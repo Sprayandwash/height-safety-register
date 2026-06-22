@@ -1,0 +1,19 @@
+{
+  "name": "Spray & Wash Height Safety Register",
+  "short_name": "S&W Safety",
+  "description": "Offline equipment register and inspection log for Spray & Wash height safety gear.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f7f7",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
