@@ -17,7 +17,7 @@ const CHECKLISTS={
 "Other":["Identification present and legible","Serial number matches register","Within manufacturer service life","Load-bearing parts free from damage and corrosion","Moving parts operate correctly","No unauthorised modification or signs requiring quarantine"]
 };
 
-let sb,currentUser=null,equipment=[],inspections=[];
+let sb,currentUser=null,equipment=[],inspections=[],photos=[];
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 function today(){return new Date().toISOString().slice(0,10);}
@@ -28,6 +28,7 @@ function latest(serial){return inspections.filter(x=>x.serial===serial).sort((a,
 document.addEventListener("DOMContentLoaded",init);
 
 async function init(){
+  if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(console.warn);}
   if(!window.SUPABASE_URL || window.SUPABASE_URL.includes("PASTE_")) configWarning.classList.remove("hidden");
   sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
   fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist();
@@ -35,24 +36,25 @@ async function init(){
   if(currentUser) await loadData();
 }
 
-function fillTypes(){let o=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=o; inType.innerHTML=o;}
+function fillTypes(){let o=EQUIPMENT_TYPES.map((t,i)=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=o; inType.innerHTML=o;}
 function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||"";}
 
 async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await loadData();}
 async function signUp(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signUp({email,password});if(error)return alert(error.message);alert("Account created. If email confirmation is enabled, check your email before signing in.");}
-async function signOut(){await sb.auth.signOut();currentUser=null;equipment=[];inspections=[];updateAuthUI();renderAll();}
+async function signOut(){await sb.auth.signOut();currentUser=null;equipment=[];inspections=[];photos=[];updateAuthUI();renderAll();}
 
 async function loadData(){
   let eq=await sb.from("equipment").select("*").order("serial");
   if(eq.error)return alert(eq.error.message);
   let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false});
   if(ins.error)return alert(ins.error.message);
-  equipment=eq.data||[]; inspections=ins.data||[]; renderAll();
+  let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false});
+  if(ph.error && !String(ph.error.message).includes("does not exist")) alert("Photo table issue: "+ph.error.message);
+  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; renderAll();
 }
 
 function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelector(`[data-tab="${id}"]`).classList.add("active");}
 function renderChecklist(){let items=CHECKLISTS[inType.value]||CHECKLISTS.Other;checklist.innerHTML=items.map(i=>`<label><input class="chk" type="checkbox" value="${esc(i)}"> ${esc(i)}</label>`).join("");}
-
 function renderAll(){renderDashboard();renderEquipment();renderInspections();renderDue();}
 
 function renderDashboard(){
@@ -63,14 +65,14 @@ function renderDashboard(){
   dashDue.textContent=due.length;
   dashNextDue.innerHTML=due.slice(0,5).map(e=>`<div class="item"><b>${esc(e.serial)}</b><span>${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No equipment due.</p>`;
   let counts={};EQUIPMENT_TYPES.forEach(t=>counts[t]=0);equipment.forEach(e=>counts[e.type||"Other"]=(counts[e.type||"Other"]||0)+1);
-  dashTypes.innerHTML=EQUIPMENT_TYPES.map(t=>`<div class="typeTile"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
+  dashTypes.innerHTML=EQUIPMENT_TYPES.map((t,i)=>`<div class="typeTile type-${i%5}"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
   dashRecent.innerHTML=inspections.slice(0,5).map(i=>`<div class="item"><b>${esc(i.serial)}</b><span>${esc(i.equipment_type)}</span><span>${pill(i.result)}</span></div>`).join("") || `<p class="muted">No inspections yet.</p>`;
 }
 
 function renderEquipment(){
   let q=(search.value||"").toLowerCase();
   let rows=equipment.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
-  equipmentList.innerHTML=rows.map(e=>{let l=latest(e.serial);return `<div class="card"><b>${esc(e.serial)}</b> ${pill(e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div><div class="row"><button onclick="editEquipment('${e.id}')">Edit</button><button onclick="startInspection('${e.id}')">Inspect</button><button class="danger" onclick="deleteEquipment('${e.id}')">Delete</button></div></div>`;}).join("") || `<p class="muted">No equipment yet.</p>`;
+  equipmentList.innerHTML=rows.map(e=>{let l=latest(e.serial);let count=photos.filter(p=>p.equipment_id===e.id).length;return `<div class="card"><b>${esc(e.serial)}</b> ${pill(e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div><div class="row"><button onclick="editEquipment('${e.id}')">Edit</button><button onclick="startInspection('${e.id}')">Inspect</button><label class="uploadBtn">Add photo<input type="file" accept="image/*" capture="environment" onchange="uploadEquipmentPhoto('${e.id}', this.files[0])"></label><button onclick="togglePhotos('${e.id}')">Photos (${count})</button><button class="danger" onclick="deleteEquipment('${e.id}')">Delete</button></div><div id="photos-${e.id}" class="photoPanel hidden"></div></div>`;}).join("") || `<p class="muted">No equipment yet.</p>`;
   serials.innerHTML=equipment.map(e=>`<option value="${esc(e.serial)}"></option>`).join("");
 }
 
@@ -82,7 +84,7 @@ async function saveEquipment(){
   let r=eqId.value?await sb.from("equipment").update(row).eq("id",eqId.value):await sb.from("equipment").insert(row);
   if(r.error)return alert(r.error.message);clearEquipmentForm();await loadData();showTab("dashboard");
 }
-async function deleteEquipment(id){if(!confirm("Delete equipment and all inspections?"))return;let {error}=await sb.from("equipment").delete().eq("id",id);if(error)return alert(error.message);await loadData();}
+async function deleteEquipment(id){if(!confirm("Delete equipment and all inspections/photos?"))return;let {error}=await sb.from("equipment").delete().eq("id",id);if(error)return alert(error.message);await loadData();}
 function startInspection(id){let e=equipment.find(x=>x.id===id);if(!e)return;inSerial.value=e.serial;inType.value=e.type;renderChecklist();showTab("inspect");}
 function loadEquipmentForInspection(){let e=equipment.find(x=>x.serial.toLowerCase()===inSerial.value.trim().toLowerCase());if(e){inType.value=e.type;renderChecklist();}}
 
@@ -99,4 +101,42 @@ async function saveInspection(){
 function clearInspectionForm(){inSerial.value="";inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";inNotes.value="";inType.value="Harness";renderChecklist();}
 function renderInspections(){inspectionList.innerHTML=inspections.map(i=>`<div class="card"><b>${esc(i.inspection_date)}</b> ${pill(i.result)}<div>${esc(i.serial)} • ${esc(i.equipment_type)}</div><div class="muted">${esc(i.notes||"")}</div></div>`).join("") || `<p class="muted">No inspections yet.</p>`;}
 function renderDue(){let rows=equipment.filter(e=>{let l=latest(e.serial);return e.status!=="In Service"||!l||(l.next_due&&l.next_due<=today())||l.result==="Fail";});dueList.innerHTML=rows.map(e=>`<div class="card"><b>${esc(e.serial)}</b> ${pill(e.status)}<div>${esc(e.type)}</div><div class="muted">Due: ${esc(latest(e.serial)?.next_due||"No inspection recorded")}</div></div>`).join("") || `<p class="muted">No due or failed items.</p>`;}
+
+async function uploadEquipmentPhoto(equipmentId,file){
+  if(!file)return;
+  const clean=(file.name||"photo.jpg").replace(/[^a-zA-Z0-9._-]/g,"_");
+  const path=`${equipmentId}/${Date.now()}-${clean}`;
+  const up=await sb.storage.from("equipment-photos").upload(path,file,{cacheControl:"3600",upsert:false});
+  if(up.error)return alert("Photo upload failed: "+up.error.message);
+  const ins=await sb.from("equipment_photos").insert({equipment_id:equipmentId,file_path:path,file_name:file.name});
+  if(ins.error)return alert("Photo record failed: "+ins.error.message);
+  await loadData();
+  await togglePhotos(equipmentId, true);
+}
+
+async function togglePhotos(equipmentId, forceOpen=false){
+  const panel=document.getElementById(`photos-${equipmentId}`);
+  if(!panel)return;
+  if(!forceOpen && !panel.classList.contains("hidden")){panel.classList.add("hidden");return;}
+  panel.classList.remove("hidden");
+  panel.innerHTML="<p class='muted'>Loading photos...</p>";
+  const rows=photos.filter(p=>p.equipment_id===equipmentId);
+  if(!rows.length){panel.innerHTML="<p class='muted'>No photos yet.</p>";return;}
+  const parts=[];
+  for(const p of rows){
+    const signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600);
+    if(signed.error){parts.push(`<div class="photoError">Could not load ${esc(p.file_name||"photo")}</div>`);continue;}
+    parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}"><button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${p.file_path.replace(/'/g,"\\'")}')">Delete</button></div>`);
+  }
+  panel.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
+}
+
+async function deleteEquipmentPhoto(photoId,filePath){
+  if(!confirm("Delete this photo?"))return;
+  await sb.storage.from("equipment-photos").remove([filePath]);
+  const r=await sb.from("equipment_photos").delete().eq("id",photoId);
+  if(r.error)return alert(r.error.message);
+  await loadData();
+}
+
 function exportCSV(kind){let rows=kind==="equipment"?equipment:inspections.map(i=>({...i,checklist:JSON.stringify(i.checklist||[])}));if(!rows.length)return alert("Nothing to export.");let h=Object.keys(rows[0]);let csv=[h.join(","),...rows.map(r=>h.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\\n");let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download=kind+".csv";a.click();}
