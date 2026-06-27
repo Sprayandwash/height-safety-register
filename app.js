@@ -1,93 +1,127 @@
-
 const EQUIPMENT_TYPES=[
-"Harness","Rope","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
-"Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
+  "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
+  "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
 ];
 
 const CHECKLISTS={
-"Harness":["Label present and legible","Serial number matches register","Webbing free from cuts, abrasion, burns, UV damage and contamination","Stitching intact","D-rings free from cracks, distortion, corrosion and excessive wear","Buckles and adjusters operate correctly","No evidence of fall arrest loading"],
-"Rope":["Rope ID/label present and legible","Serial number or rope ID matches register","Free from cuts, abrasion, glazing, burns, contamination and UV damage","No soft spots, hard spots, lumps, flat areas or exposed core","Consistent diameter and handling feel","Terminations intact"],
-"Carabiner / Connector":["Identification/batch marking present and legible","Body free from cracks, distortion, corrosion and excessive wear","Gate opens, closes and aligns correctly","Auto-close and locking mechanism operate correctly","Pins, rivets, hinges and springs secure","No side loading or impact damage"],
-"Round Sling":["Identification label present and legible","Rating and service life acceptable","Outer sleeve free from cuts, abrasion, burns and chemical damage","No exposed core or broken fibres","No knots, unauthorised repairs or modifications","No evidence of shock loading"],
-"Rope Slider / Fall Arrest Device":["Identification present and legible","Compatible with rope type and diameter","Body free from cracks, distortion, corrosion and wear","Cam/locking mechanism moves freely and locks correctly","Springs, pins and moving parts secure","Function check completed on compatible rope"],
-"Straight Lanyard":["Label present and legible","Serial number matches register","Rope/webbing free from cuts, abrasion, burns and contamination","No knots or unauthorised alterations","Terminations intact","Connectors operate correctly","No evidence of shock loading"],
-"Shock-Absorbing Lanyard":["Label present and legible","Energy absorber pack intact and not deployed","Cover/pouch secure and undamaged","No tearing, elongation or exposed absorber webbing","Webbing free from cuts, abrasion, burns and contamination","Connectors operate correctly"],
-"Temporary Anchor - T-Bar":["Identification label/serial number present and legible","Manufacturer rating and intended use acceptable","T-bar body and arms free from cracks, bends, corrosion and wear","Sliding/adjustment parts move correctly","Fasteners, pins, rivets and retainers secure","Roof sheet contact surfaces undamaged","Anchor eye/ring free from cracks or distortion"],
-"Temporary Anchor - Parapet Clamp":["Identification label/serial number present and legible","Manufacturer rating and intended use acceptable","Main frame and jaws free from cracks, bends, corrosion and wear","Clamp adjustment mechanism operates smoothly","Pins, bolts, threaded parts and retainers secure","Jaw faces or bearing plates intact","Anchor eye/ring free from cracks or distortion"],
-"Other":["Identification present and legible","Serial number matches register","Within manufacturer service life","Load-bearing parts free from damage and corrosion","Moving parts operate correctly","No unauthorised modification or signs requiring quarantine"]
+  "Harness":["Label present and legible","Serial number matches register","Webbing free from cuts, abrasion, burns, UV damage and contamination","Stitching intact","D-rings free from cracks, distortion, corrosion and excessive wear","Buckles and adjusters operate correctly","No evidence of fall arrest loading"],
+  "Rope":["Rope ID/label present and legible","Serial number or rope ID matches register","Length recorded and suitable for use","Free from cuts, abrasion, glazing, burns, contamination and UV damage","No soft spots, hard spots, lumps, flat areas or exposed core","Consistent diameter and handling feel","Terminations intact"],
+  "Roofers Rope Set":["Set ID/label present and legible","Rope length recorded","Rope free from cuts, abrasion, glazing, burns, contamination and UV damage","Integrated hook/carabiner body free from cracks, distortion, corrosion and wear","Gate closes and locking mechanism operates correctly","Slider/grab moves freely and locks correctly on compatible rope","Terminations and stitching intact","No evidence of shock loading"],
+  "Helmet":["Helmet ID/label present and legible","Shell free from cracks, deformation, UV damage and chemical damage","Suspension/harness secure and adjustable","Chin strap and buckle operate correctly","No unauthorised holes, stickers or modifications that affect safety","Within manufacturer service life"],
+  "Carabiner / Connector":["Identification/batch marking present and legible","Body free from cracks, distortion, corrosion and excessive wear","Gate opens, closes and aligns correctly","Auto-close and locking mechanism operate correctly","Pins, rivets, hinges and springs secure","No side loading or impact damage"],
+  "Round Sling":["Identification label present and legible","Rating and service life acceptable","Outer sleeve free from cuts, abrasion, burns and chemical damage","No exposed core or broken fibres","No knots, unauthorised repairs or modifications","No evidence of shock loading"],
+  "Rope Slider / Fall Arrest Device":["Identification present and legible","Compatible with rope type and diameter","Body free from cracks, distortion, corrosion and wear","Cam/locking mechanism moves freely and locks correctly","Springs, pins and moving parts secure","Function check completed on compatible rope"],
+  "Straight Lanyard":["Label present and legible","Serial number matches register","Rope/webbing free from cuts, abrasion, burns and contamination","No knots or unauthorised alterations","Terminations intact","Connectors operate correctly","No evidence of shock loading"],
+  "Shock-Absorbing Lanyard":["Label present and legible","Energy absorber pack intact and not deployed","Cover/pouch secure and undamaged","No tearing, elongation or exposed absorber webbing","Webbing free from cuts, abrasion, burns and contamination","Connectors operate correctly"],
+  "Temporary Anchor - T-Bar":["Identification label/serial number present and legible","Manufacturer rating and intended use acceptable","T-bar body and arms free from cracks, bends, corrosion and wear","Sliding/adjustment parts move correctly","Fasteners, pins, rivets and retainers secure","Roof sheet contact surfaces undamaged","Anchor eye/ring free from cracks or distortion"],
+  "Temporary Anchor - Parapet Clamp":["Identification label/serial number present and legible","Manufacturer rating and intended use acceptable","Main frame and jaws free from cracks, bends, corrosion and wear","Clamp adjustment mechanism operates smoothly","Pins, bolts, threaded parts and retainers secure","Jaw faces or bearing plates intact","Anchor eye/ring free from cracks or distortion"],
+  "Other":["Identification present and legible","Serial number matches register","Within manufacturer service life","Load-bearing parts free from damage and corrosion","Moving parts operate correctly","No unauthorised modification or signs requiring quarantine"]
 };
 
 let sb,currentUser=null,equipment=[],inspections=[],photos=[];
+let activeFilter={mode:"active",value:"active"};
+let pendingEquipmentPhotos=[];
+let cropState=null;
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 function today(){return new Date().toISOString().slice(0,10);}
+function nowIso(){return new Date().toISOString();}
 function addMonths(d,m){let x=new Date((d||today())+"T00:00:00");x.setMonth(x.getMonth()+m);return x.toISOString().slice(0,10);}
-function pill(t){let c=t==="Pass"||t==="In Service"?"pass":t==="Fail"||t==="Quarantined"?"fail":t==="Retired"?"retired":"due";return `<span class="pill ${c}">${esc(t||"")}</span>`;}
+function isArchived(e){return e.archived===true || e.status==="Retired" || !!e.disposed_at;}
 function latest(serial){return inspections.filter(x=>x.serial===serial).sort((a,b)=>(b.inspection_date||"").localeCompare(a.inspection_date||""))[0];}
+function isDue(e){let l=latest(e.serial);return !isArchived(e) && (!l || (l.next_due && l.next_due<=today()) || l?.result?.includes("Fail") || e.status==="Quarantined");}
+function isFailed(e){let l=latest(e.serial);return !isArchived(e) && (e.status==="Quarantined" || l?.result?.includes("Fail"));}
+function pill(t){let v=String(t||"");let c=v==="Pass"||v==="In Service"?"pass":v.includes("Fail")||v==="Quarantined"?"fail":v==="Retired"||v==="Archived"?"retired":"due";return `<span class="pill ${c}">${esc(v)}</span>`;}
+function typeNeedsLength(type){return type==="Rope"||type==="Roofers Rope Set";}
 
-document.addEventListener("DOMContentLoaded",init);
-
+window.addEventListener("DOMContentLoaded",init);
 async function init(){
   if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(console.warn);}
   if(!window.SUPABASE_URL || window.SUPABASE_URL.includes("PASTE_")) configWarning.classList.remove("hidden");
   sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
-  fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist();
-  const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI();
-  if(currentUser) await loadData();
+  fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); bindCropCanvas();
+  const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser) await loadData();
 }
-
-function fillTypes(){let o=EQUIPMENT_TYPES.map((t,i)=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=o; inType.innerHTML=o;}
+function fillTypes(){let opts=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=opts; inType.innerHTML=opts;}
 function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||"";}
-
 async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await loadData();}
 async function signUp(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signUp({email,password});if(error)return alert(error.message);alert("Account created. If email confirmation is enabled, check your email before signing in.");}
 async function signOut(){await sb.auth.signOut();currentUser=null;equipment=[];inspections=[];photos=[];updateAuthUI();renderAll();}
-
 async function loadData(){
-  let eq=await sb.from("equipment").select("*").order("serial");
-  if(eq.error)return alert(eq.error.message);
-  let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false});
-  if(ins.error)return alert(ins.error.message);
-  let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false});
-  if(ph.error && !String(ph.error.message).includes("does not exist")) alert("Photo table issue: "+ph.error.message);
-  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; renderAll();
+  let eq=await sb.from("equipment").select("*").order("serial"); if(eq.error)return alert(eq.error.message);
+  let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false}); if(ins.error)return alert(ins.error.message);
+  let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false}); if(ph.error) console.warn(ph.error.message);
+  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; renderAll(); renderSuggestions();
 }
-
-function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelector(`[data-tab="${id}"]`).classList.add("active");}
-function renderChecklist(){let items=CHECKLISTS[inType.value]||CHECKLISTS.Other;checklist.innerHTML=items.map(i=>`<label><input class="chk" type="checkbox" value="${esc(i)}"> ${esc(i)}</label>`).join("");}
-function renderAll(){renderDashboard();renderEquipment();renderInspections();renderDue();}
-
+function renderAll(){renderDashboard();renderEquipment();renderInspections();}
+function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function renderDashboard(){
-  dashTotal.textContent=equipment.length;
-  dashInService.textContent=equipment.filter(e=>e.status==="In Service").length;
-  dashFailed.textContent=equipment.filter(e=>e.status==="Quarantined"||e.status==="Retired").length;
-  let due=equipment.filter(e=>{let l=latest(e.serial);return !l || (l.next_due && l.next_due<=today()) || l?.result==="Fail" || e.status==="Quarantined";});
-  dashDue.textContent=due.length;
-  dashNextDue.innerHTML=due.slice(0,5).map(e=>`<div class="item"><b>${esc(e.serial)}</b><span>${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No equipment due.</p>`;
-  let counts={};EQUIPMENT_TYPES.forEach(t=>counts[t]=0);equipment.forEach(e=>counts[e.type||"Other"]=(counts[e.type||"Other"]||0)+1);
-  dashTypes.innerHTML=EQUIPMENT_TYPES.map((t,i)=>`<div class="typeTile type-${i%5}"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
-  dashRecent.innerHTML=inspections.slice(0,5).map(i=>`<div class="item"><b>${esc(i.serial)}</b><span>${esc(i.equipment_type)}</span><span>${pill(i.result)}</span></div>`).join("") || `<p class="muted">No inspections yet.</p>`;
+  const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
+  dashTotal.textContent=equipment.length; dashInService.textContent=active.filter(e=>e.status==="In Service").length; dashDue.textContent=due.length; dashFailed.textContent=failed.length; dashArchived.textContent=archived.length;
+  dashNextDue.innerHTML=due.slice(0,7).map(e=>`<div class="lineItem" onclick="openItem('${e.id}')"><b>${esc(e.serial)}</b><span class="hideMobile">${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No active equipment due.</p>`;
+  dashRecent.innerHTML=inspections.slice(0,7).map(i=>`<div class="lineItem" onclick="openItemBySerial('${escAttr(i.serial)}')"><b>${esc(i.serial)}</b><span class="hideMobile">${esc(i.equipment_type)}</span><span>${pill(i.result)}</span></div>`).join("") || `<p class="muted">No inspections yet.</p>`;
+  let counts={};EQUIPMENT_TYPES.forEach(t=>counts[t]=0);active.forEach(e=>counts[e.type||"Other"]=(counts[e.type||"Other"]||0)+1);
+  dashTypes.innerHTML=EQUIPMENT_TYPES.map((t,i)=>`<div class="typeTile type-${i%5}" onclick="setRegisterFilter('type','${escAttr(t)}')"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
 }
-
+function escAttr(s){return String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");}
+function setRegisterFilter(mode,value){activeFilter={mode,value};showTab("equipment");renderEquipment();}
+function clearFilter(){activeFilter={mode:"active",value:"active"};renderEquipment();showTab("equipment");}
+function filterLabelText(){const m=activeFilter.mode,v=activeFilter.value;if(m==="active")return "Active items";if(m==="all")return "All items";if(m==="status")return `Status: ${v}`;if(m==="due")return "Due / overdue items";if(m==="failed")return "Failed / quarantined items";if(m==="archived")return "Archived / disposed items";if(m==="type")return `Type: ${v}`;if(m==="manufacturer")return `Manufacturer: ${v}`;if(m==="model")return `Model: ${v}`;return "Filtered";}
+function filteredEquipment(){
+  let rows=[...equipment]; const m=activeFilter.mode,v=activeFilter.value;
+  if(m==="active") rows=rows.filter(e=>!isArchived(e));
+  if(m==="status") rows=rows.filter(e=>!isArchived(e)&&e.status===v);
+  if(m==="due") rows=rows.filter(isDue);
+  if(m==="failed") rows=rows.filter(isFailed);
+  if(m==="archived") rows=rows.filter(isArchived);
+  if(m==="type") rows=rows.filter(e=>!isArchived(e)&&e.type===v);
+  if(m==="manufacturer") rows=rows.filter(e=>!isArchived(e)&&(e.manufacturer||"")===v);
+  if(m==="model") rows=rows.filter(e=>!isArchived(e)&&(e.model||"")===v);
+  let q=(search.value||"").toLowerCase().trim(); if(q) rows=rows.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
+  return rows;
+}
 function renderEquipment(){
-  let q=(search.value||"").toLowerCase();
-  let rows=equipment.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
-  equipmentList.innerHTML=rows.map(e=>{let l=latest(e.serial);let count=photos.filter(p=>p.equipment_id===e.id).length;return `<div class="card"><b>${esc(e.serial)}</b> ${pill(e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div><div class="row"><button onclick="editEquipment('${e.id}')">Edit</button><button onclick="startInspection('${e.id}')">Inspect</button><label class="uploadBtn">Add photo<input type="file" accept="image/*" capture="environment" onchange="uploadEquipmentPhoto('${e.id}', this.files[0])"></label><button onclick="togglePhotos('${e.id}')">Photos (${count})</button><button class="danger" onclick="deleteEquipment('${e.id}')">Delete</button></div><div id="photos-${e.id}" class="photoPanel hidden"></div></div>`;}).join("") || `<p class="muted">No equipment yet.</p>`;
+  filterLabel.textContent=filterLabelText();
+  let rows=filteredEquipment();
+  equipmentList.innerHTML=rows.map(e=>{let l=latest(e.serial), count=photos.filter(p=>p.equipment_id===e.id).length;return `<div class="listItem" onclick="openItem('${e.id}')"><div class="listItemTop"><div><b>${esc(e.serial)}</b> ${pill(isArchived(e)?"Archived":e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div></div><span class="badge">${count} photos</span></div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div></div>`;}).join("") || `<p class="muted">No equipment found.</p>`;
   serials.innerHTML=equipment.map(e=>`<option value="${esc(e.serial)}"></option>`).join("");
 }
-
-function editEquipment(id){let e=equipment.find(x=>x.id===id);if(!e)return;eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";eqMade.value=e.date_manufactured||"";eqFirstUsed.value=e.date_first_used||"";eqRetire.value=e.retirement_date||"";eqFreq.value=e.inspection_frequency||"6 monthly";eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";showTab("equipment");}
-function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqMade","eqFirstUsed","eqRetire","eqNotes"].forEach(id=>document.getElementById(id).value="");eqType.value="Harness";eqFreq.value="6 monthly";eqStatus.value="In Service";}
+async function firstPhotoUrl(equipmentId){let p=photos.find(x=>x.equipment_id===equipmentId); if(!p)return null; let r=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); return r.error?null:r.data.signedUrl;}
+async function openItem(id){let e=equipment.find(x=>x.id===id); if(!e)return; showTab("detail"); await renderDetail(e);}
+function openItemBySerial(serial){let e=equipment.find(x=>x.serial===serial); if(e) openItem(e.id);}
+async function renderDetail(e){
+  detailContent.innerHTML=`<div class="card"><p class="muted">Loading item...</p></div>`;
+  let l=latest(e.serial); let itemPhotos=photos.filter(p=>p.equipment_id===e.id); let url=await firstPhotoUrl(e.id);
+  let history=inspections.filter(i=>i.serial===e.serial).sort((a,b)=>(b.inspection_date||"").localeCompare(a.inspection_date||""));
+  detailContent.innerHTML=`<div class="card"><div class="row"><button onclick="showTab('equipment')">← Register</button><button class="primary" onclick="startInspection('${e.id}')">Inspect</button><button onclick="editEquipment('${e.id}')">Edit</button><label class="uploadBtn">Add photo<input type="file" accept="image/*" onchange="selectExistingEquipmentPhoto('${e.id}', this.files[0]);this.value=''"></label>${isArchived(e)?`<button onclick="restoreItem('${e.id}')">Restore</button>`:`<button class="danger" onclick="archiveItem('${e.id}')">Archive / dispose</button>`}</div></div>
+  <div class="card detailHero"><div class="heroPhoto">${url?`<img src="${url}" alt="Equipment photo">`:`<span class="muted">No photo yet</span>`}</div><div><h2>${esc(e.serial)} ${pill(isArchived(e)?"Archived":e.status)}</h2><div class="kv"><b>Type</b><span class="quickLink" onclick="setRegisterFilter('type','${escAttr(e.type)}')">${esc(e.type)}</span></div><div class="kv"><b>Manufacturer</b><span>${e.manufacturer?`<span class="quickLink" onclick="setRegisterFilter('manufacturer','${escAttr(e.manufacturer)}')">${esc(e.manufacturer)}</span>`:"—"}</span></div><div class="kv"><b>Model</b><span>${e.model?`<span class="quickLink" onclick="setRegisterFilter('model','${escAttr(e.model)}')">${esc(e.model)}</span>`:"—"}</span></div><div class="kv"><b>Rope length</b><span>${e.rope_length_m?esc(e.rope_length_m)+" m":"—"}</span></div><div class="kv"><b>Manufactured</b><span>${esc(e.date_manufactured||"—")}</span></div><div class="kv"><b>First used</b><span>${esc(e.date_first_used||"—")}</span></div><div class="kv"><b>Retirement</b><span>${esc(e.retirement_date||"—")}</span></div><div class="kv"><b>Last inspection</b><span>${l?`${esc(l.inspection_date)} ${pill(l.result)}`:"No inspection recorded"}</span></div><div class="kv"><b>Next due</b><span>${esc(l?.next_due||"—")}</span></div><div class="kv"><b>Notes</b><span>${esc(e.notes||"—")}</span></div>${isArchived(e)?`<div class="kv"><b>Disposed</b><span>${esc(e.disposed_at||e.archived_at||"—")}</span></div><div class="kv"><b>Reason</b><span>${esc(e.disposal_reason||"—")}</span></div>`:""}</div></div>
+  <div class="card"><h2>Photos</h2><div id="detailPhotos"></div></div><div class="card"><h2>Inspection History</h2>${history.map(i=>`<div class="lineItem"><b>${esc(i.inspection_date)}</b><span>${pill(i.result)}</span><span>${esc(i.next_due||"")}</span></div><p class="muted">${esc(i.notes||"")}</p>`).join("")||`<p class="muted">No inspections yet.</p>`}</div>`;
+  await renderPhotoGallery(e.id,"detailPhotos");
+}
+async function renderPhotoGallery(equipmentId,targetId){
+  let target=document.getElementById(targetId); let rows=photos.filter(p=>p.equipment_id===equipmentId); if(!rows.length){target.innerHTML=`<p class="muted">No photos yet.</p>`;return;}
+  let parts=[]; for(const p of rows){let signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); if(signed.error){parts.push(`<div class="warning">Could not load ${esc(p.file_name||"photo")}</div>`);continue;} parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}"><button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${escAttr(p.file_path)}')">Delete</button></div>`);} target.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
+}
+function newEquipment(){clearEquipmentForm();equipmentFormTitle.textContent="Add Equipment";showTab("editEquipment");}
+function editEquipment(id){let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";eqMade.value=e.date_manufactured||"";eqFirstUsed.value=e.date_first_used||"";eqRetire.value=e.retirement_date||"";eqFreq.value=e.inspection_frequency||"6 monthly";eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
+function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqMade","eqFirstUsed","eqRetire","eqNotes","eqRopeLength"].forEach(id=>document.getElementById(id).value="");eqType.value="Harness";eqFreq.value="6 monthly";eqStatus.value="In Service";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();}
+function toggleRopeLengthField(){ropeLengthWrap.classList.toggle("hidden",!typeNeedsLength(eqType.value));}
 async function saveEquipment(){
   let serial=eqSerial.value.trim();if(!serial)return alert("Serial number required.");
-  let row={serial,type:eqType.value,manufacturer:eqMaker.value.trim(),model:eqModel.value.trim(),date_manufactured:eqMade.value||null,date_first_used:eqFirstUsed.value||null,retirement_date:eqRetire.value||null,inspection_frequency:eqFreq.value,status:eqStatus.value,notes:eqNotes.value.trim()};
-  let r=eqId.value?await sb.from("equipment").update(row).eq("id",eqId.value):await sb.from("equipment").insert(row);
-  if(r.error)return alert(r.error.message);clearEquipmentForm();await loadData();showTab("dashboard");
+  let row={serial,type:eqType.value,manufacturer:eqMaker.value.trim(),model:eqModel.value.trim(),date_manufactured:eqMade.value||null,date_first_used:eqFirstUsed.value||null,retirement_date:eqRetire.value||null,inspection_frequency:eqFreq.value,status:eqStatus.value,notes:eqNotes.value.trim(),rope_length_m:typeNeedsLength(eqType.value)&&(eqRopeLength.value!=="")?Number(eqRopeLength.value):null};
+  let savedId=eqId.value;
+  if(savedId){let r=await sb.from("equipment").update(row).eq("id",savedId).select().single();if(r.error)return alert(r.error.message);}
+  else{let r=await sb.from("equipment").insert({...row,initial_inspection_required:true}).select().single();if(r.error)return alert(r.error.message);savedId=r.data.id;}
+  if(pendingEquipmentPhotos.length){for(const p of pendingEquipmentPhotos){await uploadBlobToEquipment(savedId,p.blob,p.fileName);}pendingEquipmentPhotos=[];}
+  await loadData();
+  const isNew=!eqId.value; clearEquipmentForm();
+  if(isNew && confirm("Item saved. Start the initial inspection now?")){startInspection(savedId,"Initial Commissioning Inspection");return;}
+  openItem(savedId);
 }
-async function deleteEquipment(id){if(!confirm("Delete equipment and all inspections/photos?"))return;let {error}=await sb.from("equipment").delete().eq("id",id);if(error)return alert(error.message);await loadData();}
-function startInspection(id){let e=equipment.find(x=>x.id===id);if(!e)return;inSerial.value=e.serial;inType.value=e.type;renderChecklist();showTab("inspect");}
+function renderSuggestions(){let makers=[...new Set(equipment.map(e=>e.manufacturer).filter(Boolean))].sort();let models=[...new Set(equipment.map(e=>e.model).filter(Boolean))].sort();manufacturerSuggestions.innerHTML=makers.map(x=>`<option value="${esc(x)}"></option>`).join("");modelSuggestions.innerHTML=models.map(x=>`<option value="${esc(x)}"></option>`).join("");}
+function renderChecklist(){let items=CHECKLISTS[inType.value]||CHECKLISTS.Other;checklist.innerHTML=items.map(i=>`<label><input class="chk" type="checkbox" value="${esc(i)}"> ${esc(i)}</label>`).join("");}
+function startInspection(id,title="New Inspection"){let e=equipment.find(x=>x.id===id);if(!e)return;inspectTitle.textContent=title;inSerial.value=e.serial;inType.value=e.type;inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";renderChecklist();showTab("inspect");setTimeout(()=>inDate.focus(),250);}
 function loadEquipmentForInspection(){let e=equipment.find(x=>x.serial.toLowerCase()===inSerial.value.trim().toLowerCase());if(e){inType.value=e.type;renderChecklist();}}
-
 async function saveInspection(){
   let serial=inSerial.value.trim();if(!serial)return alert("Serial number required.");
   let e=equipment.find(x=>x.serial.toLowerCase()===serial.toLowerCase());
@@ -95,48 +129,31 @@ async function saveInspection(){
   let checks=[...document.querySelectorAll(".chk:checked")].map(x=>x.value);
   let row={equipment_id:e.id,serial,equipment_type:inType.value,inspection_date:inDate.value||today(),inspector:inInspector.value.trim(),result:inResult.value,next_due:inNextDue.value||null,checklist:checks,notes:inNotes.value.trim()};
   let r=await sb.from("inspections").insert(row);if(r.error)return alert(r.error.message);
-  if(inResult.value==="Fail") await sb.from("equipment").update({status:"Quarantined",type:inType.value}).eq("id",e.id); else await sb.from("equipment").update({type:inType.value}).eq("id",e.id);
-  clearInspectionForm();await loadData();showTab("dashboard");
+  let update={type:inType.value,initial_inspection_required:false};
+  if(inResult.value==="Pass") update.status="In Service";
+  if(inResult.value==="Fail - Repair Required") update.status="Quarantined";
+  if(inResult.value==="Fail - Remove From Service / Disposal"){update.status="Retired";update.archived=true;update.archived_at=nowIso();update.disposed_at=nowIso();update.disposal_reason=inNotes.value.trim()||"Failed inspection - remove from service/disposal";}
+  await sb.from("equipment").update(update).eq("id",e.id);
+  clearInspectionForm();await loadData();openItem(e.id);
 }
-function clearInspectionForm(){inSerial.value="";inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";inNotes.value="";inType.value="Harness";renderChecklist();}
-function renderInspections(){inspectionList.innerHTML=inspections.map(i=>`<div class="card"><b>${esc(i.inspection_date)}</b> ${pill(i.result)}<div>${esc(i.serial)} • ${esc(i.equipment_type)}</div><div class="muted">${esc(i.notes||"")}</div></div>`).join("") || `<p class="muted">No inspections yet.</p>`;}
-function renderDue(){let rows=equipment.filter(e=>{let l=latest(e.serial);return e.status!=="In Service"||!l||(l.next_due&&l.next_due<=today())||l.result==="Fail";});dueList.innerHTML=rows.map(e=>`<div class="card"><b>${esc(e.serial)}</b> ${pill(e.status)}<div>${esc(e.type)}</div><div class="muted">Due: ${esc(latest(e.serial)?.next_due||"No inspection recorded")}</div></div>`).join("") || `<p class="muted">No due or failed items.</p>`;}
-
-async function uploadEquipmentPhoto(equipmentId,file){
-  if(!file)return;
-  const clean=(file.name||"photo.jpg").replace(/[^a-zA-Z0-9._-]/g,"_");
-  const path=`${equipmentId}/${Date.now()}-${clean}`;
-  const up=await sb.storage.from("equipment-photos").upload(path,file,{cacheControl:"3600",upsert:false});
-  if(up.error)return alert("Photo upload failed: "+up.error.message);
-  const ins=await sb.from("equipment_photos").insert({equipment_id:equipmentId,file_path:path,file_name:file.name});
-  if(ins.error)return alert("Photo record failed: "+ins.error.message);
-  await loadData();
-  await togglePhotos(equipmentId, true);
-}
-
-async function togglePhotos(equipmentId, forceOpen=false){
-  const panel=document.getElementById(`photos-${equipmentId}`);
-  if(!panel)return;
-  if(!forceOpen && !panel.classList.contains("hidden")){panel.classList.add("hidden");return;}
-  panel.classList.remove("hidden");
-  panel.innerHTML="<p class='muted'>Loading photos...</p>";
-  const rows=photos.filter(p=>p.equipment_id===equipmentId);
-  if(!rows.length){panel.innerHTML="<p class='muted'>No photos yet.</p>";return;}
-  const parts=[];
-  for(const p of rows){
-    const signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600);
-    if(signed.error){parts.push(`<div class="photoError">Could not load ${esc(p.file_name||"photo")}</div>`);continue;}
-    parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}"><button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${p.file_path.replace(/'/g,"\\'")}')">Delete</button></div>`);
-  }
-  panel.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
-}
-
-async function deleteEquipmentPhoto(photoId,filePath){
-  if(!confirm("Delete this photo?"))return;
-  await sb.storage.from("equipment-photos").remove([filePath]);
-  const r=await sb.from("equipment_photos").delete().eq("id",photoId);
-  if(r.error)return alert(r.error.message);
-  await loadData();
-}
-
-function exportCSV(kind){let rows=kind==="equipment"?equipment:inspections.map(i=>({...i,checklist:JSON.stringify(i.checklist||[])}));if(!rows.length)return alert("Nothing to export.");let h=Object.keys(rows[0]);let csv=[h.join(","),...rows.map(r=>h.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\\n");let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download=kind+".csv";a.click();}
+function clearInspectionForm(){inspectTitle.textContent="New Inspection";inSerial.value="";inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";inNotes.value="";inType.value="Harness";renderChecklist();}
+function renderInspections(){inspectionList.innerHTML=inspections.slice(0,10).map(i=>`<div class="listItem" onclick="openItemBySerial('${escAttr(i.serial)}')"><b>${esc(i.inspection_date)}</b> ${pill(i.result)}<div>${esc(i.serial)} • ${esc(i.equipment_type)}</div><div class="muted">${esc(i.notes||"")}</div></div>`).join("") || `<p class="muted">No inspections yet.</p>`;}
+async function archiveItem(id){let reason=prompt("Reason for archive/disposal?",""); if(reason===null)return; let method=prompt("Disposal method / notes?",""); let r=await sb.from("equipment").update({archived:true,archived_at:nowIso(),disposed_at:nowIso(),disposal_reason:reason,disposal_method:method,status:"Retired"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
+async function restoreItem(id){if(!confirm("Restore this item to the active register?"))return; let r=await sb.from("equipment").update({archived:false,archived_at:null,disposed_at:null,disposal_reason:null,disposal_method:null,status:"In Service"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
+function selectNewEquipmentPhoto(file){if(!file)return; openCropper(file,{mode:"pending"});}
+function selectExistingEquipmentPhoto(equipmentId,file){if(!file)return; openCropper(file,{mode:"existing",equipmentId});}
+function openCropper(file,target){let img=new Image();let url=URL.createObjectURL(file);img.onload=()=>{cropState={file,target,img,url,rotation:0,zoom:1,offsetX:0,offsetY:0,drag:false,lastX:0,lastY:0};cropZoom.value=1;cropModal.classList.remove("hidden");drawCrop();};img.src=url;}
+function cancelCrop(){if(cropState?.url)URL.revokeObjectURL(cropState.url);cropState=null;cropModal.classList.add("hidden");}
+function setCropZoom(v){if(!cropState)return;cropState.zoom=Number(v);drawCrop();}
+function rotateCrop(){if(!cropState)return;cropState.rotation=(cropState.rotation+90)%360;cropState.offsetX=0;cropState.offsetY=0;drawCrop();}
+function bindCropCanvas(){cropCanvas.addEventListener("pointerdown",e=>{if(!cropState)return;cropState.drag=true;cropState.lastX=e.clientX;cropState.lastY=e.clientY;cropCanvas.setPointerCapture(e.pointerId);});cropCanvas.addEventListener("pointermove",e=>{if(!cropState?.drag)return;let rect=cropCanvas.getBoundingClientRect();let sx=cropCanvas.width/rect.width, sy=cropCanvas.height/rect.height;cropState.offsetX+=(e.clientX-cropState.lastX)*sx;cropState.offsetY+=(e.clientY-cropState.lastY)*sy;cropState.lastX=e.clientX;cropState.lastY=e.clientY;drawCrop();});["pointerup","pointercancel"].forEach(ev=>cropCanvas.addEventListener(ev,()=>{if(cropState)cropState.drag=false;}));}
+function drawCrop(){if(!cropState)return;let c=cropCanvas,ctx=c.getContext("2d"),img=cropState.img;ctx.clearRect(0,0,c.width,c.height);ctx.fillStyle="#111";ctx.fillRect(0,0,c.width,c.height);let rot=cropState.rotation%180!==0;let iw=rot?img.height:img.width, ih=rot?img.width:img.height;let base=Math.max(c.width/iw,c.height/ih);let scale=base*cropState.zoom;ctx.save();ctx.translate(c.width/2+cropState.offsetX,c.height/2+cropState.offsetY);ctx.rotate(cropState.rotation*Math.PI/180);ctx.drawImage(img,-img.width*scale/2,-img.height*scale/2,img.width*scale,img.height*scale);ctx.restore();ctx.strokeStyle="rgba(255,255,255,.9)";ctx.lineWidth=8;ctx.strokeRect(4,4,c.width-8,c.height-8);}
+async function saveCrop(){if(!cropState)return;drawCrop();cropCanvas.toBlob(async blob=>{let fileName=(cropState.file.name||"equipment-photo.jpg").replace(/\.[^.]+$/,"")+"-cropped.jpg";let target=cropState.target;cancelCrop();if(target.mode==="pending"){let dataUrl=await blobToDataUrl(blob);pendingEquipmentPhotos.push({blob,fileName,preview:dataUrl});renderPendingPhotos();}else{await uploadBlobToEquipment(target.equipmentId,blob,fileName);await loadData();await openItem(target.equipmentId);}},"image/jpeg",0.9);}
+function blobToDataUrl(blob){return new Promise(res=>{let r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(blob);});}
+function renderPendingPhotos(){newPhotoPreview.innerHTML=pendingEquipmentPhotos.map((p,i)=>`<div class="previewCard"><img src="${p.preview}" alt="Pending photo"><button class="danger" onclick="removePendingPhoto(${i})">Remove</button></div>`).join("");}
+function removePendingPhoto(i){pendingEquipmentPhotos.splice(i,1);renderPendingPhotos();}
+async function uploadBlobToEquipment(equipmentId,blob,fileName){const clean=(fileName||"photo.jpg").replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${equipmentId}/${Date.now()}-${clean}`;let up=await sb.storage.from("equipment-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"3600",upsert:false});if(up.error){alert("Photo upload failed: "+up.error.message);return;}let ins=await sb.from("equipment_photos").insert({equipment_id:equipmentId,file_path:path,file_name:fileName});if(ins.error)alert("Photo record failed: "+ins.error.message);}
+async function deleteEquipmentPhoto(photoId,filePath){if(!confirm("Delete this photo?"))return;await sb.storage.from("equipment-photos").remove([filePath]);let r=await sb.from("equipment_photos").delete().eq("id",photoId);if(r.error)return alert(r.error.message);await loadData();}
+function exportCSV(kind){let rows=kind==="equipment"?equipment:inspections.map(i=>({...i,checklist:JSON.stringify(i.checklist||[])}));if(!rows.length)return alert("Nothing to export.");let h=Object.keys(rows[0]);let csv=[h.join(","),...rows.map(r=>h.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");downloadBlob(csv,kind+".csv","text/csv");}
+function exportJSONBackup(){downloadBlob(JSON.stringify({exported_at:new Date().toISOString(),equipment,inspections,photos},null,2),"height-safety-full-backup.json","application/json");}
+function downloadBlob(content,name,type){let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
