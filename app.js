@@ -26,6 +26,26 @@ let pendingEquipmentPhotos=[];
 let pendingInspectionPhotos=[];
 let cropState=null;
 let photoQueue=[];
+let busyDepth=0;
+function setBusy(on,msg="Working..."){
+  const overlay=document.getElementById("busyOverlay");
+  const text=document.getElementById("busyText");
+  if(on) busyDepth++; else busyDepth=Math.max(0,busyDepth-1);
+  if(text) text.textContent=msg;
+  if(overlay) overlay.classList.toggle("hidden",busyDepth===0);
+}
+async function withBusy(msg,fn){
+  setBusy(true,msg);
+  try{return await fn();}
+  finally{setBusy(false,msg);}
+}
+document.addEventListener("click",e=>{
+  const btn=e.target.closest("button,.buttonLike,.uploadBtn");
+  if(!btn || btn.disabled)return;
+  btn.classList.add("clicked");
+  setTimeout(()=>btn.classList.remove("clicked"),140);
+});
+
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 function today(){return new Date().toISOString().slice(0,10);}
@@ -135,7 +155,7 @@ async function loadData(){
   let cert=await sb.from("certificates").select("*").order("created_at",{ascending:false}); if(cert.error) console.warn("Certificate table issue: "+cert.error.message);
   equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
 }
-function renderAll(){renderDashboard();renderEquipment();renderInspections();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory();}
+function renderAll(){renderDashboard();renderEquipment();renderInspections();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory(); if(window.certMode) updateCertificateUI();}
 function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="certificates") renderCertificatesHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function renderDashboard(){
   const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
@@ -385,52 +405,113 @@ async function openInspectionDetail(id){let i=inspections.find(x=>x.id===id); if
 let currentCertificatePacket={title:"",targets:[]};
 function fillCertificateFilterOptions(){
   if(!window.certTypeFilter)return;
+  const previous=certTypeFilter.value;
   certTypeFilter.innerHTML=`<option value="">Select type</option>`+EQUIPMENT_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  if(previous) certTypeFilter.value=previous;
   renderCertificateItemList();
+  updateCertificateUI();
 }
 function renderCertificatesHome(){
   if(!requirePerm(canCertificates(),"Only Admin, Office / Reports or Certificate Approver users can generate certificates."))return;
-  fillCertificateFilterOptions(); renderCertificateHistory();
+  fillCertificateFilterOptions(); renderCertificateHistory(); updateCertificateUI();
 }
 function renderCertificateItemList(){
   if(!window.certItemList)return;
   const active=equipment.filter(e=>!isArchived(e)).sort((a,b)=>(a.serial||"").localeCompare(b.serial||""));
-  certItemList.innerHTML=active.map(e=>`<label><input type="checkbox" class="certItemCheck" value="${esc(e.id)}"> <b>${esc(e.serial)}</b> <span class="muted">${esc(e.type)} ${esc(e.manufacturer||"")} ${esc(e.model||"")}</span></label>`).join("")||`<p class="muted">No active equipment found.</p>`;
+  certItemList.innerHTML=active.map(e=>{
+    const has=!!latestInspectionForEquipment(e);
+    const warn=has?"":`<span class="warnText">No inspection history</span>`;
+    return `<label class="certItemCheckRow ${has?"":"noInspection"}"><input type="checkbox" class="certItemCheck" value="${esc(e.id)}" ${has?"":"disabled"} onchange="updateCertificateUI()"> <b>${esc(e.serial)}</b> <span class="muted">${esc(e.type)} ${esc(e.manufacturer||"")} ${esc(e.model||"")}</span>${warn}</label>`;
+  }).join("")||`<p class="muted">No active equipment found.</p>`;
 }
-function selectAllCertItems(on){document.querySelectorAll(".certItemCheck").forEach(x=>x.checked=!!on);}
+function selectAllCertItems(on){
+  document.querySelectorAll(".certItemCheck").forEach(x=>{ if(!x.disabled) x.checked=!!on; });
+  updateCertificateUI();
+}
+function setCertPanel(id,show){const el=document.getElementById(id); if(el) el.classList.toggle("hidden",!show);}
+function setCertValidation(msg,state="warn"){
+  const v=document.getElementById("certValidation"); if(!v)return;
+  v.className="certValidation "+state; v.textContent=msg;
+}
+function selectedCertItemIds(){return [...document.querySelectorAll(".certItemCheck:checked")].map(x=>x.value);}
+function updateCertificateUI(){
+  if(!window.certMode)return;
+  const kind=certMode.value;
+  const selected=selectedCertItemIds().length;
+  if(window.certSelectedCount) certSelectedCount.textContent=`${selected} selected`;
+  setCertPanel("certItemsPanel",kind==="selected_items");
+  setCertPanel("certTypePanel",kind==="type_latest");
+  setCertPanel("certDatePanel",kind==="inspection_date_range");
+  setCertPanel("certResultPanel",kind==="inspection_result");
+  const help={
+    selected_items:"Tick one or more items. Certificates use the latest inspection for each selected item.",
+    type_latest:"Choose an equipment type. Certificates use the latest inspection for each active item of that type.",
+    inspection_date_range:"Choose a start and/or end date. Certificates are generated for inspections within that range.",
+    inspection_result:"Choose an inspection result. Certificates are generated for matching inspections.",
+    due_overdue:"Certificates are generated for active items currently due or overdue, using their latest inspection."
+  }[kind]||"Choose certificate options.";
+  if(window.certModeHelp) certModeHelp.textContent=help;
+  let ok=true,msg="Ready to generate certificates.";
+  if(kind==="selected_items" && selected===0){ok=false;msg="Tick at least one item with inspection history.";}
+  if(kind==="type_latest" && !(certTypeFilter?.value||"")){ok=false;msg="Choose an equipment type first.";}
+  if(kind==="inspection_date_range" && !(certStartDate?.value||"") && !(certEndDate?.value||"")){ok=false;msg="Choose a start date, end date, or both.";}
+  if(kind==="due_overdue" && !equipment.filter(e=>!isArchived(e)).some(isDue)){ok=false;msg="There are currently no due or overdue active items.";}
+  const btn=document.getElementById("certGenerateBtn"); if(btn) btn.disabled=!ok;
+  setCertValidation(msg,ok?"ready":"warn");
+}
 function latestInspectionForEquipment(e){return inspections.filter(i=>i.serial===e.serial).sort((a,b)=>(b.inspection_date||"").localeCompare(a.inspection_date||""))[0]||null;}
 function certTargetsForKind(kind){
   const active=equipment.filter(e=>!isArchived(e));
   let pairs=[];
   if(kind==="selected_items"){
-    const ids=[...document.querySelectorAll(".certItemCheck:checked")].map(x=>x.value);
+    const ids=selectedCertItemIds();
+    if(!ids.length){alert("Please tick at least one item first.");return [];}
     pairs=ids.map(id=>equipment.find(e=>e.id===id)).filter(Boolean).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
   }else if(kind==="type_latest"){
-    const type=certTypeFilter?.value||""; if(!type){alert("Choose an equipment type first.");return [];} pairs=active.filter(e=>e.type===type).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
+    const type=certTypeFilter?.value||""; if(!type){alert("Choose an equipment type first.");return [];}
+    pairs=active.filter(e=>e.type===type).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
   }else if(kind==="inspection_date_range"){
-    const start=certStartDate?.value||"",end=certEndDate?.value||""; if(!start&&!end){alert("Choose a start and/or end date first.");return [];} pairs=inspections.filter(i=>withinDate(i.inspection_date,start,end)).map(i=>({inspection:i,equipment:equipment.find(e=>e.id===i.equipment_id)||equipment.find(e=>e.serial===i.serial)}));
+    const start=certStartDate?.value||"",end=certEndDate?.value||""; if(!start&&!end){alert("Choose a start and/or end date first.");return [];}
+    pairs=inspections.filter(i=>withinDate(i.inspection_date,start,end)).map(i=>({inspection:i,equipment:equipment.find(e=>e.id===i.equipment_id)||equipment.find(e=>e.serial===i.serial)}));
   }else if(kind==="inspection_result"){
-    const result=certResult?.value||""; pairs=inspections.filter(i=>i.result===result).map(i=>({inspection:i,equipment:equipment.find(e=>e.id===i.equipment_id)||equipment.find(e=>e.serial===i.serial)}));
+    const result=certResult?.value||"";
+    pairs=inspections.filter(i=>i.result===result).map(i=>({inspection:i,equipment:equipment.find(e=>e.id===i.equipment_id)||equipment.find(e=>e.serial===i.serial)}));
   }else if(kind==="due_overdue"){
     pairs=active.filter(isDue).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
   }else if(kind==="single_inspection"){
     return [];
   }
+  const before=pairs.length;
   pairs=pairs.filter(p=>p.equipment && p.inspection);
-  if(!pairs.length) alert("No certificates could be generated. Make sure the selected items have inspection history.");
+  if(!pairs.length){
+    const reason=before?"The selected items do not have inspection history yet.":"No matching items were found for the selected parameters.";
+    alert(reason);
+  }
   return pairs;
 }
 async function generateCertificateForInspection(inspectionId){
   if(!requirePerm(canCertificates(),"Only Admin, Office / Reports or Certificate Approver users can generate certificates."))return;
-  const i=inspections.find(x=>x.id===inspectionId); if(!i)return alert("Inspection not found.");
-  const e=equipment.find(x=>x.id===i.equipment_id)||equipment.find(x=>x.serial===i.serial); if(!e)return alert("Equipment not found.");
-  await buildCertificatePacket([{equipment:e,inspection:i}],"Single inspection certificate");
+  await withBusy("Generating certificate...", async()=>{
+    const i=inspections.find(x=>x.id===inspectionId); if(!i){alert("Inspection not found.");return;}
+    const e=equipment.find(x=>x.id===i.equipment_id)||equipment.find(x=>x.serial===i.serial); if(!e){alert("Equipment not found.");return;}
+    await buildCertificatePacket([{equipment:e,inspection:i}],"Single inspection certificate");
+  });
 }
 async function generateCertificates(kind){
   if(!requirePerm(canCertificates(),"Only Admin, Office / Reports or Certificate Approver users can generate certificates."))return;
-  const pairs=certTargetsForKind(kind); if(!pairs.length)return;
+  updateCertificateUI();
+  const btn=document.getElementById("certGenerateBtn");
+  if(btn && btn.disabled)return;
+  const pairs=certTargetsForKind(kind); if(!pairs.length){updateCertificateUI(); return;}
   const title={selected_items:"Selected item certificates",type_latest:"Equipment type certificates",inspection_date_range:"Date range inspection certificates",inspection_result:"Inspection result certificates",due_overdue:"Due / overdue certificates"}[kind]||"Inspection certificates";
-  await buildCertificatePacket(pairs,title);
+  if(btn) btn.classList.add("working");
+  try{
+    await withBusy("Generating certificates...", async()=>{ await buildCertificatePacket(pairs,title); });
+    setCertValidation(`Generated ${pairs.length} certificate${pairs.length===1?"":"s"}.`,"ready");
+  }finally{
+    if(btn) btn.classList.remove("working");
+    updateCertificateUI();
+  }
 }
 function certNumber(serial){const clean=String(serial||"ITEM").replace(/[^a-zA-Z0-9]+/g,"").slice(0,12)||"ITEM";const d=new Date();const stamp=d.toISOString().slice(0,10).replaceAll("-","");const suffix=String(Date.now()).slice(-6);return `SW-HSE-${stamp}-${clean}-${suffix}`;}
 async function signedUrl(bucket,path){if(!path)return "";let r=await sb.storage.from(bucket).createSignedUrl(path,3600);return r.error?"":r.data.signedUrl;}
