@@ -18,7 +18,7 @@ const CHECKLISTS={
   "Other":["Identification present and legible","Serial number matches register","Within manufacturer service life","Load-bearing parts free from damage and corrosion","Moving parts operate correctly","No unauthorised modification or signs requiring quarantine"]
 };
 
-let sb,currentUser=null,equipment=[],inspections=[],photos=[],inspectionPhotos=[];
+let sb,currentUser=null,equipment=[],inspections=[],photos=[],inspectionPhotos=[],certificates=[];
 let currentRoles=[],userProfiles=[],roleAssignments=[];
 const ROLE_DEFS=["Admin","Inspector","Equipment Manager","Certificate Approver","Office / Reports","Viewer"];
 let activeFilter={mode:"active",value:"active"};
@@ -48,6 +48,7 @@ function canInspect(){return hasAnyRoles(["Inspector"]);}
 function canAddPhotos(){return hasAnyRoles(["Equipment Manager","Inspector"]);}
 function canArchive(){return hasAnyRoles(["Equipment Manager"]);}
 function canExport(){return hasAnyRoles(["Office / Reports","Certificate Approver"]);}
+function canCertificates(){return hasAnyRoles(["Office / Reports","Certificate Approver"]);}
 function currentRoleText(){return currentRoles.length?currentRoles.join(", "):"Viewer / no roles assigned";}
 function requirePerm(ok,msg){if(!ok){alert(msg||"Your account does not have permission for this action.");return false;}return true;}
 
@@ -88,6 +89,7 @@ function applyPermissions(){
   if(byId("usersTabButton")) byId("usersTabButton").classList.toggle("hidden",!canManageUsers());
   if(byId("inspectTabButton")) byId("inspectTabButton").classList.toggle("hidden",!canInspect());
   if(byId("exportTabButton")) byId("exportTabButton").classList.toggle("hidden",!canExport());
+  if(byId("certificateTabButton")) byId("certificateTabButton").classList.toggle("hidden",!canCertificates());
   if(byId("addItemButton")) byId("addItemButton").classList.toggle("hidden",!canEditEquipment());
 }
 async function loadUsers(){
@@ -129,10 +131,11 @@ async function loadData(){
   let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false}); if(ins.error)return alert(ins.error.message);
   let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false}); if(ph.error) console.warn(ph.error.message);
   let iph=await sb.from("inspection_photos").select("*").order("created_at",{ascending:false}); if(iph.error) console.warn("Inspection photo table issue: "+iph.error.message);
-  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; renderAll(); renderSuggestions();
+  let cert=await sb.from("certificates").select("*").order("created_at",{ascending:false}); if(cert.error) console.warn("Certificate table issue: "+cert.error.message);
+  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
 }
-function renderAll(){renderDashboard();renderEquipment();renderInspections();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();}
-function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
+function renderAll(){renderDashboard();renderEquipment();renderInspections();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory();}
+function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="certificates") renderCertificatesHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function renderDashboard(){
   const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
   dashTotal.textContent=equipment.length; dashInService.textContent=active.filter(e=>e.status==="In Service").length; dashDue.textContent=due.length; dashFailed.textContent=failed.length; dashArchived.textContent=archived.length;
@@ -374,7 +377,99 @@ function removePendingInspectionPhoto(i){pendingInspectionPhotos.splice(i,1);ren
 async function uploadBlobToInspection(inspectionId,equipmentId,blob,fileName){const clean=(fileName||"inspection-photo.jpg").replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${equipmentId}/${inspectionId}/${Date.now()}-${clean}`;let up=await sb.storage.from("inspection-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"3600",upsert:false});if(up.error){alert("Inspection photo upload failed: "+up.error.message);return;}let ins=await sb.from("inspection_photos").insert({inspection_id:inspectionId,equipment_id:equipmentId,file_path:path,file_name:fileName});if(ins.error)alert("Inspection photo record failed: "+ins.error.message);}
 async function deleteInspectionPhoto(photoId,filePath,inspectionId){if(!requirePerm(canInspect(),"Only Admin or Inspector users can delete inspection photos."))return;if(!confirm("Delete this inspection photo?"))return;await sb.storage.from("inspection-photos").remove([filePath]);let r=await sb.from("inspection_photos").delete().eq("id",photoId);if(r.error)return alert(r.error.message);await loadData();await openInspectionDetail(inspectionId);}
 async function renderInspectionPhotoGallery(inspectionId,targetId){let target=document.getElementById(targetId); if(!target)return; let rows=inspectionPhotos.filter(p=>p.inspection_id===inspectionId); if(!rows.length){target.innerHTML=`<p class="muted">No inspection photos yet.</p>`;return;} let parts=[]; for(const p of rows){let signed=await sb.storage.from("inspection-photos").createSignedUrl(p.file_path,3600); if(signed.error){parts.push(`<div class="warning">Could not load ${esc(p.file_name||"photo")}</div>`);continue;} parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Inspection photo")}">${canInspect()?`<button class="danger" onclick="deleteInspectionPhoto('${p.id}','${escAttr(p.file_path)}','${inspectionId}')">Delete</button>`:""}</div>`);} target.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;}
-async function openInspectionDetail(id){let i=inspections.find(x=>x.id===id); if(!i)return; let e=equipment.find(x=>x.id===i.equipment_id)||equipment.find(x=>x.serial===i.serial); showTab("inspectionDetail"); inspectionDetailContent.innerHTML=`<div class="card"><p class="muted">Loading inspection...</p></div>`; let checks=Array.isArray(i.checklist)?i.checklist:[]; inspectionDetailContent.innerHTML=`<div class="card"><div class="row"><button onclick="${e?`openItem('${e.id}')`:`showTab('equipment')`}">← Equipment</button>${canInspect()?`<label class="uploadBtn">Take photo<input type="file" accept="image/*" capture="environment" onchange="selectExistingInspectionPhotos('${i.id}','${i.equipment_id||e?.id||""}',this.files);this.value=''"></label><label class="uploadBtn">Choose from gallery<input type="file" accept="image/*" multiple onchange="selectExistingInspectionPhotos('${i.id}','${i.equipment_id||e?.id||""}',this.files);this.value=''"></label>`:""}</div></div><div class="card"><h2>Inspection ${esc(i.inspection_date)}</h2><div class="kv"><b>Serial</b><span>${esc(i.serial)}</span></div><div class="kv"><b>Type</b><span>${esc(i.equipment_type)}</span></div><div class="kv"><b>Inspector</b><span>${esc(i.inspector||"—")}</span></div><div class="kv"><b>Result</b><span>${pill(i.result)}</span></div><div class="kv"><b>Next due</b><span>${esc(i.next_due||"—")}</span></div><div class="kv"><b>Notes</b><span>${esc(i.notes||"—")}</span></div></div><div class="card"><h2>Checklist</h2>${checks.length?checks.map(x=>`<div class="lineItem"><b>✓</b><span>${esc(x)}</span><span></span></div>`).join(""):`<p class="muted">No checklist items recorded.</p>`}</div><div class="card"><h2>Inspection Photos</h2><div id="inspectionDetailPhotos"></div></div>`; await renderInspectionPhotoGallery(id,"inspectionDetailPhotos");}
+async function openInspectionDetail(id){let i=inspections.find(x=>x.id===id); if(!i)return; let e=equipment.find(x=>x.id===i.equipment_id)||equipment.find(x=>x.serial===i.serial); showTab("inspectionDetail"); inspectionDetailContent.innerHTML=`<div class="card"><p class="muted">Loading inspection...</p></div>`; let checks=Array.isArray(i.checklist)?i.checklist:[]; inspectionDetailContent.innerHTML=`<div class="card"><div class="row"><button onclick="${e?`openItem('${e.id}')`:`showTab('equipment')`}">← Equipment</button>${canCertificates()?`<button class="primary" onclick="generateCertificateForInspection('${i.id}')">Generate certificate</button>`:""}${canInspect()?`<label class="uploadBtn">Take photo<input type="file" accept="image/*" capture="environment" onchange="selectExistingInspectionPhotos('${i.id}','${i.equipment_id||e?.id||""}',this.files);this.value=''"></label><label class="uploadBtn">Choose from gallery<input type="file" accept="image/*" multiple onchange="selectExistingInspectionPhotos('${i.id}','${i.equipment_id||e?.id||""}',this.files);this.value=''"></label>`:""}</div></div><div class="card"><h2>Inspection ${esc(i.inspection_date)}</h2><div class="kv"><b>Serial</b><span>${esc(i.serial)}</span></div><div class="kv"><b>Type</b><span>${esc(i.equipment_type)}</span></div><div class="kv"><b>Inspector</b><span>${esc(i.inspector||"—")}</span></div><div class="kv"><b>Result</b><span>${pill(i.result)}</span></div><div class="kv"><b>Next due</b><span>${esc(i.next_due||"—")}</span></div><div class="kv"><b>Notes</b><span>${esc(i.notes||"—")}</span></div></div><div class="card"><h2>Checklist</h2>${checks.length?checks.map(x=>`<div class="lineItem"><b>✓</b><span>${esc(x)}</span><span></span></div>`).join(""):`<p class="muted">No checklist items recorded.</p>`}</div><div class="card"><h2>Inspection Photos</h2><div id="inspectionDetailPhotos"></div></div>`; await renderInspectionPhotoGallery(id,"inspectionDetailPhotos");}
+
+
+
+let currentCertificatePacket={title:"",targets:[]};
+function fillCertificateFilterOptions(){
+  if(!window.certTypeFilter)return;
+  certTypeFilter.innerHTML=`<option value="">Select type</option>`+EQUIPMENT_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  renderCertificateItemList();
+}
+function renderCertificatesHome(){
+  if(!requirePerm(canCertificates(),"Only Admin, Office / Reports or Certificate Approver users can generate certificates."))return;
+  fillCertificateFilterOptions(); renderCertificateHistory();
+}
+function renderCertificateItemList(){
+  if(!window.certItemList)return;
+  const active=equipment.filter(e=>!isArchived(e)).sort((a,b)=>(a.serial||"").localeCompare(b.serial||""));
+  certItemList.innerHTML=active.map(e=>`<label><input type="checkbox" class="certItemCheck" value="${esc(e.id)}"> <b>${esc(e.serial)}</b> <span class="muted">${esc(e.type)} ${esc(e.manufacturer||"")} ${esc(e.model||"")}</span></label>`).join("")||`<p class="muted">No active equipment found.</p>`;
+}
+function selectAllCertItems(on){document.querySelectorAll(".certItemCheck").forEach(x=>x.checked=!!on);}
+function latestInspectionForEquipment(e){return inspections.filter(i=>i.serial===e.serial).sort((a,b)=>(b.inspection_date||"").localeCompare(a.inspection_date||""))[0]||null;}
+function certTargetsForKind(kind){
+  const active=equipment.filter(e=>!isArchived(e));
+  let pairs=[];
+  if(kind==="selected_items"){
+    const ids=[...document.querySelectorAll(".certItemCheck:checked")].map(x=>x.value);
+    pairs=ids.map(id=>equipment.find(e=>e.id===id)).filter(Boolean).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
+  }else if(kind==="type_latest"){
+    const type=certTypeFilter?.value||""; if(!type){alert("Choose an equipment type first.");return [];} pairs=active.filter(e=>e.type===type).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
+  }else if(kind==="inspection_date_range"){
+    const start=certStartDate?.value||"",end=certEndDate?.value||""; if(!start&&!end){alert("Choose a start and/or end date first.");return [];} pairs=inspections.filter(i=>withinDate(i.inspection_date,start,end)).map(i=>({inspection:i,equipment:equipment.find(e=>e.id===i.equipment_id)||equipment.find(e=>e.serial===i.serial)}));
+  }else if(kind==="inspection_result"){
+    const result=certResult?.value||""; pairs=inspections.filter(i=>i.result===result).map(i=>({inspection:i,equipment:equipment.find(e=>e.id===i.equipment_id)||equipment.find(e=>e.serial===i.serial)}));
+  }else if(kind==="due_overdue"){
+    pairs=active.filter(isDue).map(e=>({equipment:e,inspection:latestInspectionForEquipment(e)}));
+  }else if(kind==="single_inspection"){
+    return [];
+  }
+  pairs=pairs.filter(p=>p.equipment && p.inspection);
+  if(!pairs.length) alert("No certificates could be generated. Make sure the selected items have inspection history.");
+  return pairs;
+}
+async function generateCertificateForInspection(inspectionId){
+  if(!requirePerm(canCertificates(),"Only Admin, Office / Reports or Certificate Approver users can generate certificates."))return;
+  const i=inspections.find(x=>x.id===inspectionId); if(!i)return alert("Inspection not found.");
+  const e=equipment.find(x=>x.id===i.equipment_id)||equipment.find(x=>x.serial===i.serial); if(!e)return alert("Equipment not found.");
+  await buildCertificatePacket([{equipment:e,inspection:i}],"Single inspection certificate");
+}
+async function generateCertificates(kind){
+  if(!requirePerm(canCertificates(),"Only Admin, Office / Reports or Certificate Approver users can generate certificates."))return;
+  const pairs=certTargetsForKind(kind); if(!pairs.length)return;
+  const title={selected_items:"Selected item certificates",type_latest:"Equipment type certificates",inspection_date_range:"Date range inspection certificates",inspection_result:"Inspection result certificates",due_overdue:"Due / overdue certificates"}[kind]||"Inspection certificates";
+  await buildCertificatePacket(pairs,title);
+}
+function certNumber(serial){const clean=String(serial||"ITEM").replace(/[^a-zA-Z0-9]+/g,"").slice(0,12)||"ITEM";const d=new Date();const stamp=d.toISOString().slice(0,10).replaceAll("-","");const suffix=String(Date.now()).slice(-6);return `SW-HSE-${stamp}-${clean}-${suffix}`;}
+async function signedUrl(bucket,path){if(!path)return "";let r=await sb.storage.from(bucket).createSignedUrl(path,3600);return r.error?"":r.data.signedUrl;}
+async function certImageUrls(e,i){
+  const includeEq=(certIncludeEquipmentPhotos?.value||"yes")==="yes";
+  const includeIns=(certIncludeInspectionPhotos?.value||"yes")==="yes";
+  let equipmentUrls=[],inspectionUrls=[];
+  if(includeEq){for(const p of photos.filter(p=>p.equipment_id===e.id).slice(0,3)){let u=await signedUrl("equipment-photos",p.file_path); if(u)equipmentUrls.push(u);}}
+  if(includeIns){for(const p of inspectionPhotos.filter(p=>p.inspection_id===i.id).slice(0,6)){let u=await signedUrl("inspection-photos",p.file_path); if(u)inspectionUrls.push(u);}}
+  return {equipmentUrls,inspectionUrls};
+}
+async function buildCertificatePacket(pairs,title){
+  const records=[];
+  for(const p of pairs){
+    const number=certNumber(p.equipment.serial);
+    const img=await certImageUrls(p.equipment,p.inspection);
+    records.push({...p,certificate_number:number,images:img});
+  }
+  await saveCertificateHistory(records,title);
+  currentCertificatePacket={title,targets:records};
+  openCertificateWindow(records,title);
+  await loadCertificateHistory();
+}
+async function saveCertificateHistory(records,summary){
+  if(!records.length)return;
+  const rows=records.map(r=>({certificate_number:r.certificate_number,equipment_id:r.equipment.id,inspection_id:r.inspection.id,generated_by:currentUser?.id||null,generated_by_email:currentUser?.email||"",filter_summary:summary,status:"Generated"}));
+  const ins=await sb.from("certificates").insert(rows);
+  if(ins.error) alert("Certificates were created, but certificate history was not saved: "+ins.error.message);
+}
+function checklistHtml(i){const checks=Array.isArray(i.checklist)?i.checklist:[];return checks.length?`<ul>${checks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:`<p>No checklist items recorded.</p>`;}
+function photoStrip(urls){return urls.length?`<div class="photos">${urls.map(u=>`<img src="${u}">`).join("")}</div>`:`<p class="muted">No photos included.</p>`;}
+function certificatePageHtml(records,title){
+  const generated=new Date().toLocaleString();
+  const body=records.map(r=>{const e=r.equipment,i=r.inspection;return `<section class="cert"><div class="certHeader"><div><h1>Spray & Wash Height Safety Inspection Certificate</h1><p>Certificate No: <b>${esc(r.certificate_number)}</b></p></div><div class="brand">SPRAY<br>& WASH</div></div><div class="status ${String(i.result||"").includes("Fail")?"bad":"good"}">${esc(i.result)}</div><div class="grid"><div><h2>Equipment</h2><table><tr><th>Serial</th><td>${esc(e.serial)}</td></tr><tr><th>Type</th><td>${esc(e.type)}</td></tr><tr><th>Manufacturer</th><td>${esc(e.manufacturer||"—")}</td></tr><tr><th>Model</th><td>${esc(e.model||"—")}</td></tr><tr><th>Rope length</th><td>${e.rope_length_m?esc(e.rope_length_m)+" m":"—"}</td></tr><tr><th>Manufactured</th><td>${esc(e.date_manufactured||"—")}</td></tr><tr><th>First used</th><td>${esc(e.date_first_used||"—")}</td></tr><tr><th>Retirement date</th><td>${esc(e.retirement_date||"—")}</td></tr></table></div><div><h2>Inspection</h2><table><tr><th>Date</th><td>${esc(i.inspection_date)}</td></tr><tr><th>Inspector</th><td>${esc(i.inspector||"—")}</td></tr><tr><th>Result</th><td>${esc(i.result)}</td></tr><tr><th>Next due</th><td>${esc(i.next_due||"—")}</td></tr><tr><th>Generated</th><td>${esc(generated)}</td></tr></table></div></div><h2>Checklist</h2>${checklistHtml(i)}<h2>Inspection Notes</h2><p>${esc(i.notes||"No notes recorded.")}</p><h2>Equipment Photos</h2>${photoStrip(r.images.equipmentUrls)}<h2>Inspection Photos</h2>${photoStrip(r.images.inspectionUrls)}<footer>This certificate was generated from the Spray & Wash Height Safety Register. Verify against the live register before relying on expired downloaded copies.</footer></section>`}).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.toolbar{position:sticky;top:0;background:#0f766e;color:white;padding:12px;display:flex;gap:8px;align-items:center;z-index:5}.toolbar button{border:0;border-radius:8px;padding:10px 14px;font-weight:800}.cert{background:white;margin:18px auto;padding:28px;max-width:900px;box-shadow:0 8px 30px #0001;page-break-after:always}.certHeader{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #0f766e;padding-bottom:16px;margin-bottom:16px}.brand{background:#0f766e;color:white;border-radius:12px;padding:14px;font-weight:900;text-align:center}.status{display:inline-block;border-radius:999px;padding:8px 14px;font-weight:900;margin-bottom:12px}.good{background:#dcfce7;color:#166534}.bad{background:#fee2e2;color:#991b1b}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;vertical-align:top}th{width:140px;color:#475569}ul{columns:2}.photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.photos img{width:100%;height:150px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0}.muted{color:#64748b}footer{margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:12px;color:#64748b}@media print{.toolbar{display:none}.cert{box-shadow:none;margin:0;max-width:none;page-break-after:always}body{background:white}}@media(max-width:700px){.grid{grid-template-columns:1fr}ul{columns:1}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save PDF</button><button onclick="window.close()">Close</button><span>${esc(title)} · ${records.length} certificate(s)</span></div>${body}</body></html>`;
+}
+function openCertificateWindow(records,title){const html=certificatePageHtml(records,title);const w=window.open("","_blank");if(!w){downloadBlob(html,"inspection-certificates.html","text/html");alert("Popup blocked. The certificate HTML file has been downloaded instead.");return;}w.document.open();w.document.write(html);w.document.close();}
+async function loadCertificateHistory(){const r=await sb.from("certificates").select("*").order("created_at",{ascending:false}).limit(100);if(r.error){console.warn(r.error.message);return;}certificates=r.data||[];renderCertificateHistory();}
+function renderCertificateHistory(){if(!window.certificateHistory)return; if(!certificates.length){certificateHistory.innerHTML=`<p class="muted">No certificate history yet.</p>`;return;} certificateHistory.innerHTML=certificates.slice(0,50).map(c=>{const e=equipment.find(x=>x.id===c.equipment_id);const i=inspections.find(x=>x.id===c.inspection_id);return `<div class="certHistoryItem"><div><b>${esc(c.certificate_number)}</b><div class="muted">${esc(e?.serial||"Unknown item")} · ${esc(i?.inspection_date||"Unknown inspection")} · ${esc(c.filter_summary||"")}</div><div class="muted">Generated: ${esc(c.created_at||"")} by ${esc(c.generated_by_email||"")}</div></div>${i?`<button onclick="generateCertificateForInspection('${i.id}')">Regenerate</button>`:""}</div>`;}).join("");}
+function exportCertificatesCSV(){downloadRowsCSV((certificates||[]).map(c=>({certificate_number:c.certificate_number,equipment_serial:(equipment.find(e=>e.id===c.equipment_id)||{}).serial||"",inspection_date:(inspections.find(i=>i.id===c.inspection_id)||{}).inspection_date||"",generated_by:c.generated_by_email||"",generated_at:c.created_at||"",summary:c.filter_summary||"",status:c.status||""})),"certificate-history.csv");}
 
 let currentReport={title:"",rows:[],kind:""};
 function fillReportFilterOptions(){if(!window.reportTypeFilter)return; const typeOptions=`<option value="">Select type</option>`+EQUIPMENT_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join(""); if(reportTypeFilter.options.length<2) reportTypeFilter.innerHTML=typeOptions; if(reportInspectionType.options.length<2) reportInspectionType.innerHTML=typeOptions; const makers=[...new Set(equipment.map(e=>e.manufacturer).filter(Boolean))].sort(); reportManufacturer.innerHTML=`<option value="">Select manufacturer</option>`+makers.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join(""); const models=[...new Set(equipment.map(e=>e.model).filter(Boolean))].sort(); reportModel.innerHTML=`<option value="">Select model</option>`+models.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join("");}
@@ -389,5 +484,5 @@ function renderReportPreview(){if(!window.reportPreview)return; reportTitleOut.t
 function exportCurrentReportCSV(){if(!currentReport.rows.length)return alert("Run a report first.");downloadRowsCSV(currentReport.rows,(currentReport.title||"report").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".csv");}
 function downloadRowsCSV(rows,name){if(!rows.length)return alert("Nothing to export.");let h=Object.keys(rows[0]);let csv=[h.join(","),...rows.map(r=>h.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");downloadBlob(csv,name,"text/csv");}
 function exportCSV(kind){if(!requirePerm(canExport(),"Only Admin, Office / Reports or Certificate Approver users can export data."))return;let rows=kind==="equipment"?equipment:inspections.map(i=>({...i,checklist:JSON.stringify(i.checklist||[])}));downloadRowsCSV(rows,kind+".csv");}
-function exportJSONBackup(){if(!requirePerm(canExport(),"Only Admin, Office / Reports or Certificate Approver users can export data."))return;downloadBlob(JSON.stringify({exported_at:new Date().toISOString(),equipment,inspections,photos,inspectionPhotos},null,2),"height-safety-full-backup.json","application/json");}
+function exportJSONBackup(){if(!requirePerm(canExport(),"Only Admin, Office / Reports or Certificate Approver users can export data."))return;downloadBlob(JSON.stringify({exported_at:new Date().toISOString(),equipment,inspections,photos,inspectionPhotos,certificates},null,2),"height-safety-full-backup.json","application/json");}
 function downloadBlob(content,name,type){let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
