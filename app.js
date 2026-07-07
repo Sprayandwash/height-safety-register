@@ -22,6 +22,7 @@ let sb,currentUser=null,equipment=[],inspections=[],photos=[];
 let activeFilter={mode:"active",value:"active"};
 let pendingEquipmentPhotos=[];
 let cropState=null;
+let photoQueue=[];
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 function today(){return new Date().toISOString().slice(0,10);}
@@ -39,7 +40,7 @@ async function init(){
   if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(console.warn);}
   if(!window.SUPABASE_URL || window.SUPABASE_URL.includes("PASTE_")) configWarning.classList.remove("hidden");
   sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
-  fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); bindCropCanvas();
+  fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); initDateParts(); bindCropCanvas();
   const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser) await loadData();
 }
 function fillTypes(){let opts=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=opts; inType.innerHTML=opts;}
@@ -93,7 +94,7 @@ async function renderDetail(e){
   detailContent.innerHTML=`<div class="card"><p class="muted">Loading item...</p></div>`;
   let l=latest(e.serial); let itemPhotos=photos.filter(p=>p.equipment_id===e.id); let url=await firstPhotoUrl(e.id);
   let history=inspections.filter(i=>i.serial===e.serial).sort((a,b)=>(b.inspection_date||"").localeCompare(a.inspection_date||""));
-  detailContent.innerHTML=`<div class="card"><div class="row"><button onclick="showTab('equipment')">← Register</button><button class="primary" onclick="startInspection('${e.id}')">Inspect</button><button onclick="editEquipment('${e.id}')">Edit</button><label class="uploadBtn">Add photo<input type="file" accept="image/*" onchange="selectExistingEquipmentPhoto('${e.id}', this.files[0]);this.value=''"></label>${isArchived(e)?`<button onclick="restoreItem('${e.id}')">Restore</button>`:`<button class="danger" onclick="archiveItem('${e.id}')">Archive / dispose</button>`}</div></div>
+  detailContent.innerHTML=`<div class="card"><div class="row"><button onclick="showTab('equipment')">← Register</button><button class="primary" onclick="startInspection('${e.id}')">Inspect</button><button onclick="editEquipment('${e.id}')">Edit</button><label class="uploadBtn">Take photo<input type="file" accept="image/*" capture="environment" onchange="selectExistingEquipmentPhotos('${e.id}', this.files);this.value=''"></label><label class="uploadBtn">Choose from gallery<input type="file" accept="image/*" multiple onchange="selectExistingEquipmentPhotos('${e.id}', this.files);this.value=''"></label>${isArchived(e)?`<button onclick="restoreItem('${e.id}')">Restore</button>`:`<button class="danger" onclick="archiveItem('${e.id}')">Archive / dispose</button>`}</div></div>
   <div class="card detailHero"><div class="heroPhoto">${url?`<img src="${url}" alt="Equipment photo">`:`<span class="muted">No photo yet</span>`}</div><div><h2>${esc(e.serial)} ${pill(isArchived(e)?"Archived":e.status)}</h2><div class="kv"><b>Type</b><span class="quickLink" onclick="setRegisterFilter('type','${escAttr(e.type)}')">${esc(e.type)}</span></div><div class="kv"><b>Manufacturer</b><span>${e.manufacturer?`<span class="quickLink" onclick="setRegisterFilter('manufacturer','${escAttr(e.manufacturer)}')">${esc(e.manufacturer)}</span>`:"—"}</span></div><div class="kv"><b>Model</b><span>${e.model?`<span class="quickLink" onclick="setRegisterFilter('model','${escAttr(e.model)}')">${esc(e.model)}</span>`:"—"}</span></div><div class="kv"><b>Rope length</b><span>${e.rope_length_m?esc(e.rope_length_m)+" m":"—"}</span></div><div class="kv"><b>Manufactured</b><span>${esc(e.date_manufactured||"—")}</span></div><div class="kv"><b>First used</b><span>${esc(e.date_first_used||"—")}</span></div><div class="kv"><b>Retirement</b><span>${esc(e.retirement_date||"—")}</span></div><div class="kv"><b>Last inspection</b><span>${l?`${esc(l.inspection_date)} ${pill(l.result)}`:"No inspection recorded"}</span></div><div class="kv"><b>Next due</b><span>${esc(l?.next_due||"—")}</span></div><div class="kv"><b>Notes</b><span>${esc(e.notes||"—")}</span></div>${isArchived(e)?`<div class="kv"><b>Disposed</b><span>${esc(e.disposed_at||e.archived_at||"—")}</span></div><div class="kv"><b>Reason</b><span>${esc(e.disposal_reason||"—")}</span></div>`:""}</div></div>
   <div class="card"><h2>Photos</h2><div id="detailPhotos"></div></div><div class="card"><h2>Inspection History</h2>${history.map(i=>`<div class="lineItem"><b>${esc(i.inspection_date)}</b><span>${pill(i.result)}</span><span>${esc(i.next_due||"")}</span></div><p class="muted">${esc(i.notes||"")}</p>`).join("")||`<p class="muted">No inspections yet.</p>`}</div>`;
   await renderPhotoGallery(e.id,"detailPhotos");
@@ -103,9 +104,59 @@ async function renderPhotoGallery(equipmentId,targetId){
   let parts=[]; for(const p of rows){let signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); if(signed.error){parts.push(`<div class="warning">Could not load ${esc(p.file_name||"photo")}</div>`);continue;} parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}"><button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${escAttr(p.file_path)}')">Delete</button></div>`);} target.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
 }
 function newEquipment(){clearEquipmentForm();equipmentFormTitle.textContent="Add Equipment";showTab("editEquipment");}
-function editEquipment(id){let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";eqMade.value=e.date_manufactured||"";eqFirstUsed.value=e.date_first_used||"";eqRetire.value=e.retirement_date||"";eqFreq.value=e.inspection_frequency||"6 monthly";eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
-function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqMade","eqFirstUsed","eqRetire","eqNotes","eqRopeLength"].forEach(id=>document.getElementById(id).value="");eqType.value="Harness";eqFreq.value="6 monthly";eqStatus.value="In Service";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();}
+function editEquipment(id){let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";setDateParts("eqMade",e.date_manufactured||"");setDateParts("eqFirstUsed",e.date_first_used||"");setDateParts("eqRetire",e.retirement_date||"");eqFreq.value=e.inspection_frequency||"6 monthly";eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";eqServiceLifeYears.value=eqServiceLifeYears.value||"10";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
+function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqNotes","eqRopeLength"].forEach(id=>document.getElementById(id).value="");setDateParts("eqMade","");setDateParts("eqFirstUsed","");setDateParts("eqRetire","");eqServiceLifeYears.value="10";eqRetireBasis.value="manufactured";eqAutoRetire.checked=true;eqType.value="Harness";eqFreq.value="6 monthly";eqStatus.value="In Service";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();}
 function toggleRopeLengthField(){ropeLengthWrap.classList.toggle("hidden",!typeNeedsLength(eqType.value));}
+
+function initDateParts(){
+  ["eqMade","eqFirstUsed","eqRetire"].forEach(prefix=>{
+    ["Day","Month","Year"].forEach(part=>{
+      const el=document.getElementById(prefix+part);
+      if(!el)return;
+      el.addEventListener("input",()=>{
+        syncHiddenDate(prefix);
+        if(prefix==="eqMade"||prefix==="eqFirstUsed") maybeAutoCalculateRetire();
+        if(prefix==="eqRetire" && document.activeElement===el && window.eqAutoRetire) eqAutoRetire.checked=false;
+      });
+      el.addEventListener("change",()=>{
+        syncHiddenDate(prefix);
+        if(prefix==="eqMade"||prefix==="eqFirstUsed") maybeAutoCalculateRetire();
+      });
+    });
+  });
+  if(window.eqServiceLifeYears) eqServiceLifeYears.addEventListener("input",maybeAutoCalculateRetire);
+  if(window.eqRetireBasis) eqRetireBasis.addEventListener("change",maybeAutoCalculateRetire);
+  if(window.eqAutoRetire) eqAutoRetire.addEventListener("change",maybeAutoCalculateRetire);
+}
+function syncHiddenDate(prefix){
+  const dayEl=document.getElementById(prefix+"Day"),monthEl=document.getElementById(prefix+"Month"),yearEl=document.getElementById(prefix+"Year"),hidden=document.getElementById(prefix);
+  if(!dayEl||!monthEl||!yearEl||!hidden)return;
+  const y=String(yearEl.value||"").trim(),m=String(monthEl.value||"").trim(),d=String(dayEl.value||"01").trim().padStart(2,"0");
+  hidden.value=(y&&m)?`${y}-${m}-${d}`:"";
+}
+function setDateParts(prefix,iso){
+  const dayEl=document.getElementById(prefix+"Day"),monthEl=document.getElementById(prefix+"Month"),yearEl=document.getElementById(prefix+"Year"),hidden=document.getElementById(prefix);
+  if(!dayEl||!monthEl||!yearEl||!hidden)return;
+  hidden.value=iso||"";
+  const match=String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  yearEl.value=match?match[1]:""; monthEl.value=match?match[2]:""; dayEl.value=match?String(Number(match[3])):"";
+}
+function addYearsIso(iso,years){
+  if(!iso||!years)return "";
+  const d=new Date(iso+"T00:00:00");
+  if(Number.isNaN(d.getTime()))return "";
+  d.setFullYear(d.getFullYear()+Number(years));
+  return d.toISOString().slice(0,10);
+}
+function maybeAutoCalculateRetire(){if(window.eqAutoRetire && eqAutoRetire.checked) calculateRetirementDate();}
+function calculateRetirementDate(){
+  const years=Number(eqServiceLifeYears?.value||0);
+  if(!years)return;
+  const base=eqRetireBasis.value==="first_used"?eqFirstUsed.value:eqMade.value;
+  const result=addYearsIso(base,years);
+  if(result)setDateParts("eqRetire",result);
+}
+
 async function saveEquipment(){
   let serial=eqSerial.value.trim();if(!serial)return alert("Serial number required.");
   let row={serial,type:eqType.value,manufacturer:eqMaker.value.trim(),model:eqModel.value.trim(),date_manufactured:eqMade.value||null,date_first_used:eqFirstUsed.value||null,retirement_date:eqRetire.value||null,inspection_frequency:eqFreq.value,status:eqStatus.value,notes:eqNotes.value.trim(),rope_length_m:typeNeedsLength(eqType.value)&&(eqRopeLength.value!=="")?Number(eqRopeLength.value):null};
@@ -140,15 +191,86 @@ function clearInspectionForm(){inspectTitle.textContent="New Inspection";inSeria
 function renderInspections(){inspectionList.innerHTML=inspections.slice(0,10).map(i=>`<div class="listItem" onclick="openItemBySerial('${escAttr(i.serial)}')"><b>${esc(i.inspection_date)}</b> ${pill(i.result)}<div>${esc(i.serial)} • ${esc(i.equipment_type)}</div><div class="muted">${esc(i.notes||"")}</div></div>`).join("") || `<p class="muted">No inspections yet.</p>`;}
 async function archiveItem(id){let reason=prompt("Reason for archive/disposal?",""); if(reason===null)return; let method=prompt("Disposal method / notes?",""); let r=await sb.from("equipment").update({archived:true,archived_at:nowIso(),disposed_at:nowIso(),disposal_reason:reason,disposal_method:method,status:"Retired"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
 async function restoreItem(id){if(!confirm("Restore this item to the active register?"))return; let r=await sb.from("equipment").update({archived:false,archived_at:null,disposed_at:null,disposal_reason:null,disposal_method:null,status:"In Service"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
-function selectNewEquipmentPhoto(file){if(!file)return; openCropper(file,{mode:"pending"});}
-function selectExistingEquipmentPhoto(equipmentId,file){if(!file)return; openCropper(file,{mode:"existing",equipmentId});}
-function openCropper(file,target){let img=new Image();let url=URL.createObjectURL(file);img.onload=()=>{cropState={file,target,img,url,rotation:0,zoom:1,offsetX:0,offsetY:0,drag:false,lastX:0,lastY:0};cropZoom.value=1;cropModal.classList.remove("hidden");drawCrop();};img.src=url;}
-function cancelCrop(){if(cropState?.url)URL.revokeObjectURL(cropState.url);cropState=null;cropModal.classList.add("hidden");}
-function setCropZoom(v){if(!cropState)return;cropState.zoom=Number(v);drawCrop();}
-function rotateCrop(){if(!cropState)return;cropState.rotation=(cropState.rotation+90)%360;cropState.offsetX=0;cropState.offsetY=0;drawCrop();}
-function bindCropCanvas(){cropCanvas.addEventListener("pointerdown",e=>{if(!cropState)return;cropState.drag=true;cropState.lastX=e.clientX;cropState.lastY=e.clientY;cropCanvas.setPointerCapture(e.pointerId);});cropCanvas.addEventListener("pointermove",e=>{if(!cropState?.drag)return;let rect=cropCanvas.getBoundingClientRect();let sx=cropCanvas.width/rect.width, sy=cropCanvas.height/rect.height;cropState.offsetX+=(e.clientX-cropState.lastX)*sx;cropState.offsetY+=(e.clientY-cropState.lastY)*sy;cropState.lastX=e.clientX;cropState.lastY=e.clientY;drawCrop();});["pointerup","pointercancel"].forEach(ev=>cropCanvas.addEventListener(ev,()=>{if(cropState)cropState.drag=false;}));}
-function drawCrop(){if(!cropState)return;let c=cropCanvas,ctx=c.getContext("2d"),img=cropState.img;ctx.clearRect(0,0,c.width,c.height);ctx.fillStyle="#111";ctx.fillRect(0,0,c.width,c.height);let rot=cropState.rotation%180!==0;let iw=rot?img.height:img.width, ih=rot?img.width:img.height;let base=Math.max(c.width/iw,c.height/ih);let scale=base*cropState.zoom;ctx.save();ctx.translate(c.width/2+cropState.offsetX,c.height/2+cropState.offsetY);ctx.rotate(cropState.rotation*Math.PI/180);ctx.drawImage(img,-img.width*scale/2,-img.height*scale/2,img.width*scale,img.height*scale);ctx.restore();ctx.strokeStyle="rgba(255,255,255,.9)";ctx.lineWidth=8;ctx.strokeRect(4,4,c.width-8,c.height-8);}
-async function saveCrop(){if(!cropState)return;drawCrop();cropCanvas.toBlob(async blob=>{let fileName=(cropState.file.name||"equipment-photo.jpg").replace(/\.[^.]+$/,"")+"-cropped.jpg";let target=cropState.target;cancelCrop();if(target.mode==="pending"){let dataUrl=await blobToDataUrl(blob);pendingEquipmentPhotos.push({blob,fileName,preview:dataUrl});renderPendingPhotos();}else{await uploadBlobToEquipment(target.equipmentId,blob,fileName);await loadData();await openItem(target.equipmentId);}},"image/jpeg",0.9);}
+
+function selectNewEquipmentPhoto(file){if(!file)return;selectNewEquipmentPhotos([file]);}
+function selectExistingEquipmentPhoto(equipmentId,file){if(!file)return;selectExistingEquipmentPhotos(equipmentId,[file]);}
+function selectNewEquipmentPhotos(files){beginPhotoQueue(files,{mode:"pending"});}
+function selectExistingEquipmentPhotos(equipmentId,files){beginPhotoQueue(files,{mode:"existing",equipmentId});}
+function beginPhotoQueue(files,target){
+  const list=Array.from(files||[]).filter(f=>String(f.type||"").startsWith("image/"));
+  if(!list.length)return;
+  photoQueue=list.map(file=>({file,target}));
+  processNextPhoto();
+}
+function processNextPhoto(){
+  if(!photoQueue.length)return;
+  const next=photoQueue.shift();
+  openCropper(next.file,next.target);
+}
+function openCropper(file,target){
+  let img=new Image();let url=URL.createObjectURL(file);
+  img.onload=()=>{
+    cropState={file,target,img,url,rotation:0,crop:{left:0,right:0,top:0,bottom:0}};
+    [cropLeft,cropRight,cropTop,cropBottom].forEach(x=>x.value=0);
+    cropQueueInfo.classList.toggle("hidden",photoQueue.length===0);
+    cropQueueInfo.textContent=photoQueue.length?`Cropping 1 photo now. ${photoQueue.length} more queued after this.`:"";
+    cropModal.classList.remove("hidden");
+    drawCrop();
+  };
+  img.onerror=()=>{URL.revokeObjectURL(url);alert("Could not open this image.");processNextPhoto();};
+  img.src=url;
+}
+function closeCropModal(){if(cropState?.url)URL.revokeObjectURL(cropState.url);cropState=null;cropModal.classList.add("hidden");}
+function cancelCrop(){photoQueue=[];closeCropModal();}
+function setCropZoom(v){drawCrop();}
+function rotateCrop(){if(!cropState)return;cropState.rotation=(cropState.rotation+90)%360;drawCrop();}
+function resetCrop(){if(!cropState)return;cropState.crop={left:0,right:0,top:0,bottom:0};[cropLeft,cropRight,cropTop,cropBottom].forEach(x=>x.value=0);drawCrop();}
+function setCropEdge(edge,value){
+  if(!cropState)return;
+  cropState.crop[edge]=Number(value);
+  if(cropState.crop.left+cropState.crop.right>90){if(edge==="left")cropState.crop.right=90-cropState.crop.left;else cropState.crop.left=90-cropState.crop.right;cropLeft.value=cropState.crop.left;cropRight.value=cropState.crop.right;}
+  if(cropState.crop.top+cropState.crop.bottom>90){if(edge==="top")cropState.crop.bottom=90-cropState.crop.top;else cropState.crop.top=90-cropState.crop.bottom;cropTop.value=cropState.crop.top;cropBottom.value=cropState.crop.bottom;}
+  drawCrop();
+}
+function bindCropCanvas(){/* Cropping is controlled with side sliders for reliable phone use. */}
+function buildRotatedCanvas(){
+  const img=cropState.img,rot=cropState.rotation%360;
+  const c=document.createElement("canvas"),ctx=c.getContext("2d");
+  if(rot===90||rot===270){c.width=img.height;c.height=img.width;}else{c.width=img.width;c.height=img.height;}
+  ctx.translate(c.width/2,c.height/2);ctx.rotate(rot*Math.PI/180);ctx.drawImage(img,-img.width/2,-img.height/2);
+  return c;
+}
+function drawCrop(){
+  if(!cropState)return;
+  const c=cropCanvas,ctx=c.getContext("2d"),src=buildRotatedCanvas();
+  ctx.clearRect(0,0,c.width,c.height);ctx.fillStyle="#111827";ctx.fillRect(0,0,c.width,c.height);
+  const scale=Math.min(c.width/src.width,c.height/src.height);
+  const dw=src.width*scale,dh=src.height*scale,dx=(c.width-dw)/2,dy=(c.height-dh)/2;
+  ctx.drawImage(src,dx,dy,dw,dh);
+  const cr=cropState.crop;
+  const x1=dx+dw*cr.left/100,y1=dy+dh*cr.top/100,x2=dx+dw*(1-cr.right/100),y2=dy+dh*(1-cr.bottom/100);
+  ctx.fillStyle="rgba(15,23,42,.55)";ctx.fillRect(dx,dy,dw,y1-dy);ctx.fillRect(dx,y2,dw,dy+dh-y2);ctx.fillRect(dx,y1,x1-dx,y2-y1);ctx.fillRect(x2,y1,dx+dw-x2,y2-y1);
+  ctx.strokeStyle="rgba(255,255,255,.95)";ctx.lineWidth=6;ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+}
+async function saveCrop(){
+  if(!cropState)return;
+  const source=buildRotatedCanvas(),cr=cropState.crop;
+  let sx=Math.round(source.width*cr.left/100),sy=Math.round(source.height*cr.top/100);
+  let sw=Math.round(source.width*(1-(cr.left+cr.right)/100)),sh=Math.round(source.height*(1-(cr.top+cr.bottom)/100));
+  sw=Math.max(1,sw);sh=Math.max(1,sh);
+  const maxDim=2200,scale=Math.min(1,maxDim/Math.max(sw,sh));
+  const out=document.createElement("canvas");out.width=Math.round(sw*scale);out.height=Math.round(sh*scale);
+  out.getContext("2d").drawImage(source,sx,sy,sw,sh,0,0,out.width,out.height);
+  out.toBlob(async blob=>{
+    let fileName=(cropState.file.name||"equipment-photo.jpg").replace(/\.[^.]+$/,"")+"-cropped.jpg";
+    let target=cropState.target;closeCropModal();
+    if(target.mode==="pending"){
+      let dataUrl=await blobToDataUrl(blob);pendingEquipmentPhotos.push({blob,fileName,preview:dataUrl});renderPendingPhotos();processNextPhoto();
+    }else{
+      await uploadBlobToEquipment(target.equipmentId,blob,fileName);await loadData();if(photoQueue.length)processNextPhoto();else await openItem(target.equipmentId);
+    }
+  },"image/jpeg",0.9);
+}
 function blobToDataUrl(blob){return new Promise(res=>{let r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(blob);});}
 function renderPendingPhotos(){newPhotoPreview.innerHTML=pendingEquipmentPhotos.map((p,i)=>`<div class="previewCard"><img src="${p.preview}" alt="Pending photo"><button class="danger" onclick="removePendingPhoto(${i})">Remove</button></div>`).join("");}
 function removePendingPhoto(i){pendingEquipmentPhotos.splice(i,1);renderPendingPhotos();}
