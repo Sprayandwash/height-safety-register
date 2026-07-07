@@ -1,0 +1,21 @@
+SERVICE WORKER PATCH FOR V4.0
+
+Recommended, but optional.
+
+Purpose:
+Force the PWA cache to refresh and include operations-v4.js.
+
+In service-worker.js:
+1. Change the cache version/name from the V3.4 value to a V4.0 value.
+   Example:
+   const CACHE_NAME = 'spray-wash-operations-v4.0';
+
+2. Add operations-v4.js to the asset list/cache list, if the service worker uses one.
+   Example:
+   './operations-v4.js',
+
+3. Upload the changed service-worker.js to the V4 branch.
+
+4. After deployment, open the app, hard refresh, and if needed unregister the old service worker from browser dev tools.
+
+Do not change config.js.

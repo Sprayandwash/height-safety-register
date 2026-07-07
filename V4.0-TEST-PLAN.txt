@@ -1,0 +1,89 @@
+Spray & Wash Operations App V4.0 Test Plan
+
+PRE-INSTALL CHECKS
+[ ] V3.4 repo ZIP downloaded.
+[ ] Full JSON backup exported from the app.
+[ ] Equipment CSV exported.
+[ ] Inspections CSV exported.
+[ ] Certificates CSV exported.
+[ ] Supabase table CSVs exported where needed.
+[ ] Brendan has Admin role.
+[ ] Live V3.4 app loads before changes.
+
+DATABASE
+[ ] Run supabase-schema-v4.0-operations.sql in Supabase SQL Editor.
+[ ] Confirm these tables exist:
+    - operations_vehicles
+    - operations_washing_equipment
+    - operations_checklist_templates
+    - operations_checklist_items
+    - operations_inspections
+    - operations_inspection_answers
+    - operations_inspection_photos
+    - operations_maintenance_procedures
+    - operations_maintenance_procedure_steps
+    - operations_equipment_maintenance_schedules
+    - operations_maintenance_tasks
+    - operations_maintenance_task_steps
+    - operations_maintenance_parts_used
+    - operations_maintenance_readings
+[ ] Confirm checklist templates were seeded.
+[ ] Confirm maintenance procedures and steps were seeded.
+
+FRONT END
+[ ] Upload operations-v4.js to GitHub branch.
+[ ] Patch index.html with the operations-v4.js script tag.
+[ ] Do not replace config.js.
+[ ] Open app and sign in as Brendan.
+[ ] Confirm Operations tab appears.
+[ ] Confirm existing V3.4 Dashboard, Equipment, Inspection, Reports, Certificates, Users and Admin tabs still work.
+
+VEHICLE REGISTER
+[ ] Add a test vehicle.
+[ ] Edit the test vehicle.
+[ ] Confirm vehicle appears in Operations Dashboard.
+
+WASHING EQUIPMENT REGISTER
+[ ] Add a test water blaster.
+[ ] Include engine make/model and pump make/model if known.
+[ ] Link it to the test vehicle.
+[ ] Edit the equipment.
+
+INSPECTIONS
+[ ] Submit a passing vehicle inspection.
+[ ] Submit a washing equipment inspection with one failed/problem answer.
+[ ] Confirm inspection history records both submissions.
+[ ] Confirm failed/problem answer created a maintenance task.
+[ ] Upload a test photo with the inspection.
+[ ] Confirm photo metadata appears in operations_inspection_photos.
+
+MAINTENANCE TASKS
+[ ] Open the generated maintenance task.
+[ ] Change status to In Progress.
+[ ] Change status to Waiting on Parts.
+[ ] Complete the task with notes.
+[ ] Confirm task status and completed_at are recorded.
+
+PREVENTIVE MAINTENANCE
+[ ] Create a schedule for Engine oil change on test water blaster.
+[ ] Set next due date to today or earlier.
+[ ] Click Generate due tasks.
+[ ] Confirm a scheduled maintenance task is created.
+[ ] Open the scheduled task.
+[ ] Follow/check the guide steps.
+[ ] Enter hours/parts used.
+[ ] Complete the task.
+[ ] Confirm schedule next due date updates.
+
+ROLES
+[ ] Inspector can submit inspections but cannot manage vehicles/schedules.
+[ ] Equipment Manager can manage vehicles, washing gear, maintenance and schedules.
+[ ] Viewer can view but not edit.
+[ ] User with no roles cannot access Operations data.
+
+ROLLBACK PLAN
+If anything fails:
+1. Revert index.html to remove operations-v4.js script tag.
+2. Leave additive V4 tables in Supabase; they do not affect V3.4.
+3. Restore GitHub branch/main from V3.4 backup if needed.
+4. Do not delete V3.4 data.

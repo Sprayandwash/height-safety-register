@@ -1,0 +1,30 @@
+Spray & Wash Operations App V4.0.1 - Periodic Vehicle Checks conversion
+
+Source file
+- Periodic Vehicle Checks - Google Forms.pdf
+
+What this adds
+- A new checklist template: Periodic Vehicle Checks - Google Form
+- Seed vehicle records from the current Google Form dropdown:
+  - Navara - MRT70
+  - Dyna - RQJ369
+  - Dyna - QAN557
+  - Hilux - KMT606
+- 74 checklist items converted from the form.
+- Extra maintenance guides from the form:
+  - Fuel tank water/grit removal with syringe
+  - Ladder levelling feet clean and lubricate
+  - Pure water TDS test
+- operations-v4.js now defaults New Inspection to the Periodic Vehicle Checks template when present.
+
+Implementation notes
+- The original Google Form uses many "tick all that apply" questions. The app conversion stores each required tick-box option as its own Pass / Fail / N/A checklist item. This lets a missing item or incomplete check automatically create a maintenance task.
+- The original form selects only a vehicle, so this template is target_type = vehicle. Washing-equipment problems from this form will therefore be linked to the inspected vehicle. Specific water-blaster engine/pump preventive maintenance can still be scheduled against individual washing equipment records in the Preventive Maintenance section.
+- Photos are currently uploaded at inspection level using the existing inspection-photos bucket. The "Truck and tray photos uploaded after cleaning" item reminds the user to use that upload field.
+- Numeric threshold logic, such as automatically flagging WOF due soon, RUC low, or pure water ppm > 20 from a numeric entry, is not built into the V4.0 UI yet. For now the pure-water check is represented as Pass/Fail against the <=20ppm requirement.
+
+Install options
+1. Fresh V4 install: run supabase-schema-v4.0-operations.sql from this package. It includes the V4.0 base schema and this V4.0.1 form seed.
+2. Existing V4 database already installed: run only supabase-seed-periodic-vehicle-checks-v4.0.1.sql.
+
+Do not replace config.js.

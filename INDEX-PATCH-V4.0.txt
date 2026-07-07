@@ -1,0 +1,20 @@
+INDEX.HTML PATCH FOR V4.0
+
+Do not replace config.js.
+
+In index.html, find the existing script tag that loads app.js. It will look similar to:
+
+<script src="./app.js"></script>
+
+Immediately after it, add:
+
+<script src="./operations-v4.js?v=4.0"></script>
+
+The final order should be:
+
+<script src="./config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./app.js"></script>
+<script src="./operations-v4.js?v=4.0"></script>
+
+If the exact order differs in the current file, keep config.js and Supabase before app.js and operations-v4.js.
