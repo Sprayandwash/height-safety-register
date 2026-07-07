@@ -19,6 +19,8 @@ const CHECKLISTS={
 };
 
 let sb,currentUser=null,equipment=[],inspections=[],photos=[];
+let currentRoles=[],userProfiles=[],roleAssignments=[];
+const ROLE_DEFS=["Admin","Inspector","Equipment Manager","Certificate Approver","Office / Reports","Viewer"];
 let activeFilter={mode:"active",value:"active"};
 let pendingEquipmentPhotos=[];
 let cropState=null;
@@ -35,26 +37,99 @@ function isFailed(e){let l=latest(e.serial);return !isArchived(e) && (e.status==
 function pill(t){let v=String(t||"");let c=v==="Pass"||v==="In Service"?"pass":v.includes("Fail")||v==="Quarantined"?"fail":v==="Retired"||v==="Archived"?"retired":"due";return `<span class="pill ${c}">${esc(v)}</span>`;}
 function typeNeedsLength(type){return type==="Rope"||type==="Roofers Rope Set";}
 
+function roleLabel(role){return role||"";}
+function hasAdmin(){return currentRoles.includes("Admin");}
+function hasRole(role){return hasAdmin()||currentRoles.includes(role);}
+function hasAnyRoles(roles){return hasAdmin()||roles.some(r=>currentRoles.includes(r));}
+function canManageUsers(){return hasAdmin();}
+function canEditEquipment(){return hasAnyRoles(["Equipment Manager"]);}
+function canInspect(){return hasAnyRoles(["Inspector"]);}
+function canAddPhotos(){return hasAnyRoles(["Equipment Manager","Inspector"]);}
+function canArchive(){return hasAnyRoles(["Equipment Manager"]);}
+function canExport(){return hasAnyRoles(["Office / Reports","Certificate Approver"]);}
+function currentRoleText(){return currentRoles.length?currentRoles.join(", "):"Viewer / no roles assigned";}
+function requirePerm(ok,msg){if(!ok){alert(msg||"Your account does not have permission for this action.");return false;}return true;}
+
 window.addEventListener("DOMContentLoaded",init);
 async function init(){
   if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(console.warn);}
   if(!window.SUPABASE_URL || window.SUPABASE_URL.includes("PASTE_")) configWarning.classList.remove("hidden");
   sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
   fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); initDateParts(); bindCropCanvas();
-  const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser) await loadData();
+  const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser){await ensureCurrentProfile(); await loadRoles(); await loadData();}
 }
 function fillTypes(){let opts=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=opts; inType.innerHTML=opts;}
-function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||"";}
-async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await loadData();}
+function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||""; if(window.userRolesText) userRolesText.textContent=currentRoleText(); applyPermissions();}
+async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await ensureCurrentProfile();await loadRoles();await loadData();}
 async function signUp(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signUp({email,password});if(error)return alert(error.message);alert("Account created. If email confirmation is enabled, check your email before signing in.");}
-async function signOut(){await sb.auth.signOut();currentUser=null;equipment=[];inspections=[];photos=[];updateAuthUI();renderAll();}
+async function signOut(){await sb.auth.signOut();currentUser=null;currentRoles=[];userProfiles=[];roleAssignments=[];equipment=[];inspections=[];photos=[];updateAuthUI();renderAll();}
+
+async function ensureCurrentProfile(){
+  if(!currentUser)return;
+  try{
+    const email=currentUser.email||"";
+    await sb.from("profiles").upsert({user_id:currentUser.id,email,display_name:email.split("@")[0]||email,last_seen_at:nowIso()},{onConflict:"user_id"});
+  }catch(err){console.warn("Profile sync skipped",err);}
+}
+async function loadRoles(){
+  currentRoles=[];
+  if(!currentUser)return;
+  try{
+    const r=await sb.from("user_roles").select("role").eq("user_id",currentUser.id).order("role");
+    if(r.error){console.warn("Role loading issue",r.error.message);}
+    currentRoles=(r.data||[]).map(x=>x.role).filter(Boolean);
+  }catch(err){console.warn("Role loading skipped",err);}
+  updateAuthUI();
+}
+function applyPermissions(){
+  const byId=id=>document.getElementById(id);
+  if(byId("userRolesText")) byId("userRolesText").textContent=currentRoleText();
+  if(byId("usersTabButton")) byId("usersTabButton").classList.toggle("hidden",!canManageUsers());
+  if(byId("inspectTabButton")) byId("inspectTabButton").classList.toggle("hidden",!canInspect());
+  if(byId("exportTabButton")) byId("exportTabButton").classList.toggle("hidden",!canExport());
+  if(byId("addItemButton")) byId("addItemButton").classList.toggle("hidden",!canEditEquipment());
+}
+async function loadUsers(){
+  if(!requirePerm(canManageUsers(),"Only Admin users can manage accounts and roles."))return;
+  const p=await sb.from("profiles").select("user_id,email,display_name,created_at,last_seen_at").order("email");
+  if(p.error)return alert("Could not load users: "+p.error.message);
+  const r=await sb.from("user_roles").select("id,user_id,role,created_at").order("role");
+  if(r.error)return alert("Could not load roles: "+r.error.message);
+  userProfiles=p.data||[]; roleAssignments=r.data||[]; renderUsers();
+}
+function rolesForUser(userId){return roleAssignments.filter(x=>x.user_id===userId).map(x=>x.role);}
+function renderUsers(){
+  if(!window.userList)return;
+  const roleSummary=currentRoles.length?currentRoles.join(", "):"No roles";
+  adminRoleSummary.textContent=roleSummary;
+  userList.innerHTML=userProfiles.map(u=>{
+    const rs=rolesForUser(u.user_id);
+    const checks=ROLE_DEFS.map(role=>`<label class="roleCheck"><input type="checkbox" ${rs.includes(role)?"checked":""} onchange="toggleUserRole('${u.user_id}','${escAttr(role)}',this.checked,this)"> ${esc(role)}</label>`).join("");
+    return `<div class="userCard"><div><b>${esc(u.display_name||u.email||"User")}</b><div class="muted">${esc(u.email||"")}</div><div class="muted">Last seen: ${esc(u.last_seen_at||"—")}</div></div><div class="roleGrid">${checks}</div></div>`;
+  }).join("") || `<p class="muted">No users found. Users appear here after they create an account and sign in once.</p>`;
+}
+async function toggleUserRole(userId,role,checked,el){
+  if(!requirePerm(canManageUsers(),"Only Admin users can manage roles.")){if(el)el.checked=!checked;return;}
+  const existing=roleAssignments.find(x=>x.user_id===userId && x.role===role);
+  if(!checked && role==="Admin"){
+    const adminCount=roleAssignments.filter(x=>x.role==="Admin").length;
+    if(adminCount<=1){alert("Cannot remove the last Admin role.");if(el)el.checked=true;return;}
+  }
+  let res;
+  if(checked && !existing) res=await sb.from("user_roles").insert({user_id:userId,role,assigned_by:currentUser.id});
+  if(!checked && existing) res=await sb.from("user_roles").delete().eq("id",existing.id);
+  if(res?.error){alert(res.error.message);if(el)el.checked=!checked;return;}
+  if(userId===currentUser.id) await loadRoles();
+  await loadUsers();
+}
+
 async function loadData(){
   let eq=await sb.from("equipment").select("*").order("serial"); if(eq.error)return alert(eq.error.message);
   let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false}); if(ins.error)return alert(ins.error.message);
   let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false}); if(ph.error) console.warn(ph.error.message);
   equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; renderAll(); renderSuggestions();
 }
-function renderAll(){renderDashboard();renderEquipment();renderInspections();}
+function renderAll(){renderDashboard();renderEquipment();renderInspections();applyPermissions();}
 function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function renderDashboard(){
   const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
@@ -92,19 +167,24 @@ async function openItem(id){let e=equipment.find(x=>x.id===id); if(!e)return; sh
 function openItemBySerial(serial){let e=equipment.find(x=>x.serial===serial); if(e) openItem(e.id);}
 async function renderDetail(e){
   detailContent.innerHTML=`<div class="card"><p class="muted">Loading item...</p></div>`;
-  let l=latest(e.serial); let itemPhotos=photos.filter(p=>p.equipment_id===e.id); let url=await firstPhotoUrl(e.id);
+  let l=latest(e.serial); let url=await firstPhotoUrl(e.id);
   let history=inspections.filter(i=>i.serial===e.serial).sort((a,b)=>(b.inspection_date||"").localeCompare(a.inspection_date||""));
-  detailContent.innerHTML=`<div class="card"><div class="row"><button onclick="showTab('equipment')">← Register</button><button class="primary" onclick="startInspection('${e.id}')">Inspect</button><button onclick="editEquipment('${e.id}')">Edit</button><label class="uploadBtn">Take photo<input type="file" accept="image/*" capture="environment" onchange="selectExistingEquipmentPhotos('${e.id}', this.files);this.value=''"></label><label class="uploadBtn">Choose from gallery<input type="file" accept="image/*" multiple onchange="selectExistingEquipmentPhotos('${e.id}', this.files);this.value=''"></label>${isArchived(e)?`<button onclick="restoreItem('${e.id}')">Restore</button>`:`<button class="danger" onclick="archiveItem('${e.id}')">Archive / dispose</button>`}</div></div>
+  let actions=`<button onclick="showTab('equipment')">← Register</button>`;
+  if(canInspect()) actions+=`<button class="primary" onclick="startInspection('${e.id}')">Inspect</button>`;
+  if(canEditEquipment()) actions+=`<button onclick="editEquipment('${e.id}')">Edit</button>`;
+  if(canAddPhotos()) actions+=`<label class="uploadBtn">Take photo<input type="file" accept="image/*" capture="environment" onchange="selectExistingEquipmentPhotos('${e.id}', this.files);this.value=''"></label><label class="uploadBtn">Choose from gallery<input type="file" accept="image/*" multiple onchange="selectExistingEquipmentPhotos('${e.id}', this.files);this.value=''"></label>`;
+  if(canArchive()) actions+=isArchived(e)?`<button onclick="restoreItem('${e.id}')">Restore</button>`:`<button class="danger" onclick="archiveItem('${e.id}')">Archive / dispose</button>`;
+  detailContent.innerHTML=`<div class="card"><div class="row">${actions}</div>${currentRoles.length?"":`<p class="warning">Your account currently has no assigned roles, so this item is view-only.</p>`}</div>
   <div class="card detailHero"><div class="heroPhoto">${url?`<img src="${url}" alt="Equipment photo">`:`<span class="muted">No photo yet</span>`}</div><div><h2>${esc(e.serial)} ${pill(isArchived(e)?"Archived":e.status)}</h2><div class="kv"><b>Type</b><span class="quickLink" onclick="setRegisterFilter('type','${escAttr(e.type)}')">${esc(e.type)}</span></div><div class="kv"><b>Manufacturer</b><span>${e.manufacturer?`<span class="quickLink" onclick="setRegisterFilter('manufacturer','${escAttr(e.manufacturer)}')">${esc(e.manufacturer)}</span>`:"—"}</span></div><div class="kv"><b>Model</b><span>${e.model?`<span class="quickLink" onclick="setRegisterFilter('model','${escAttr(e.model)}')">${esc(e.model)}</span>`:"—"}</span></div><div class="kv"><b>Rope length</b><span>${e.rope_length_m?esc(e.rope_length_m)+" m":"—"}</span></div><div class="kv"><b>Manufactured</b><span>${esc(e.date_manufactured||"—")}</span></div><div class="kv"><b>First used</b><span>${esc(e.date_first_used||"—")}</span></div><div class="kv"><b>Retirement</b><span>${esc(e.retirement_date||"—")}</span></div><div class="kv"><b>Last inspection</b><span>${l?`${esc(l.inspection_date)} ${pill(l.result)}`:"No inspection recorded"}</span></div><div class="kv"><b>Next due</b><span>${esc(l?.next_due||"—")}</span></div><div class="kv"><b>Notes</b><span>${esc(e.notes||"—")}</span></div>${isArchived(e)?`<div class="kv"><b>Disposed</b><span>${esc(e.disposed_at||e.archived_at||"—")}</span></div><div class="kv"><b>Reason</b><span>${esc(e.disposal_reason||"—")}</span></div>`:""}</div></div>
   <div class="card"><h2>Photos</h2><div id="detailPhotos"></div></div><div class="card"><h2>Inspection History</h2>${history.map(i=>`<div class="lineItem"><b>${esc(i.inspection_date)}</b><span>${pill(i.result)}</span><span>${esc(i.next_due||"")}</span></div><p class="muted">${esc(i.notes||"")}</p>`).join("")||`<p class="muted">No inspections yet.</p>`}</div>`;
   await renderPhotoGallery(e.id,"detailPhotos");
 }
 async function renderPhotoGallery(equipmentId,targetId){
   let target=document.getElementById(targetId); let rows=photos.filter(p=>p.equipment_id===equipmentId); if(!rows.length){target.innerHTML=`<p class="muted">No photos yet.</p>`;return;}
-  let parts=[]; for(const p of rows){let signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); if(signed.error){parts.push(`<div class="warning">Could not load ${esc(p.file_name||"photo")}</div>`);continue;} parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}"><button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${escAttr(p.file_path)}')">Delete</button></div>`);} target.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
+  let parts=[]; for(const p of rows){let signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); if(signed.error){parts.push(`<div class="warning">Could not load ${esc(p.file_name||"photo")}</div>`);continue;} parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}">${canAddPhotos()?`<button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${escAttr(p.file_path)}')">Delete</button>`:""}</div>`);} target.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
 }
-function newEquipment(){clearEquipmentForm();equipmentFormTitle.textContent="Add Equipment";showTab("editEquipment");}
-function editEquipment(id){let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";setDateParts("eqMade",e.date_manufactured||"");setDateParts("eqFirstUsed",e.date_first_used||"");setDateParts("eqRetire",e.retirement_date||"");eqFreq.value=e.inspection_frequency||"6 monthly";eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";eqServiceLifeYears.value=eqServiceLifeYears.value||"10";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
+function newEquipment(){if(!requirePerm(canEditEquipment(),"Only Admin or Equipment Manager users can add equipment."))return;clearEquipmentForm();equipmentFormTitle.textContent="Add Equipment";showTab("editEquipment");}
+function editEquipment(id){if(!requirePerm(canEditEquipment(),"Only Admin or Equipment Manager users can edit equipment."))return;let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";setDateParts("eqMade",e.date_manufactured||"");setDateParts("eqFirstUsed",e.date_first_used||"");setDateParts("eqRetire",e.retirement_date||"");eqFreq.value=e.inspection_frequency||"6 monthly";eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";eqServiceLifeYears.value=eqServiceLifeYears.value||"10";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
 function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqNotes","eqRopeLength"].forEach(id=>document.getElementById(id).value="");setDateParts("eqMade","");setDateParts("eqFirstUsed","");setDateParts("eqRetire","");eqServiceLifeYears.value="10";eqRetireBasis.value="manufactured";eqAutoRetire.checked=true;eqType.value="Harness";eqFreq.value="6 monthly";eqStatus.value="In Service";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();}
 function toggleRopeLengthField(){ropeLengthWrap.classList.toggle("hidden",!typeNeedsLength(eqType.value));}
 
@@ -158,6 +238,7 @@ function calculateRetirementDate(){
 }
 
 async function saveEquipment(){
+  if(!requirePerm(canEditEquipment(),"Only Admin or Equipment Manager users can save equipment."))return;
   let serial=eqSerial.value.trim();if(!serial)return alert("Serial number required.");
   let row={serial,type:eqType.value,manufacturer:eqMaker.value.trim(),model:eqModel.value.trim(),date_manufactured:eqMade.value||null,date_first_used:eqFirstUsed.value||null,retirement_date:eqRetire.value||null,inspection_frequency:eqFreq.value,status:eqStatus.value,notes:eqNotes.value.trim(),rope_length_m:typeNeedsLength(eqType.value)&&(eqRopeLength.value!=="")?Number(eqRopeLength.value):null};
   let savedId=eqId.value;
@@ -171,9 +252,10 @@ async function saveEquipment(){
 }
 function renderSuggestions(){let makers=[...new Set(equipment.map(e=>e.manufacturer).filter(Boolean))].sort();let models=[...new Set(equipment.map(e=>e.model).filter(Boolean))].sort();manufacturerSuggestions.innerHTML=makers.map(x=>`<option value="${esc(x)}"></option>`).join("");modelSuggestions.innerHTML=models.map(x=>`<option value="${esc(x)}"></option>`).join("");}
 function renderChecklist(){let items=CHECKLISTS[inType.value]||CHECKLISTS.Other;checklist.innerHTML=items.map(i=>`<label><input class="chk" type="checkbox" value="${esc(i)}"> ${esc(i)}</label>`).join("");}
-function startInspection(id,title="New Inspection"){let e=equipment.find(x=>x.id===id);if(!e)return;inspectTitle.textContent=title;inSerial.value=e.serial;inType.value=e.type;inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";renderChecklist();showTab("inspect");setTimeout(()=>inDate.focus(),250);}
+function startInspection(id,title="New Inspection"){if(!requirePerm(canInspect(),"Only Admin or Inspector users can start inspections."))return;let e=equipment.find(x=>x.id===id);if(!e)return;inspectTitle.textContent=title;inSerial.value=e.serial;inType.value=e.type;inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";renderChecklist();showTab("inspect");setTimeout(()=>inDate.focus(),250);}
 function loadEquipmentForInspection(){let e=equipment.find(x=>x.serial.toLowerCase()===inSerial.value.trim().toLowerCase());if(e){inType.value=e.type;renderChecklist();}}
 async function saveInspection(){
+  if(!requirePerm(canInspect(),"Only Admin or Inspector users can save inspections."))return;
   let serial=inSerial.value.trim();if(!serial)return alert("Serial number required.");
   let e=equipment.find(x=>x.serial.toLowerCase()===serial.toLowerCase());
   if(!e){let r=await sb.from("equipment").insert({serial,type:inType.value,status:"In Service",inspection_frequency:"6 monthly"}).select().single();if(r.error)return alert(r.error.message);e=r.data;}
@@ -189,13 +271,13 @@ async function saveInspection(){
 }
 function clearInspectionForm(){inspectTitle.textContent="New Inspection";inSerial.value="";inDate.value=today();inNextDue.value=addMonths(today(),6);inResult.value="Pass";inNotes.value="";inType.value="Harness";renderChecklist();}
 function renderInspections(){inspectionList.innerHTML=inspections.slice(0,10).map(i=>`<div class="listItem" onclick="openItemBySerial('${escAttr(i.serial)}')"><b>${esc(i.inspection_date)}</b> ${pill(i.result)}<div>${esc(i.serial)} • ${esc(i.equipment_type)}</div><div class="muted">${esc(i.notes||"")}</div></div>`).join("") || `<p class="muted">No inspections yet.</p>`;}
-async function archiveItem(id){let reason=prompt("Reason for archive/disposal?",""); if(reason===null)return; let method=prompt("Disposal method / notes?",""); let r=await sb.from("equipment").update({archived:true,archived_at:nowIso(),disposed_at:nowIso(),disposal_reason:reason,disposal_method:method,status:"Retired"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
-async function restoreItem(id){if(!confirm("Restore this item to the active register?"))return; let r=await sb.from("equipment").update({archived:false,archived_at:null,disposed_at:null,disposal_reason:null,disposal_method:null,status:"In Service"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
+async function archiveItem(id){if(!requirePerm(canArchive(),"Only Admin or Equipment Manager users can archive equipment."))return;let reason=prompt("Reason for archive/disposal?",""); if(reason===null)return; let method=prompt("Disposal method / notes?",""); let r=await sb.from("equipment").update({archived:true,archived_at:nowIso(),disposed_at:nowIso(),disposal_reason:reason,disposal_method:method,status:"Retired"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
+async function restoreItem(id){if(!requirePerm(canArchive(),"Only Admin or Equipment Manager users can restore equipment."))return;if(!confirm("Restore this item to the active register?"))return; let r=await sb.from("equipment").update({archived:false,archived_at:null,disposed_at:null,disposal_reason:null,disposal_method:null,status:"In Service"}).eq("id",id); if(r.error)return alert(r.error.message); await loadData(); openItem(id);}
 
 function selectNewEquipmentPhoto(file){if(!file)return;selectNewEquipmentPhotos([file]);}
 function selectExistingEquipmentPhoto(equipmentId,file){if(!file)return;selectExistingEquipmentPhotos(equipmentId,[file]);}
-function selectNewEquipmentPhotos(files){beginPhotoQueue(files,{mode:"pending"});}
-function selectExistingEquipmentPhotos(equipmentId,files){beginPhotoQueue(files,{mode:"existing",equipmentId});}
+function selectNewEquipmentPhotos(files){if(!requirePerm(canAddPhotos(),"Only Admin, Equipment Manager or Inspector users can add photos."))return;beginPhotoQueue(files,{mode:"pending"});}
+function selectExistingEquipmentPhotos(equipmentId,files){if(!requirePerm(canAddPhotos(),"Only Admin, Equipment Manager or Inspector users can add photos."))return;beginPhotoQueue(files,{mode:"existing",equipmentId});}
 function beginPhotoQueue(files,target){
   const list=Array.from(files||[]).filter(f=>String(f.type||"").startsWith("image/"));
   if(!list.length)return;
@@ -275,7 +357,7 @@ function blobToDataUrl(blob){return new Promise(res=>{let r=new FileReader();r.o
 function renderPendingPhotos(){newPhotoPreview.innerHTML=pendingEquipmentPhotos.map((p,i)=>`<div class="previewCard"><img src="${p.preview}" alt="Pending photo"><button class="danger" onclick="removePendingPhoto(${i})">Remove</button></div>`).join("");}
 function removePendingPhoto(i){pendingEquipmentPhotos.splice(i,1);renderPendingPhotos();}
 async function uploadBlobToEquipment(equipmentId,blob,fileName){const clean=(fileName||"photo.jpg").replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${equipmentId}/${Date.now()}-${clean}`;let up=await sb.storage.from("equipment-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"3600",upsert:false});if(up.error){alert("Photo upload failed: "+up.error.message);return;}let ins=await sb.from("equipment_photos").insert({equipment_id:equipmentId,file_path:path,file_name:fileName});if(ins.error)alert("Photo record failed: "+ins.error.message);}
-async function deleteEquipmentPhoto(photoId,filePath){if(!confirm("Delete this photo?"))return;await sb.storage.from("equipment-photos").remove([filePath]);let r=await sb.from("equipment_photos").delete().eq("id",photoId);if(r.error)return alert(r.error.message);await loadData();}
-function exportCSV(kind){let rows=kind==="equipment"?equipment:inspections.map(i=>({...i,checklist:JSON.stringify(i.checklist||[])}));if(!rows.length)return alert("Nothing to export.");let h=Object.keys(rows[0]);let csv=[h.join(","),...rows.map(r=>h.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");downloadBlob(csv,kind+".csv","text/csv");}
-function exportJSONBackup(){downloadBlob(JSON.stringify({exported_at:new Date().toISOString(),equipment,inspections,photos},null,2),"height-safety-full-backup.json","application/json");}
+async function deleteEquipmentPhoto(photoId,filePath){if(!requirePerm(canAddPhotos(),"Only Admin, Equipment Manager or Inspector users can delete photos."))return;if(!confirm("Delete this photo?"))return;await sb.storage.from("equipment-photos").remove([filePath]);let r=await sb.from("equipment_photos").delete().eq("id",photoId);if(r.error)return alert(r.error.message);await loadData();}
+function exportCSV(kind){if(!requirePerm(canExport(),"Only Admin, Office / Reports or Certificate Approver users can export data."))return;let rows=kind==="equipment"?equipment:inspections.map(i=>({...i,checklist:JSON.stringify(i.checklist||[])}));if(!rows.length)return alert("Nothing to export.");let h=Object.keys(rows[0]);let csv=[h.join(","),...rows.map(r=>h.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");downloadBlob(csv,kind+".csv","text/csv");}
+function exportJSONBackup(){if(!requirePerm(canExport(),"Only Admin, Office / Reports or Certificate Approver users can export data."))return;downloadBlob(JSON.stringify({exported_at:new Date().toISOString(),equipment,inspections,photos},null,2),"height-safety-full-backup.json","application/json");}
 function downloadBlob(content,name,type){let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}

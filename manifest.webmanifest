@@ -1,7 +1,7 @@
 {
-  "name": "Spray & Wash Height Safety Register",
+  "name": "Spray & Wash Height Safety Register V3",
   "short_name": "S&W Safety",
-  "description": "Height safety equipment register with inspections, photos and archive.",
+  "description": "Cloud equipment register with multi-role user permissions.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
