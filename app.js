@@ -58,6 +58,54 @@ function isFailed(e){let l=latest(e.serial);return !isArchived(e) && (e.status==
 function pill(t){let v=String(t||"");let c=v==="Pass"||v==="In Service"?"pass":v.includes("Fail")||v==="Quarantined"?"fail":v==="Retired"||v==="Archived"?"retired":"due";return `<span class="pill ${c}">${esc(v)}</span>`;}
 function typeNeedsLength(type){return type==="Rope"||type==="Roofers Rope Set";}
 
+function getNotificationLeadDays(){return parseInt(localStorage.getItem("hsrNotifyLeadDays")||"30",10)||30;}
+function setNotificationLeadDays(days){localStorage.setItem("hsrNotifyLeadDays",String(days));renderNotifications();}
+function parseDateOnly(d){return d?new Date(d+"T00:00:00"):null;}
+function daysUntilDate(d){const target=parseDateOnly(d); if(!target)return null; const now=parseDateOnly(today()); return Math.ceil((target-now)/86400000);}
+function nextDueForEquipment(e){return latest(e.serial)?.next_due||null;}
+function isOverdueEquipment(e){const due=nextDueForEquipment(e); const days=daysUntilDate(due); return !isArchived(e)&&days!==null&&days<0;}
+function isDueSoonEquipment(e){const days=daysUntilDate(nextDueForEquipment(e)); const lead=getNotificationLeadDays(); return !isArchived(e)&&days!==null&&days>=0&&days<=lead;}
+function hasEquipmentPhoto(e){return photos.some(p=>p.equipment_id===e.id);}
+function latestInspectionHasPhoto(e){const l=latest(e.serial); return !!l && inspectionPhotos.some(p=>p.inspection_id===l.id);}
+function getNotificationSummary(){
+  const active=equipment.filter(e=>!isArchived(e));
+  const overdue=active.filter(isOverdueEquipment);
+  const dueSoon=active.filter(isDueSoonEquipment).filter(e=>!overdue.some(o=>o.id===e.id));
+  const failed=active.filter(isFailed);
+  const noInspection=active.filter(e=>!latest(e.serial));
+  const noEquipmentPhotos=active.filter(e=>!hasEquipmentPhoto(e));
+  const noInspectionPhotos=active.filter(e=>latest(e.serial)&&!latestInspectionHasPhoto(e));
+  const high=overdue.length+failed.length+noInspection.length;
+  const medium=dueSoon.length;
+  const low=noEquipmentPhotos.length+noInspectionPhotos.length;
+  return {active,overdue,dueSoon,failed,noInspection,noEquipmentPhotos,noInspectionPhotos,high,medium,low,total:high+medium+low,lead:getNotificationLeadDays()};
+}
+function notificationRows(){
+  const n=getNotificationSummary();
+  const rows=[];
+  if(n.failed.length) rows.push({level:"high",title:`${n.failed.length} failed / quarantined item${n.failed.length===1?"":"s"}`,body:"Items are not for use and need action.",filter:["failed","failed"]});
+  if(n.overdue.length) rows.push({level:"high",title:`${n.overdue.length} overdue inspection${n.overdue.length===1?"":"s"}`,body:"Inspection due date has passed.",filter:["overdue","overdue"]});
+  if(n.noInspection.length) rows.push({level:"high",title:`${n.noInspection.length} item${n.noInspection.length===1?" has":"s have"} no inspection history`,body:"These items should receive an initial inspection before use.",filter:["noInspection","noInspection"]});
+  if(n.dueSoon.length) rows.push({level:"medium",title:`${n.dueSoon.length} item${n.dueSoon.length===1?"":"s"} due within ${n.lead} days`,body:"Plan inspections before the due date.",filter:["dueSoon","dueSoon"]});
+  if(n.noEquipmentPhotos.length) rows.push({level:"low",title:`${n.noEquipmentPhotos.length} item${n.noEquipmentPhotos.length===1?" has":"s have"} no equipment photos`,body:"Photos help identify equipment and labels.",filter:["noPhotos","noPhotos"]});
+  if(n.noInspectionPhotos.length) rows.push({level:"low",title:`${n.noInspectionPhotos.length} latest inspection${n.noInspectionPhotos.length===1?" has":"s have"} no photos`,body:"Inspection photos add evidence to the record and certificates.",filter:["noInspectionPhotos","noInspectionPhotos"]});
+  if(!rows.length) rows.push({level:"ok",title:"No current notifications",body:"All active items are currently clear based on your notification settings.",filter:null});
+  return rows;
+}
+function toggleNotificationPanel(){const p=document.getElementById("notificationPanel"); if(!p)return; p.classList.toggle("hidden"); if(!p.classList.contains("hidden")) renderNotifications(); const ap=document.getElementById("accountPanel"); if(ap)ap.classList.add("hidden");}
+function openNotificationFilter(mode,value){if(mode&&value)setRegisterFilter(mode,value); const p=document.getElementById("notificationPanel"); if(p)p.classList.add("hidden");}
+function renderNotifications(){
+  const badge=document.getElementById("notifyBadge"), panel=document.getElementById("notificationPanelContent"), digest=document.getElementById("notificationDigest");
+  if(!currentUser||!equipment.length){if(badge)badge.classList.add("hidden"); if(panel)panel.innerHTML='<p class="muted">Notifications will appear after equipment loads.</p>'; if(digest)digest.innerHTML='<p class="muted">Notifications will appear after equipment loads.</p>'; return;}
+  const n=getNotificationSummary();
+  const count=n.high+n.medium;
+  if(badge){badge.textContent=String(count); badge.classList.toggle("hidden",count===0);}
+  const rows=notificationRows();
+  const rowHtml=rows.map(r=>`<div class="notifyItem ${r.level}" ${r.filter?`onclick="openNotificationFilter('${r.filter[0]}','${r.filter[1]}')"`:""}><div class="notifyItemTop"><b>${esc(r.title)}</b><span class="notifyLevel ${r.level}">${r.level==="ok"?"clear":r.level}</span></div><div class="muted">${esc(r.body)}</div></div>`).join("");
+  if(panel) panel.innerHTML=`<h2>Notifications</h2><p class="muted">In-app reminders based on active equipment and inspection dates.</p>${rowHtml}<div class="notifySettings"><label>Due soon lead time</label><select onchange="setNotificationLeadDays(this.value)"><option value="7" ${n.lead===7?"selected":""}>7 days</option><option value="14" ${n.lead===14?"selected":""}>14 days</option><option value="30" ${n.lead===30?"selected":""}>30 days</option><option value="60" ${n.lead===60?"selected":""}>60 days</option><option value="90" ${n.lead===90?"selected":""}>90 days</option></select><p class="muted">These notifications appear inside the app only. They do not send phone push notifications or emails.</p></div>`;
+  if(digest) digest.innerHTML=`<div class="digestItem ${n.high?"high":"ok"}" onclick="toggleNotificationPanel()"><b>${n.high}</b><span>High priority</span><div class="muted">failed, overdue, or no inspection</div></div><div class="digestItem ${n.medium?"medium":"ok"}" onclick="openNotificationFilter('dueSoon','dueSoon')"><b>${n.dueSoon.length}</b><span>Due soon</span><div class="muted">within ${n.lead} days</div></div><div class="digestItem ${n.noEquipmentPhotos.length?"low":"ok"}" onclick="openNotificationFilter('noPhotos','noPhotos')"><b>${n.noEquipmentPhotos.length}</b><span>No equipment photos</span><div class="muted">active items</div></div><div class="digestItem ${n.noInspectionPhotos.length?"low":"ok"}" onclick="openNotificationFilter('noInspectionPhotos','noInspectionPhotos')"><b>${n.noInspectionPhotos.length}</b><span>No inspection photos</span><div class="muted">latest inspections</div></div>`;
+}
+
 function roleLabel(role){return role||"";}
 function hasAdmin(){return currentRoles.includes("Admin");}
 function hasRole(role){return hasAdmin()||currentRoles.includes(role);}
@@ -71,7 +119,7 @@ function canExport(){return hasAnyRoles(["Office / Reports","Certificate Approve
 function canCertificates(){return hasAnyRoles(["Office / Reports","Certificate Approver"]);}
 function currentRoleText(){return currentRoles.length?currentRoles.join(", "):"Viewer / no roles assigned";}
 function requirePerm(ok,msg){if(!ok){alert(msg||"Your account does not have permission for this action.");return false;}return true;}
-function toggleAccountPanel(){const panel=document.getElementById("accountPanel");if(panel)panel.classList.toggle("hidden");}
+function toggleAccountPanel(){const panel=document.getElementById("accountPanel");if(panel)panel.classList.toggle("hidden");const np=document.getElementById("notificationPanel");if(np)np.classList.add("hidden");}
 
 window.addEventListener("DOMContentLoaded",init);
 async function init(){
@@ -155,7 +203,7 @@ async function loadData(){
   let cert=await sb.from("certificates").select("*").order("created_at",{ascending:false}); if(cert.error) console.warn("Certificate table issue: "+cert.error.message);
   equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
 }
-function renderAll(){renderDashboard();renderEquipment();renderInspections();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory(); if(window.certMode) updateCertificateUI();}
+function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory(); if(window.certMode) updateCertificateUI();}
 function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="certificates") renderCertificatesHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function renderDashboard(){
   const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
@@ -168,12 +216,17 @@ function renderDashboard(){
 function escAttr(s){return String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");}
 function setRegisterFilter(mode,value){activeFilter={mode,value};showTab("equipment");renderEquipment();}
 function clearFilter(){activeFilter={mode:"active",value:"active"};renderEquipment();showTab("equipment");}
-function filterLabelText(){const m=activeFilter.mode,v=activeFilter.value;if(m==="active")return "Active items";if(m==="all")return "All items";if(m==="status")return `Status: ${v}`;if(m==="due")return "Due / overdue items";if(m==="failed")return "Failed / quarantined items";if(m==="archived")return "Archived / disposed items";if(m==="type")return `Type: ${v}`;if(m==="manufacturer")return `Manufacturer: ${v}`;if(m==="model")return `Model: ${v}`;return "Filtered";}
+function filterLabelText(){const m=activeFilter.mode,v=activeFilter.value;if(m==="active")return "Active items";if(m==="all")return "All items";if(m==="status")return `Status: ${v}`;if(m==="due")return "Due / overdue items";if(m==="dueSoon")return `Due within ${getNotificationLeadDays()} days`;if(m==="overdue")return "Overdue inspections";if(m==="noInspection")return "No inspection history";if(m==="noPhotos")return "No equipment photos";if(m==="noInspectionPhotos")return "Latest inspection has no photos";if(m==="failed")return "Failed / quarantined items";if(m==="archived")return "Archived / disposed items";if(m==="type")return `Type: ${v}`;if(m==="manufacturer")return `Manufacturer: ${v}`;if(m==="model")return `Model: ${v}`;return "Filtered";}
 function filteredEquipment(){
   let rows=[...equipment]; const m=activeFilter.mode,v=activeFilter.value;
   if(m==="active") rows=rows.filter(e=>!isArchived(e));
   if(m==="status") rows=rows.filter(e=>!isArchived(e)&&e.status===v);
   if(m==="due") rows=rows.filter(isDue);
+  if(m==="dueSoon") rows=rows.filter(isDueSoonEquipment);
+  if(m==="overdue") rows=rows.filter(isOverdueEquipment);
+  if(m==="noInspection") rows=rows.filter(e=>!isArchived(e)&&!latest(e.serial));
+  if(m==="noPhotos") rows=rows.filter(e=>!isArchived(e)&&!hasEquipmentPhoto(e));
+  if(m==="noInspectionPhotos") rows=rows.filter(e=>!isArchived(e)&&latest(e.serial)&&!latestInspectionHasPhoto(e));
   if(m==="failed") rows=rows.filter(isFailed);
   if(m==="archived") rows=rows.filter(isArchived);
   if(m==="type") rows=rows.filter(e=>!isArchived(e)&&e.type===v);
