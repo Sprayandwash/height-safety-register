@@ -1,0 +1,53 @@
+INDEX.HTML PATCH - V4.0.2
+
+Do not replace config.js.
+
+1. Confirm script order near the bottom of index.html.
+
+It should include config.js, then app.js, then operations-v4.js.
+
+Use:
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="./operations-v4.js?v=4.0.2"></script>
+
+If you already have the V4.0.1 line:
+
+<script src="./operations-v4.js?v=4.0.1"></script>
+
+change it to:
+
+<script src="./operations-v4.js?v=4.0.2"></script>
+
+2. Change the visible app title/header text.
+
+Find text similar to:
+
+Spray & Wash Height Safety Register
+
+Change to:
+
+Spray & Wash Operations
+
+3. Change visible version/subtitle text.
+
+Find text similar to:
+
+Version 3.4 • Security • Audit Trail • Admin Controls
+
+or:
+
+Version 4.0.1 • Height Safety • Operations • Audit Trail
+
+Change to:
+
+Version 4.0.2 • Height Safety • Vehicle Checks • Operations Management
+
+4. Do not remove existing Height Safety tabs.
+
+V4.0.2 adds/separates:
+- Vehicle Checks: staff-facing periodic vehicle checks
+- Operations Mgmt: management registers, maintenance, schedules and guides
+
+Existing Height Safety tabs remain the Height Safety branch.

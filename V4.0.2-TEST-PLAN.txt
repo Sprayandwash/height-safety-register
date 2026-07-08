@@ -1,0 +1,116 @@
+V4.0.2 TEST PLAN
+
+Before testing
+--------------
+- Confirm V4.0.1 was working before this update.
+- Confirm config.js was not replaced.
+- Run the V4.0.2 SQL migration successfully.
+- Replace operations-v4.js.
+- Patch index.html and service-worker.js.
+- Open the app using ?v=4.0.2 and hard refresh.
+
+A. Existing Height Safety module
+--------------------------------
+1. Open existing Height Safety dashboard/tabs.
+2. Confirm existing equipment records load.
+3. Confirm existing inspection records load.
+4. Confirm reports/certificates/admin areas still open as before.
+5. Do not submit/delete production Height Safety data unless intentionally testing.
+
+Expected result:
+Height Safety still works as before.
+
+B. New top-level Operations split
+---------------------------------
+1. Confirm the app title/header says Spray & Wash Operations or equivalent.
+2. Confirm Vehicle Checks tab appears.
+3. Confirm Operations Mgmt tab appears for Admin/Equipment Manager/Office/Reports/Viewer users.
+4. Confirm normal staff can use Vehicle Checks without needing to enter Maintenance or Guides.
+
+Expected result:
+Periodic Vehicle Checks are separated from management areas.
+
+C. Periodic Vehicle Checks workflow
+-----------------------------------
+1. Open Vehicle Checks.
+2. Confirm it opens directly to Periodic Vehicle Checks.
+3. Select a vehicle.
+4. Confirm answer options are:
+   - Completed OK
+   - Issue to report
+   - N/A
+5. Confirm no engine hours or pump hours fields appear.
+6. Complete a test inspection with all items Completed OK.
+7. Submit.
+
+Expected result:
+Inspection saves with no maintenance task created.
+
+D. Maintenance task creation from issue
+---------------------------------------
+1. Open Vehicle Checks.
+2. Submit a test inspection with one item set to Issue to report.
+3. Add a note to the issue.
+4. Submit.
+5. Open Operations Mgmt > Maintenance.
+
+Expected result:
+A maintenance task is created and linked back to the inspection/answer.
+
+E. Vehicle cab photo upload
+---------------------------
+1. Open Vehicle Checks.
+2. Find: Vehicle cab tidied - rubbish removed and interior surfaces wiped down.
+3. Confirm a Photos for this item upload area appears inside that checklist box.
+4. Add a test photo.
+5. Submit inspection.
+6. Confirm the inspection submits successfully.
+7. In Supabase, confirm a row is created in operations_inspection_photos with checklist_item_id populated.
+
+Expected result:
+Cab photo uses the existing operations_inspection_photos table. No new photo table required.
+
+F. Operations Management
+------------------------
+1. Open Operations Mgmt.
+2. Check Management Dashboard.
+3. Check Vehicles.
+4. Check Washing Equipment.
+5. Check Inspection History.
+6. Check Maintenance.
+7. Check Preventive Maintenance.
+8. Check Guides.
+
+Expected result:
+Management views still load and are separate from the staff Vehicle Checks workflow.
+
+G. Date-based preventive maintenance
+------------------------------------
+1. Open Operations Mgmt > Preventive Maintenance.
+2. Confirm only date/frequency-days fields are shown.
+3. Confirm frequency hours, next due hours, pump hours and engine hours are not shown.
+4. Create/update a test date-based schedule.
+5. Generate due tasks if a schedule is due.
+
+Expected result:
+Preventive maintenance works using dates only.
+
+H. Cache/PWA check
+------------------
+1. Open the app on desktop.
+2. Open the app on mobile/PWA if used.
+3. Confirm V4.0.2 is loaded.
+4. Confirm Vehicle Checks appears after refresh.
+
+Expected result:
+No device remains stuck on V4.0.1/V3.4.
+
+Post-test backup
+----------------
+After testing succeeds, export:
+- GitHub repo ZIP
+- App full JSON backup
+- Equipment CSV
+- Inspections CSV
+- Certificates CSV
+- Operations tables CSVs if required

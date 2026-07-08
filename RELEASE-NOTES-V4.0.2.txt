@@ -1,0 +1,38 @@
+RELEASE NOTES - Spray & Wash Operations V4.0.2
+
+Release name:
+V4.0.2 - Operations Polish & Structure Update
+
+Status:
+Prepared as an update package after successful V4.0.1 testing.
+
+Summary:
+This release refines the Operations module so staff can use Periodic Vehicle Checks without navigating through broader maintenance/management areas.
+
+Changes included:
+- Overall app naming to Spray & Wash Operations.
+- Visible version text update instructions.
+- Service worker cache update instructions.
+- Separate Vehicle Checks tab for staff-facing Periodic Vehicle Checks.
+- Separate Operations Mgmt tab for dashboard, registers, maintenance, preventive maintenance and guides.
+- Answer wording changed from Pass / Fail / N/A to Completed OK / Issue to report / N/A.
+- Issue to report creates maintenance items using the same inspection task-generation logic.
+- Pump hours and engine hours removed from the UI.
+- Preventive maintenance changed to date-based scheduling only.
+- Vehicle cab item now has an in-box photo upload portal using the existing operations_inspection_photos table.
+- Existing Height Safety module remains unchanged.
+- config.js remains untouched.
+
+Database notes:
+- supabase-migration-v4.0.2-amendments.sql does not drop or rename existing columns.
+- Hour-related columns remain in Supabase for compatibility but are no longer used by the V4.0.2 app UI.
+- Supabase Storage buckets are not changed.
+
+Install files:
+- operations-v4.js
+- supabase-migration-v4.0.2-amendments.sql
+- README-V4.0.2-OPERATIONS.txt
+- INDEX-PATCH-V4.0.2.txt
+- SERVICE-WORKER-PATCH-V4.0.2.txt
+- V4.0.2-TEST-PLAN.txt
+- periodic-vehicle-checks-checklist-review.csv

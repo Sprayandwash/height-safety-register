@@ -1,0 +1,44 @@
+SERVICE WORKER PATCH - V4.0.2
+
+This prevents mobile/PWA/browser cache from holding onto V4.0.1.
+
+1. Open service-worker.js.
+
+2. Find the cache name near the top. It may look like:
+
+const CACHE_NAME = 'height-safety-v4.0.1';
+
+or:
+
+const CACHE_NAME = 'height-safety-v3.4';
+
+Change to:
+
+const CACHE_NAME = 'spray-wash-operations-v4.0.2';
+
+3. In the cached assets list, make sure operations-v4.js is included.
+
+Use the path style that matches the rest of your file. Usually:
+
+'./operations-v4.js',
+
+or:
+
+'operations-v4.js',
+
+4. Commit service-worker.js.
+
+5. After GitHub Pages updates, open:
+
+https://sprayandwash.github.io/height-safety-register/?v=4.0.2
+
+6. Hard refresh with Ctrl + F5.
+
+If the PWA is still stuck on the old version:
+- Open DevTools
+- Application
+- Service Workers
+- Unregister
+- Storage
+- Clear site data
+- Reload
