@@ -1,0 +1,7 @@
+V4.0.6 Release Notes
+
+- Retains V4.0.5 certificate generator fixes.
+- Changes navigation labels so module back buttons consistently say "Home".
+- Updates app header/script/cache versions to V4.0.6.
+- Repackages files in a flat, short-path ZIP to avoid Windows extraction path length issues.
+- No Supabase SQL migration required.

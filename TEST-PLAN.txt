@@ -1,0 +1,11 @@
+V4.0.6 Test Plan
+
+1. Open app with ?v=4.0.6 and hard refresh.
+2. Confirm main module dashboard loads.
+3. Open Height Equipment and confirm the top button says "Home".
+4. Click Home and confirm it returns to the module dashboard.
+5. Open Vehicle Checks and confirm the top button says "Home".
+6. Click Home and confirm it returns to the module dashboard.
+7. Open Ops Management and confirm the top button says "Home".
+8. Test Certificates > Helmet certificate generation.
+9. Confirm existing Height Safety equipment and inspections still load.

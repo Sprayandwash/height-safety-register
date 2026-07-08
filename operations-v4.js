@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.4
+/* Spray & Wash Operations App V4.0.6
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.4';
+  const VERSION = '4.0.6';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -209,7 +209,7 @@
         state.currentModule = 'height';
         originalShowTab(id);
         setTopTabsMode('height');
-        if(id === 'certificates') setTimeout(enhanceCertificateSelector, 80);
+        if(id === 'certificates') setTimeout(()=>{ enhanceCertificateSelector(); installCertificateV405Patch(); }, 80);
         if(id === 'users') setTimeout(enhanceLegacyUserUI, 80);
       };
     }
@@ -227,7 +227,7 @@
       btn.id = 'moduleHomeTabButton';
       btn.type = 'button';
       btn.className = 'tab ops-home-tab';
-      btn.textContent = '← Home Dashboard';
+      btn.textContent = '← Home';
       btn.addEventListener('click', showModuleHome);
       tabs.insertBefore(btn, tabs.firstChild);
     }
@@ -243,7 +243,7 @@
       box = document.createElement('div');
       box.id = 'certEquipmentSearchBox';
       box.className = 'ops-cert-search';
-      box.innerHTML = `<label style="margin-top:0">Search equipment items</label><input id="certEquipmentSearch" type="search" placeholder="Search by serial, make, model, type or description"><div id="certEquipmentSearchCount" class="muted" style="margin-top:6px"></div>`;
+      box.innerHTML = `<label style="margin-top:0">Search equipment items</label><input id="certEquipmentSearch" type="search" placeholder="Search by serial, type, manufacturer, model or description"><div id="certEquipmentSearchCount" class="muted" style="margin-top:6px"></div>`;
       const tools = panel.querySelector('.certSelectionTools') || list;
       panel.insertBefore(box, tools);
       byId('certEquipmentSearch')?.addEventListener('input', filterCertificateItems);
@@ -480,7 +480,7 @@
     return `
       <div class="ops-header">
         <div>
-          <button type="button" class="ops-btn ghost" onclick="showModuleHome()">← Module dashboard</button>
+          <button type="button" class="ops-btn ghost" onclick="showModuleHome()">← Home</button>
           <h2>${state.currentView === 'vehicle-checks' ? 'Vehicle Checks' : 'Operations Management'}</h2>
           <div class="ops-subtle">V${VERSION} • ${state.currentView === 'vehicle-checks' ? 'Staff vehicle inspection checklist' : 'Maintenance, schedules and management'}</div>
         </div>
@@ -1147,9 +1147,187 @@
     await loadAll();
   }
 
+
+  // V4.0.5 certificate generator hardening.
+  // The original certificate generator was too dependent on exact app-side filters.
+  // This replacement fetches current Height Equipment and inspections directly from Supabase,
+  // handles status values such as "In Service", and matches latest inspections by equipment_id or serial.
+  function certNorm(v){
+    return String(v || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[–—]/g, '-')
+      .replace(/\s+/g, ' ');
+  }
+  function certTypeNorm(v){
+    const s = certNorm(v);
+    return s.endsWith('s') ? s.slice(0, -1) : s;
+  }
+  function certDateVal(v){ return String(v || '').slice(0, 10); }
+  function certWithinDate(v, start, end){
+    const d = certDateVal(v);
+    if(!d) return false;
+    if(start && d < start) return false;
+    if(end && d > end) return false;
+    return true;
+  }
+  function certIsArchivedEquipment(e){
+    const status = certNorm(e.status);
+    return e.archived === true || !!e.disposed_at || status === 'retired' || status === 'disposed' || status === 'archived';
+  }
+  function certIsActiveEquipment(e){
+    return !certIsArchivedEquipment(e);
+  }
+  function certInspectionForEquipment(e, inspections){
+    const serial = certNorm(e.serial);
+    const matches = (inspections || []).filter(i => {
+      if(i.equipment_id && e.id && String(i.equipment_id) === String(e.id)) return true;
+      return serial && certNorm(i.serial) === serial;
+    });
+    return matches.sort((a,b) => certDateVal(b.inspection_date).localeCompare(certDateVal(a.inspection_date)))[0] || null;
+  }
+  function certLatestInspectionMap(equipmentRows, inspectionRows){
+    return (equipmentRows || []).map(e => ({ equipment: e, inspection: certInspectionForEquipment(e, inspectionRows || []) }));
+  }
+  async function certFetchHeightData(){
+    if(!state.sb) throw new Error('Supabase is not ready yet. Please wait a moment and try again.');
+    const [eq, ins] = await Promise.all([
+      state.sb.from('equipment').select('*'),
+      state.sb.from('inspections').select('*').order('inspection_date', { ascending: false })
+    ]);
+    if(eq.error) throw eq.error;
+    if(ins.error) throw ins.error;
+    return { equipmentRows: eq.data || [], inspectionRows: ins.data || [] };
+  }
+  function certSelectedIds(){
+    return Array.from(document.querySelectorAll('.certItemCheck:checked')).map(x => x.value);
+  }
+  function certNoPairsMessage(kind, before, type){
+    if(before > 0) return `Found ${before} matching item${before === 1 ? '' : 's'}, but none had inspection history to certify.`;
+    if(kind === 'type_latest') return `No active equipment items were found for type “${type || 'selected type'}”. Check type spelling/status, or use selected items.`;
+    if(kind === 'selected_items') return 'Select at least one item with inspection history.';
+    return 'No matching certificate items were found for the selected parameters.';
+  }
+  function certIsDueFromPair(pair){
+    const i = pair.inspection;
+    if(!i) return true;
+    const todayText = new Date().toISOString().slice(0, 10);
+    if(i.next_due && String(i.next_due).slice(0,10) <= todayText) return true;
+    if(String(i.result || '').toLowerCase().includes('fail')) return true;
+    return false;
+  }
+  async function buildCertificatePairsV405(kind){
+    const { equipmentRows, inspectionRows } = await certFetchHeightData();
+    const active = equipmentRows.filter(certIsActiveEquipment);
+    let pairs = [];
+    let before = 0;
+    let type = '';
+
+    if(kind === 'selected_items'){
+      const ids = certSelectedIds();
+      if(!ids.length) return { pairs: [], before: 0, type: '' };
+      const selected = equipmentRows.filter(e => ids.includes(String(e.id)));
+      before = selected.length;
+      pairs = certLatestInspectionMap(selected, inspectionRows);
+    } else if(kind === 'type_latest'){
+      type = document.getElementById('certTypeFilter')?.value || '';
+      const wanted = certTypeNorm(type);
+      const selected = active.filter(e => certTypeNorm(e.type) === wanted);
+      before = selected.length;
+      pairs = certLatestInspectionMap(selected, inspectionRows);
+    } else if(kind === 'inspection_date_range'){
+      const start = document.getElementById('certStartDate')?.value || '';
+      const end = document.getElementById('certEndDate')?.value || '';
+      const rows = inspectionRows.filter(i => certWithinDate(i.inspection_date, start, end));
+      before = rows.length;
+      pairs = rows.map(i => ({ inspection: i, equipment: equipmentRows.find(e => String(e.id) === String(i.equipment_id)) || equipmentRows.find(e => certNorm(e.serial) === certNorm(i.serial)) }));
+    } else if(kind === 'inspection_result'){
+      const result = document.getElementById('certResult')?.value || '';
+      const rows = inspectionRows.filter(i => String(i.result || '') === result);
+      before = rows.length;
+      pairs = rows.map(i => ({ inspection: i, equipment: equipmentRows.find(e => String(e.id) === String(i.equipment_id)) || equipmentRows.find(e => certNorm(e.serial) === certNorm(i.serial)) }));
+    } else if(kind === 'due_overdue'){
+      const allPairs = certLatestInspectionMap(active, inspectionRows);
+      pairs = allPairs.filter(certIsDueFromPair);
+      before = pairs.length;
+    } else {
+      return { pairs: [], before: 0, type: '' };
+    }
+
+    pairs = pairs.filter(p => p.equipment && p.inspection);
+    return { pairs, before, type };
+  }
+  async function generateCertificatesV405(kind){
+    const btn = document.getElementById('certGenerateBtn');
+    try{
+      if(btn) btn.disabled = true;
+      if(window.setCertValidation) window.setCertValidation('Checking matching equipment and inspections...', 'warn');
+      const built = await buildCertificatePairsV405(kind);
+      if(!built.pairs.length){
+        const msg = certNoPairsMessage(kind, built.before, built.type);
+        if(window.setCertValidation) window.setCertValidation(msg, 'warn');
+        alert(msg);
+        return;
+      }
+      const title = {
+        selected_items: 'Selected item certificates',
+        type_latest: 'Equipment type certificates',
+        inspection_date_range: 'Date range inspection certificates',
+        inspection_result: 'Inspection result certificates',
+        due_overdue: 'Due / overdue certificates'
+      }[kind] || 'Inspection certificates';
+      if(window.withBusy && window.buildCertificatePacket){
+        await window.withBusy('Generating certificates...', async () => { await window.buildCertificatePacket(built.pairs, title); });
+      } else if(window.buildCertificatePacket){
+        await window.buildCertificatePacket(built.pairs, title);
+      } else {
+        throw new Error('Certificate builder was not found. Please refresh and try again.');
+      }
+      if(window.setCertValidation) window.setCertValidation(`Generated ${built.pairs.length} certificate${built.pairs.length === 1 ? '' : 's'}.`, 'ready');
+    } catch(err){
+      alert('Certificate generation failed: ' + (err.message || err));
+      if(window.setCertValidation) window.setCertValidation('Certificate generation failed: ' + (err.message || err), 'warn');
+    } finally {
+      if(btn) btn.disabled = false;
+      if(window.updateCertificateUI) window.updateCertificateUI();
+    }
+  }
+  async function refreshCertificateTypeCountsV405(){
+    const sel = document.getElementById('certTypeFilter');
+    if(!sel) return;
+    let note = document.getElementById('certTypeMatchCount');
+    if(!note){
+      note = document.createElement('div');
+      note.id = 'certTypeMatchCount';
+      note.className = 'muted';
+      note.style.marginTop = '6px';
+      sel.parentElement?.appendChild(note);
+    }
+    const type = sel.value || '';
+    if(!type){ note.textContent = ''; return; }
+    try{
+      const { equipmentRows, inspectionRows } = await certFetchHeightData();
+      const active = equipmentRows.filter(certIsActiveEquipment).filter(e => certTypeNorm(e.type) === certTypeNorm(type));
+      const withInspections = certLatestInspectionMap(active, inspectionRows).filter(p => p.inspection).length;
+      note.textContent = `${active.length} active ${type} item${active.length === 1 ? '' : 's'} found; ${withInspections} with inspection history.`;
+    } catch(err){
+      note.textContent = 'Could not check matching item count.';
+    }
+  }
+  function installCertificateV405Patch(){
+    window.generateCertificates = generateCertificatesV405;
+    const sel = document.getElementById('certTypeFilter');
+    if(sel && !sel.dataset.v405CountListener){
+      sel.dataset.v405CountListener = '1';
+      sel.addEventListener('change', refreshCertificateTypeCountsV405);
+    }
+    refreshCertificateTypeCountsV405();
+  }
+
   function boot(){
     injectTab();
     installModulePortal();
+    installCertificateV405Patch();
     initSupabase().catch(err => { state.lastError = err.message; render(); });
     window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state };
   }
