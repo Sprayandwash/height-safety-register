@@ -1,0 +1,20 @@
+V4.0.3 - Corrective Release
+===========================
+
+This release fixes V4.0.2 usability issues and reorganises the app around module selection.
+
+Highlights:
+- First-open module dashboard.
+- Height Equipment, Vehicle Checks and Ops Management separated.
+- Certificates UI fixed.
+- Users/Admin access preserved within Height Equipment.
+- Vehicle Checks simplified to one Vehicle Inspection Checklist.
+- Checklist answers start blank and are required.
+- Photo upload only on exterior vehicle cleaning item.
+- Cab and tray cleaning combined.
+- Preventive maintenance standard templates introduced.
+- New water blaster/engine/pump equipment can auto-receive standard schedules.
+
+Known later work:
+- Write fuller maintenance guides for each procedure after exact models/manuals are confirmed.
+- Build Employee Portal, central task list, safety reports and chemical inventory in a later phase.

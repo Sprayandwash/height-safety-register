@@ -1,0 +1,44 @@
+V4.0.3 Test Plan
+================
+
+After install:
+1. Open app with ?v=4.0.3 and hard refresh.
+2. Confirm the app opens to the module dashboard, not directly to Height Safety tabs.
+3. Confirm Admin/Brendan can see:
+   - Height Equipment
+   - Vehicle Checks
+   - Ops Management
+4. Confirm a normal tool/Inspector user can see only:
+   - Height Equipment
+   - Vehicle Checks
+   and not Ops Management.
+5. Open Height Equipment.
+   - Confirm Dashboard, Equipment, New Inspection, Due / Failed, Reports, Certificates, Users/Admin tabs appear according to role.
+6. Open Certificates.
+   - Confirm certificate batch type dropdown works.
+   - Confirm equipment type dropdown populates.
+   - Confirm selected item list populates.
+7. Open Users as Admin.
+   - Confirm user list and role checkboxes appear.
+8. Return to module dashboard.
+9. Open Vehicle Checks.
+   - Confirm only Vehicle Inspection Checklist is shown.
+   - Confirm there is no inspection template dropdown.
+   - Confirm inspector name is prefilled from user/profile and read-only.
+   - Confirm every select starts as No response.
+   - Try submitting without answering all items; app should block submission.
+   - Confirm photo upload appears only under the exterior vehicle wash item.
+   - Confirm cab/tray cleaning is one combined item.
+   - Submit a test vehicle check with one Issue to report.
+   - Confirm a maintenance task is created.
+10. Open Ops Management.
+   - Confirm registers, history, maintenance, preventive maintenance and guides are available.
+   - Confirm Vehicle Checks are not duplicated here as a staff checklist workflow.
+11. Preventive Maintenance:
+   - Confirm standard template area appears.
+   - Apply templates to one water blaster item.
+   - Apply templates to all equipment of same type.
+   - Confirm schedules are created/updated.
+12. Add a new washing equipment item with type Water Blaster.
+   - Confirm standard preventive schedules are automatically created.
+13. Confirm existing Height Safety equipment records still load and inspections still work.

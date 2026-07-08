@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.2
+/* Spray & Wash Operations App V4.0.3
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,14 +6,16 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.2';
+  const VERSION = '4.0.3';
   const PHOTO_BUCKET = 'inspection-photos';
-  const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Completed','Deferred'];
+  const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
   const state = {
     sb: null,
     user: null,
     roles: [],
+    profile: null,
+    currentModule: 'home',
     vehicles: [],
     washEquipment: [],
     templates: [],
@@ -76,6 +78,8 @@
   }
   function openTasks(){ return state.tasks.filter(t => !['Completed','Deferred'].includes(t.status)); }
   function canUseManagement(){ return hasAny(['Equipment Manager','Office / Reports','Viewer']); }
+  function canUseHeight(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer','Certificate Approver']); }
+  function canUseVehicleChecks(){ return hasAny(['Inspector','Equipment Manager']); }
   function isManagementView(view){ return ['management-dashboard','vehicles','washing','history','maintenance','schedules','guides'].includes(view); }
   function displayStatusLabel(value){
     const v = String(value || '—');
@@ -84,7 +88,19 @@
     return v;
   }
   function itemAllowsPhoto(item){
-    return !!(item?.photo_required_on_problem || /vehicle cab/i.test(String(item?.question_text || '')));
+    const q = String(item?.question_text || '');
+    return /Vehicle exterior washed/i.test(q);
+  }
+
+  function titleCaseName(value){
+    return String(value || '').replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+  function inspectorDisplayName(){
+    const p = state.profile || {};
+    const name = p.display_name || p.full_name || p.name || '';
+    if(name) return titleCaseName(name);
+    const emailName = String(state.user?.email || '').split('@')[0];
+    return titleCaseName(emailName) || 'Inspector';
   }
 
   function injectStyles(){
@@ -131,6 +147,10 @@
       .ops-branch-card { text-align:left; border:1px solid #dbe3ec; background:white; border-radius:1rem; padding:1rem; cursor:pointer; box-shadow:0 1px 2px rgba(15,23,42,.05); }
       .ops-branch-card strong { display:block; font-size:1.1rem; margin-bottom:.25rem; }
       .ops-question-photo { margin-top:.65rem; padding:.65rem; border-radius:.7rem; background:#f8fafc; border:1px dashed #cfd8e3; }
+      .ops-check-section { margin:1rem 0; padding:.8rem; border:1px solid #dbe3ec; border-radius:1rem; background:#f8fafc; }
+      .ops-check-section h4 { margin:.1rem 0 .6rem; }
+      .ops-check { display:flex; gap:.5rem; align-items:center; font-weight:700; margin:.35rem 0; }
+      .ops-check input { width:auto; }
       @media (max-width: 720px){ .ops-header { flex-direction:column; } .ops-table { min-width:620px; } }
     `;
     const style = document.createElement('style');
@@ -143,57 +163,123 @@
     if(byId('operations')) return;
     injectStyles();
     const main = byId('appMain') || document.querySelector('main') || document.body;
+
+    if(!byId('moduleHome')){
+      const home = document.createElement('section');
+      home.id = 'moduleHome';
+      home.className = 'tabpane';
+      home.innerHTML = '<div class="ops-shell" id="moduleHomeShell"></div>';
+      main.insertBefore(home, main.firstChild);
+    }
+
     const pane = document.createElement('section');
     pane.id = 'operations';
     pane.className = 'tabpane hidden ops-v4';
     pane.innerHTML = `<div class="ops-shell" id="opsShell"></div>`;
     main.appendChild(pane);
+  }
 
-    const vehicleBtn = document.createElement('button');
-    vehicleBtn.id = 'vehicleChecksTabButton';
-    vehicleBtn.className = 'tab';
-    vehicleBtn.type = 'button';
-    vehicleBtn.dataset.tab = 'operations';
-    vehicleBtn.textContent = 'Vehicle Checks';
-    vehicleBtn.addEventListener('click', () => showOperations('vehicle-checks'));
-
-    const mgmtBtn = document.createElement('button');
-    mgmtBtn.id = 'operationsManagementTabButton';
-    mgmtBtn.className = 'tab';
-    mgmtBtn.type = 'button';
-    mgmtBtn.dataset.tab = 'operations';
-    mgmtBtn.textContent = 'Operations Mgmt';
-    mgmtBtn.addEventListener('click', () => showOperations('management-dashboard'));
-
-    const tabParent = document.querySelector('.tabs') || document.querySelector('.tabbar') || document.querySelector('[role="tablist"]') || (byId('dashboard') && document.querySelector('button[data-tab="dashboard"]')?.parentElement);
-    if(tabParent){
-      tabParent.appendChild(vehicleBtn);
-      tabParent.appendChild(mgmtBtn);
-    } else {
-      const top = document.createElement('div');
-      top.className = 'ops-nav';
-      top.appendChild(vehicleBtn);
-      top.appendChild(mgmtBtn);
-      main.insertBefore(top, pane);
+  let originalShowTab = null;
+  function installModulePortal(){
+    if(window.__swModulePortalInstalled) return;
+    window.__swModulePortalInstalled = true;
+    originalShowTab = typeof window.showTab === 'function' ? window.showTab.bind(window) : null;
+    window.showModuleHome = showModuleHome;
+    window.openHeightModule = openHeightModule;
+    window.openVehicleChecksModule = openVehicleChecksModule;
+    window.openOpsManagementModule = openOpsManagementModule;
+    if(originalShowTab){
+      window.showTab = function(id){
+        state.currentModule = 'height';
+        originalShowTab(id);
+        setTopTabsMode('height');
+      };
     }
+    setTimeout(showModuleHome, 450);
+  }
+
+  function setTopTabsMode(mode){
+    const tabs = document.querySelector('.tabs');
+    if(!tabs) return;
+    tabs.style.display = mode === 'height' ? 'flex' : 'none';
+    if(mode === 'height'){
+      tabs.querySelectorAll('.tab').forEach(btn => {
+        const tab = btn.dataset.tab || '';
+        btn.style.display = ['dashboard','equipment','inspect','export','certificates','users','admin'].includes(tab) || !tab ? '' : 'none';
+      });
+    }
+  }
+
+  function showModuleHome(){
+    state.currentModule = 'home';
+    setTopTabsMode('none');
+    document.querySelectorAll('.tabpane').forEach(x => x.classList.add('hidden'));
+    byId('moduleHome')?.classList.remove('hidden');
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    renderModuleHome();
+    setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
+  }
+
+  function openHeightModule(){
+    if(!state.user) return alert('Sign in first.');
+    if(!canUseHeight()) return alert('Your account does not have Height Safety access.');
+    state.currentModule = 'height';
+    setTopTabsMode('height');
+    if(originalShowTab) originalShowTab('dashboard');
+  }
+
+  function openVehicleChecksModule(){
+    if(!state.user) return alert('Sign in first.');
+    if(!canUseVehicleChecks()) return alert('Your account cannot submit vehicle checks.');
+    state.currentModule = 'vehicle-checks';
+    setTopTabsMode('none');
+    showOperations('vehicle-checks');
+  }
+
+  function openOpsManagementModule(){
+    if(!state.user) return alert('Sign in first.');
+    if(!canUseManagement()) return alert('Operations Management requires Admin, Equipment Manager, Office / Reports, or Viewer access.');
+    state.currentModule = 'ops-management';
+    setTopTabsMode('none');
+    showOperations('management-dashboard');
+  }
+
+  function renderModuleHome(){
+    const shell = byId('moduleHomeShell');
+    if(!shell) return;
+    const signedIn = !!state.user;
+    const cards = [];
+    if(!signedIn){
+      cards.push(`<div class="ops-card"><h3>Sign in required</h3><p class="ops-subtle">Use the Account button to sign in, then choose the module you need.</p></div>`);
+    } else {
+      if(canUseHeight()) cards.push(moduleCard('Height Equipment', 'Height safety register, height-safety equipment, inspections, certificates and reports.', 'openHeightModule()'));
+      if(canUseVehicleChecks()) cards.push(moduleCard('Vehicle Checks', 'Complete the staff Vehicle Inspection Checklist only.', 'openVehicleChecksModule()'));
+      if(canUseManagement()) cards.push(moduleCard('Ops Management', 'Vehicles, washing equipment, maintenance tasks, preventive maintenance, guides and management reports.', 'openOpsManagementModule()'));
+      if(!cards.length) cards.push(`<div class="ops-card"><h3>No app access yet</h3><p class="ops-subtle">Your account needs an assigned role before modules will appear.</p></div>`);
+    }
+    shell.innerHTML = `
+      <div class="ops-header">
+        <div><h2>Spray &amp; Wash Operations</h2><div class="ops-subtle">Choose the area you need.</div></div>
+        <div class="ops-subtle">${state.user ? `Signed in as ${esc(state.user.email)}<br>Roles: ${esc(roleText())}` : 'Not signed in'}</div>
+      </div>
+      <div class="ops-branch-grid">${cards.join('')}</div>`;
+  }
+  function moduleCard(title, body, action){
+    return `<button type="button" class="ops-branch-card" onclick="${action}"><strong>${esc(title)}</strong><span class="ops-subtle">${esc(body)}</span></button>`;
   }
 
   function showOperations(view){
     state.currentView = view || state.currentView || 'vehicle-checks';
     if(isManagementView(state.currentView) && !canUseManagement()) state.currentView = 'vehicle-checks';
+    setTopTabsMode('none');
     document.querySelectorAll('.tabpane').forEach(x => x.classList.add('hidden'));
     byId('operations')?.classList.remove('hidden');
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    if(state.currentView === 'vehicle-checks') byId('vehicleChecksTabButton')?.classList.add('active');
-    else byId('operationsManagementTabButton')?.classList.add('active');
     render();
     setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
   }
 
-  function updateExternalTabVisibility(){
-    const mgmt = byId('operationsManagementTabButton');
-    if(mgmt) mgmt.style.display = state.user && canUseManagement() ? '' : 'none';
-  }
+  function updateExternalTabVisibility(){ /* V4.0.3 uses the module dashboard instead of top-level Operations tabs. */ }
 
   async function initSupabase(){
     if(!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY){
@@ -221,8 +307,12 @@
 
   async function loadRoles(){
     state.roles = [];
+    state.profile = null;
     const r = await state.sb.from('user_roles').select('role').eq('user_id', state.user.id).order('role');
     if(!r.error) state.roles = (r.data || []).map(x => x.role).filter(Boolean);
+    const p = await state.sb.from('profiles').select('*').eq('user_id', state.user.id).maybeSingle();
+    if(!p.error) state.profile = p.data || null;
+    renderModuleHome();
   }
 
   async function loadTable(table, select='*', order){
@@ -265,10 +355,11 @@
     updateExternalTabVisibility();
     shell.innerHTML = headerHtml() + (state.lastError ? `<div class="ops-error">${esc(state.lastError)}</div>` : '') + bodyHtml();
     bindRenderedEvents();
+    if(state.currentModule === 'home') renderModuleHome();
   }
 
   function headerHtml(){
-    const managementNav = canUseManagement() ? `
+    const managementNav = canUseManagement() && state.currentView !== 'vehicle-checks' ? `
         ${navButton('management-dashboard','Management Dashboard')}
         ${navButton('vehicles','Vehicles')}
         ${navButton('washing','Washing Equipment')}
@@ -276,19 +367,19 @@
         ${navButton('maintenance','Maintenance')}
         ${navButton('schedules','Preventive Maintenance')}
         ${navButton('guides','Guides')}` : '';
+    const staffNav = state.currentView === 'vehicle-checks' ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : managementNav;
     return `
       <div class="ops-header">
         <div>
-          <h2>Spray &amp; Wash Operations</h2>
-          <div class="ops-subtle">V${VERSION} • Periodic Vehicle Checks • Operations Management • Maintenance</div>
+          <button type="button" class="ops-btn ghost" onclick="showModuleHome()">← Module dashboard</button>
+          <h2>${state.currentView === 'vehicle-checks' ? 'Vehicle Checks' : 'Operations Management'}</h2>
+          <div class="ops-subtle">V${VERSION} • ${state.currentView === 'vehicle-checks' ? 'Staff vehicle inspection checklist' : 'Maintenance, schedules and management'}</div>
         </div>
         <div class="ops-subtle">${state.user ? `Signed in as ${esc(state.user.email)}<br>Roles: ${esc(roleText())}` : 'Sign in to use Operations.'}</div>
       </div>
-      <div class="ops-nav" id="opsNav">
-        ${navButton('vehicle-checks','Periodic Vehicle Checks')}
-        ${managementNav}
-      </div>`;
+      <div class="ops-nav" id="opsNav">${staffNav}</div>`;
   }
+
   function navButton(id, label){ return `<button type="button" class="${state.currentView===id?'active':''}" data-ops-view="${id}">${label}</button>`; }
 
   function bodyHtml(){
@@ -305,14 +396,21 @@
     return dashboardHtml();
   }
 
+  function vehicleChecklistTemplate(){
+    return state.templates.find(t=>t.name==='Vehicle Inspection Checklist')
+      || state.templates.find(t=>t.name==='Periodic Vehicle Checks - Google Form')
+      || state.templates.find(t=>t.target_type==='vehicle')
+      || state.templates[0]
+      || {};
+  }
   function periodicVehicleChecksHtml(){
-    if(!canSubmit()) return `<div class="ops-card"><h3>Periodic Vehicle Checks</h3><p>Your role can view Operations, but cannot submit vehicle checks.</p></div>`;
-    const template = state.templates.find(t=>t.name==='Periodic Vehicle Checks - Google Form') || state.templates.find(t=>t.target_type==='combined') || state.templates[0] || {};
+    if(!canSubmit()) return `<div class="ops-card"><h3>Vehicle Inspection Checklist</h3><p>Your role can view Operations, but cannot submit vehicle checks.</p></div>`;
+    const template = vehicleChecklistTemplate();
     const myRecent = state.inspections.filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email).slice(0,5);
     return `
       <div class="ops-card">
-        <h3>Periodic Vehicle Checks</h3>
-        <p class="ops-subtle">Staff-facing fortnightly vehicle, cab, washing equipment, PPE, engine and pump check. Issues reported here automatically create maintenance items for management.</p>
+        <h3>Vehicle Inspection Checklist</h3>
+        <p class="ops-subtle">Complete the periodic vehicle, equipment, PPE, engine, pump, hose reel and unloader checks. Any item marked Issue to report will create a management maintenance task.</p>
         ${inspectionFormHtml(template.id || '')}
       </div>
       <div class="ops-card" style="margin-top:1rem">
@@ -413,43 +511,47 @@
     return `<div class="ops-card"><h3>New inspection</h3>${inspectionFormHtml(defaultTemplate.id || '')}</div>`;
   }
   function inspectionFormHtml(templateId){
-    const template = state.templates.find(t => t.id === templateId) || state.templates[0] || {};
-    const type = template.target_type || 'washing_equipment';
+    const template = state.templates.find(t => t.id === templateId) || vehicleChecklistTemplate() || {};
+    const type = template.target_type || 'vehicle';
     return `<form id="opsInspectionForm" class="ops-form">
-      <label>Inspection template<select id="opsInspectionTemplate">${state.templates.filter(t=>t.is_active!==false).map(t=>`<option value="${t.id}" ${t.id===template.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
-      <label>Inspection date<input id="opsInspectionDate" type="date" value="${today()}"></label>
-      <label>Inspector name<input id="opsInspectorName" value="${esc(state.user?.email?.split('@')[0] || '')}"></label>
-      ${['vehicle','combined'].includes(type) ? `<label>Vehicle<select id="opsInspectionVehicle">${state.vehicles.filter(v=>v.status==='Active').map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>` : ''}
-      ${['washing_equipment','combined'].includes(type) ? `<label>Washing equipment<select id="opsInspectionWash">${state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>` : ''}
+      <input type="hidden" id="opsInspectionTemplate" value="${esc(template.id || '')}">
+      <label>Inspection date *<input id="opsInspectionDate" type="date" value="${today()}" required></label>
+      <label>Inspector<input id="opsInspectorName" value="${esc(inspectorDisplayName())}" readonly></label>
+      ${['vehicle','combined'].includes(type) ? `<label>Vehicle *<select id="opsInspectionVehicle" required><option value="">Select vehicle</option>${state.vehicles.filter(v=>v.status==='Active').map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>` : ''}
+      ${['washing_equipment','combined'].includes(type) ? `<label>Washing equipment<select id="opsInspectionWash"><option value="">Select washing equipment</option>${state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>` : ''}
       <label>Odometer / mileage<input id="opsInspectionOdo" type="number" step="0.1"></label>
       <label class="ops-span-2">General notes<textarea id="opsInspectionNotes"></textarea></label>
       <div class="ops-span-2"><h3>Checklist</h3>${checklistQuestionsHtml(template.id)}</div>
-      <label class="ops-span-2">Photos<input id="opsInspectionPhotos" type="file" accept="image/*" multiple></label>
-      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Submit inspection</button></div>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Submit vehicle check</button></div>
     </form>`;
   }
   function checklistQuestionsHtml(templateId){
     const items = state.checklistItems.filter(i=>i.template_id===templateId && i.is_active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-    if(!items.length) return '<p class="ops-subtle">No checklist questions found. Run the V4 SQL seed or add checklist items in Supabase.</p>';
-    return items.map(item => `<div class="ops-question" data-item-id="${item.id}">
-      <strong>${esc(item.section || 'Checklist')} · ${esc(item.question_text)}</strong>
+    if(!items.length) return '<p class="ops-subtle">No checklist questions found. Run the V4 SQL migration or add checklist items in Supabase.</p>';
+    const groups = [];
+    items.forEach(item => {
+      const section = item.section || 'Checklist';
+      let g = groups.find(x => x.section === section);
+      if(!g){ g = { section, items: [] }; groups.push(g); }
+      g.items.push(item);
+    });
+    return groups.map(g => `<div class="ops-check-section"><h4>${esc(g.section)}</h4>${g.items.map(item => `<div class="ops-question" data-item-id="${item.id}">
+      <strong>${esc(item.question_text)}</strong>
       ${item.help_text ? `<div class="ops-subtle">${esc(item.help_text)}</div>` : ''}
       <div class="ops-form">
-        <label>Status${answerInputHtml(item)}</label>
+        <label>Status / response *${answerInputHtml(item)}</label>
         <label>Notes<input class="ops-answer-notes" placeholder="Notes if needed"></label>
       </div>
-      ${itemAllowsPhoto(item) ? `<div class="ops-question-photo"><label><strong>Photos for this item</strong><input class="ops-item-photo" type="file" accept="image/*" multiple></label><div class="ops-subtle">Use this for cab/tray photos or evidence of an issue. Stored against this checklist item using the existing inspection photos table.</div></div>` : ''}
-    </div>`).join('');
+      ${itemAllowsPhoto(item) ? `<div class="ops-question-photo"><label><strong>Exterior cleaning photos</strong><input class="ops-item-photo" type="file" accept="image/*" multiple></label><div class="ops-subtle">Upload exterior vehicle photos here after washing. No other checklist boxes need photos.</div></div>` : ''}
+    </div>`).join('')}</div>`).join('');
   }
   function answerInputHtml(item){
     const type = item.response_type;
     if(type === 'number') return `<input class="ops-answer-value" type="number" step="0.1" ${item.required?'required':''}>`;
     if(type === 'text') return `<input class="ops-answer-value" ${item.required?'required':''}>`;
     let opts = ['Completed OK','Issue to report','N/A'];
-    if(type === 'pass_fail') opts = ['Completed OK','Issue to report'];
-    if(type === 'yes_no') opts = ['No','Yes'];
     if(type === 'choice' && Array.isArray(item.response_options) && item.response_options.length) opts = item.response_options;
-    return `<select class="ops-answer-value" ${item.required?'required':''}>${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
+    return `<select class="ops-answer-value" ${item.required?'required':''}><option value="">No response</option>${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
   }
 
 
@@ -468,6 +570,7 @@
       <label>Washing equipment<select id="opsManualWash"><option value="">None</option>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>
       <label>Vehicle<select id="opsManualVehicle"><option value="">None</option>${state.vehicles.map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>
       <label>Title<input id="opsManualTitle" required></label>
+      <label><span>Apply to matching equipment type</span><select id="opsManualApplyScope"><option value="single">Standalone/single task only</option><option value="same_type">Create one for all washing equipment of the same type</option></select></label>
       <label>Priority<select id="opsManualPriority">${optionList(PRIORITIES,'Medium')}</select></label>
       <label>Due date<input id="opsManualDue" type="date"></label>
       <label class="ops-span-2">Description<textarea id="opsManualDescription"></textarea></label>
@@ -483,7 +586,7 @@
     if(!rows.length) return '<p class="ops-subtle">No maintenance tasks yet.</p>';
     return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Status</th><th>Priority</th><th>Task</th><th>Target</th><th>Source</th><th>Due</th><th>Actions</th></tr>${rows.map(t=>`<tr><td>${statusPill(t.status)}</td><td>${statusPill(t.priority)}</td><td><strong>${esc(t.title)}</strong><br><span class="ops-subtle">${esc(t.description||'')}</span></td><td>${esc(targetName(t))}</td><td>${esc(t.source_type)}</td><td>${nzDate(t.due_date)}</td><td><button class="ops-btn ghost" data-ops-open-task="${t.id}">Open</button></td></tr>`).join('')}</table></div>`;
   }
-  function statusRank(s){ return {'Open':0,'In Progress':1,'Waiting on Parts':2,'Deferred':3,'Completed':4}[s] ?? 5; }
+  function statusRank(s){ return {'Open':0,'In Progress':1,'Waiting on Parts':2,'Waiting on Someone':3,'Deferred':4,'Completed':5}[s] ?? 5; }
 
   function taskDetailHtml(taskId){
     const t = state.tasks.find(x=>x.id===taskId); if(!t) return '';
@@ -510,26 +613,72 @@
   }
 
   function schedulesHtml(){
-    return `<div class="ops-card"><h3>Preventive maintenance schedules</h3>${canMaintain()?scheduleFormHtml():''}${scheduleTableHtml()}${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" data-ops-action="generateDueTasks">Generate due tasks</button></div>':''}</div>`;
+    return `<div class="ops-card"><h3>Preventive maintenance</h3><p class="ops-subtle">Use standard templates for water blaster engines, pumps, hose reels and unloaders, or add a standalone schedule.</p>${canMaintain()?standardMaintenanceHtml()+scheduleFormHtml():''}${scheduleTableHtml()}${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" data-ops-action="generateDueTasks">Generate due tasks</button></div>':''}</div>`;
+  }
+  function standardProcedures(){
+    const names = ['Engine oil change','Air filter check/replacement','Spark plug inspection/replacement','Pump oil change','Pump leak and fitting check','Unloader valve check','Hose reel inspection','Fuel tank water/grit removal with syringe'];
+    return state.procedures.filter(p => p.is_active !== false && names.includes(p.name));
+  }
+  function standardMaintenanceHtml(){
+    return `<details open><summary><strong>Standard maintenance templates</strong></summary><div class="ops-form" style="margin-top:.8rem">
+      <label>Equipment<select id="opsStdWash">${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)} (${esc(w.equipment_type||'')})</option>`).join('')}</select></label>
+      <label>Default next due date<input id="opsStdNextDate" type="date" value="${addDays(today(), 30)}"></label>
+      <div class="ops-span-2"><div class="ops-subtle">These procedure templates will be attached as date-based schedules. Adding a new Water Blaster item also automatically receives these templates.</div>${standardProcedures().map(p=>`<label class="ops-check"><input type="checkbox" class="ops-std-proc" value="${p.id}" checked> ${esc(p.name)} ${p.frequency_days?`(${p.frequency_days} days)`:''}</label>`).join('') || '<p class="ops-subtle">No standard procedures found. Run the V4.0.3 migration.</p>'}</div>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="button" data-ops-action="applyStdSelected">Apply to selected equipment</button><button class="ops-btn ghost" type="button" data-ops-action="applyStdSameType">Apply to all equipment of same type</button></div>
+    </div></details>`;
   }
   function scheduleFormHtml(){
-    return `<details><summary><strong>Add/update schedule</strong></summary><form id="opsScheduleForm" class="ops-form" style="margin-top:.8rem">
+    return `<details><summary><strong>Add standalone maintenance schedule</strong></summary><form id="opsScheduleForm" class="ops-form" style="margin-top:.8rem">
       <label>Washing equipment<select id="opsScheduleWash" required>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>
       <label>Procedure<select id="opsScheduleProcedure" required>${state.procedures.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>
       <label>Frequency days<input id="opsScheduleFreqDays" type="number" min="1" placeholder="e.g. 180"></label>
       <label>Next due date<input id="opsScheduleNextDate" type="date"></label>
-      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save schedule</button></div>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save standalone schedule</button></div>
     </form></details>`;
   }
   function scheduleTableHtml(){
     if(!state.schedules.length) return '<p class="ops-subtle">No preventive maintenance schedules yet.</p>';
-    return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment</th><th>Procedure</th><th>Frequency</th><th>Next due</th><th>Status</th></tr>${state.schedules.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name||'Unknown')}</td><td>${esc(p?.name||'Unknown')}</td><td>${esc(s.frequency_days||'—')} days</td><td>${nzDate(s.next_due_at)}</td><td>${scheduleIsDue(s)?'<span class="ops-pill ops-bad">Due</span>':'<span class="ops-pill ops-ok">Scheduled</span>'}</td></tr>`; }).join('')}</table></div>`;
+    return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment</th><th>Procedure</th><th>Frequency</th><th>Next due</th><th>Status</th></tr>${state.schedules.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name||'Unknown')}</td><td>${esc(p?.name||'Unknown')}</td><td>${esc(s.frequency_days||p?.frequency_days||'—')} days</td><td>${nzDate(s.next_due_at)}</td><td>${scheduleIsDue(s)?'<span class="ops-pill ops-bad">Due</span>':'<span class="ops-pill ops-ok">Scheduled</span>'}</td></tr>`; }).join('')}</table></div>`;
   }
   function scheduleIsDue(s){
     if(s.is_active === false) return false;
     return !!(s.next_due_at && daysUntil(s.next_due_at) <= 0);
   }
 
+  async function applyDefaultSchedulesForEquipment(wash){
+    const w = typeof wash === 'string' ? (state.washEquipment.find(x=>x.id===wash) || {id:wash, equipment_type:''}) : (wash || {});
+    if(!/water\s*blaster|engine|pump/i.test(String(w.equipment_type || ''))) return;
+    const procs = standardProcedures();
+    if(procs.length) await upsertSchedulesForWashIds([w.id], procs.map(p=>p.id), addDays(today(), 30));
+  }
+  async function applyStandardSchedules(scope){
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can apply schedules.');
+    const washId = byId('opsStdWash')?.value;
+    if(!washId) return alert('Choose equipment first.');
+    const selectedProcIds = Array.from(document.querySelectorAll('.ops-std-proc:checked')).map(x=>x.value);
+    if(!selectedProcIds.length) return alert('Choose at least one maintenance template.');
+    let washIds = [washId];
+    if(scope === 'same_type'){
+      const base = state.washEquipment.find(w=>w.id===washId);
+      if(base) washIds = state.washEquipment.filter(w=>w.equipment_type === base.equipment_type).map(w=>w.id);
+    }
+    await upsertSchedulesForWashIds(washIds, selectedProcIds, byId('opsStdNextDate')?.value || addDays(today(),30));
+    alert(`Applied ${selectedProcIds.length} template${selectedProcIds.length===1?'':'s'} to ${washIds.length} equipment item${washIds.length===1?'':'s'}.`);
+    await loadAll();
+  }
+  async function upsertSchedulesForWashIds(washIds, procedureIds, nextDate){
+    const rows = [];
+    for(const washId of washIds){
+      for(const procId of procedureIds){
+        const p = state.procedures.find(x=>x.id===procId) || {};
+        const existing = state.schedules.find(s=>s.washing_equipment_id===washId && s.procedure_id===procId);
+        const row = { washing_equipment_id:washId, procedure_id:procId, frequency_days:p.frequency_days || 90, next_due_at:nextDate || addDays(today(), p.frequency_days || 90), is_active:true, created_by:state.user.id };
+        if(existing) await state.sb.from('operations_equipment_maintenance_schedules').update(row).eq('id', existing.id);
+        else rows.push(row);
+      }
+    }
+    if(rows.length) await state.sb.from('operations_equipment_maintenance_schedules').insert(rows);
+  }
 
   function guidesHtml(){
     if(!state.procedures.length) return '<div class="ops-card"><h3>Maintenance guides</h3><p>No guides found. Run the V4 SQL seed.</p></div>';
@@ -555,7 +704,6 @@
     byId('opsNav')?.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
     byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
     byId('opsWashingForm')?.addEventListener('submit', saveWashing);
-    byId('opsInspectionTemplate')?.addEventListener('change', e => { byId('opsInspectionForm').outerHTML = inspectionFormHtml(e.target.value); bindRenderedEvents(); });
     byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
     byId('opsManualTaskForm')?.addEventListener('submit', createManualTask);
     byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
@@ -571,6 +719,8 @@
     if(action === 'clearWash'){ state.editingWashId=''; render(); }
     if(action === 'closeTask'){ state.openTaskId=''; render(); }
     if(action === 'generateDueTasks'){ await generateDueTasks(); }
+    if(action === 'applyStdSelected'){ await applyStandardSchedules('selected'); }
+    if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
   }
 
   async function saveVehicle(e){
@@ -609,8 +759,11 @@
       created_by: state.user.id
     };
     if(!row.name) return alert('Name is required.');
-    const r = id ? await state.sb.from('operations_washing_equipment').update(row).eq('id', id) : await state.sb.from('operations_washing_equipment').insert(row);
+    let r;
+    if(id) r = await state.sb.from('operations_washing_equipment').update(row).eq('id', id).select().single();
+    else r = await state.sb.from('operations_washing_equipment').insert(row).select().single();
     if(r.error) return alert(r.error.message);
+    if(!id && r.data) await applyDefaultSchedulesForEquipment(r.data);
     state.editingWashId=''; await loadAll();
   }
 
@@ -623,18 +776,21 @@
 
   async function submitInspection(e){
     e.preventDefault(); if(!canSubmit()) return alert('Your role cannot submit Operations inspections.');
-    const template = state.templates.find(t=>t.id===byId('opsInspectionTemplate').value);
-    if(!template) return alert('Choose an inspection template.');
+    const template = state.templates.find(t=>t.id===byId('opsInspectionTemplate').value) || vehicleChecklistTemplate();
+    if(!template || !template.id) return alert('Vehicle Inspection Checklist is not available. Run the V4.0.3 migration.');
     const targetType = template.target_type;
     const vehicleId = byId('opsInspectionVehicle')?.value || null;
     const washId = byId('opsInspectionWash')?.value || null;
     const answerRows = [];
     const itemPhotos = [];
     let hasProblem = false;
-    document.querySelectorAll('.ops-question').forEach(q => {
+    try{
+      document.querySelectorAll('.ops-question').forEach(q => {
       const item = state.checklistItems.find(i=>i.id===q.dataset.itemId);
       if(!item) return;
-      const answer = q.querySelector('.ops-answer-value')?.value || '';
+      const input = q.querySelector('.ops-answer-value');
+      const answer = input?.value || '';
+      if(input?.hasAttribute('required') && !answer){ throw new Error('Please answer every checklist item before submitting.'); }
       const notes = q.querySelector('.ops-answer-notes')?.value || '';
       const problem = itemIsProblem(item, answer);
       if(problem) hasProblem = true;
@@ -643,6 +799,7 @@
         Array.from(input.files || []).forEach(file => itemPhotos.push({ item, file }));
       });
     });
+    }catch(err){ return alert(err.message); }
     const insRow = {
       template_id: template.id,
       target_type: targetType,
@@ -696,8 +853,6 @@
       if(tr.error) alert('Inspection saved, but task generation failed: ' + tr.error.message);
     }
 
-    const files = Array.from(byId('opsInspectionPhotos')?.files || []);
-    for(const file of files){ await uploadInspectionPhoto(inspectionId, file); }
     for(const p of itemPhotos){ await uploadInspectionPhoto(inspectionId, p.file, p.item.id, p.item.question_text); }
 
     alert(`Inspection saved. ${taskRows.length} maintenance task${taskRows.length===1?'':'s'} created.`);
@@ -730,7 +885,15 @@
       created_by: state.user.id
     };
     if(!row.title) return alert('Task title is required.');
-    const r = await state.sb.from('operations_maintenance_tasks').insert(row);
+    let rows = [row];
+    const scope = byId('opsManualApplyScope')?.value || 'single';
+    if(scope === 'same_type' && row.target_type === 'washing_equipment' && row.washing_equipment_id){
+      const base = state.washEquipment.find(w=>w.id===row.washing_equipment_id);
+      if(base){
+        rows = state.washEquipment.filter(w=>w.equipment_type === base.equipment_type).map(w => ({...row, washing_equipment_id:w.id, vehicle_id:null, title: row.title}));
+      }
+    }
+    const r = await state.sb.from('operations_maintenance_tasks').insert(rows);
     if(r.error) return alert(r.error.message);
     await loadAll();
   }
@@ -824,6 +987,7 @@
 
   function boot(){
     injectTab();
+    installModulePortal();
     initSupabase().catch(err => { state.lastError = err.message; render(); });
     window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state };
   }

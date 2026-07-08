@@ -43,7 +43,7 @@
 <body>
 <header>
   <img class="logo" src="assets/logo.png" onerror="this.src='assets/icon.svg'" alt="Spray & Wash logo">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.2 • Height Safety • Vehicle Checks • Equipment • Maintenance</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.3 • Height Safety • Vehicle Checks • Equipment • Maintenance</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -59,7 +59,74 @@
     <section id="inspectionDetail" class="tabpane hidden"><div id="inspectionDetailContent"></div></section>
     <section id="users" class="tabpane hidden"><div class="card"><h2>User Accounts &amp; Roles</h2><p class="permissionNote">Users appear here after they create an account and sign in once. Admin users can assign multiple roles to each person.</p><div class="kv"><b>Your roles</b><span id="adminRoleSummary">Loading...</span></div><div class="row"><button class="primary" onclick="loadUsers()">Refresh users</button></div></div><div id="userList"></div><div class="card"><h3>Role guide</h3><div class="roleGrid"><div><b>Admin</b><p class="muted">Manage users and all app areas.</p></div><div><b>Inspector</b><p class="muted">Run inspections and add inspection/equipment photos.</p></div><div><b>Equipment Manager</b><p class="muted">Add, edit, archive and restore equipment.</p></div><div><b>Certificate Approver</b><p class="muted">Reserved for certificates.</p></div><div><b>Office / Reports</b><p class="muted">Export records and view reports.</p></div><div><b>Viewer</b><p class="muted">Read-only access.</p></div></div></div></section>
     <section id="admin" class="tabpane hidden"><div class="card"><h2>Admin Controls</h2><p class="muted">Security status, shared app settings, audit log and backup tools.</p><div class="securityBox"><b>V4.0.2 security model</b><p>Users must have at least one assigned role before they can access business data. App buttons are role-controlled, and Supabase RLS policies can enforce role permissions.</p></div></div><div class="adminGrid"><div class="card"><h2>App Settings</h2><div class="settingRow"><div><label>Due-soon notification lead time</label><select id="adminNotifyLead"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></div><div><label>Default inspection frequency</label><select id="adminDefaultFrequency"><option>6 monthly</option><option>Annual</option><option>Other</option></select></div><div><label>Default certificate photo layout</label><select id="adminCertPhotoLayout"><option value="photo_page">Photos on second page</option><option value="inline">Inline photos</option></select></div><div><label>Company name on certificates</label><input id="adminCompanyName" placeholder="Spray & Wash"></div></div><label>Default certificate footer note</label><textarea id="adminCertFooter" placeholder="Certificate footer wording"></textarea><div class="row"><button class="primary" onclick="saveAdminSettings()">Save admin settings</button><button onclick="renderAdmin()">Refresh</button></div></div><div class="card"><h2>Backup &amp; Controls</h2><p class="muted">Run a full JSON backup before major updates or before changing security policies.</p><div class="row"><button class="primary" onclick="exportJSONBackup()">Full JSON backup</button><button onclick="exportAuditCSV()">Export audit CSV</button><button onclick="refreshAuditLogs()">Refresh audit log</button></div><div class="dangerBox"><b>Do not delete rows from Supabase manually.</b><p>Use Archive / Dispose from the equipment detail page so the action is recorded.</p></div></div><div class="card"><h2>Audit Log</h2><div class="auditFilters"><div><label>Action contains</label><input id="auditActionFilter" oninput="renderAuditLog()"></div><div><label>Entity type</label><select id="auditEntityFilter" onchange="renderAuditLog()"><option value="">All</option><option>equipment</option><option>inspection</option><option>equipment_photo</option><option>inspection_photo</option><option>certificate</option><option>user_role</option><option>settings</option><option>report</option></select></div><div><label>Show rows</label><select id="auditLimit" onchange="renderAuditLog()"><option>50</option><option>100</option><option>200</option></select></div><div><label>&nbsp;</label><button onclick="refreshAuditLogs()">Refresh</button></div></div><div id="auditLogList"><p class="muted">Loading audit log...</p></div></div></div></section>
-    <section id="certificates" class="tabpane hidden"><div class="card"><h2>Inspection Certificates</h2><p class="muted">Generate branded inspection certificates on demand. Certificates open in a printable page; use Print to save as PDF.</p><p class="muted">Tip: Certificates include equipment details, latest or selected inspection details, checklist, notes, equipment photos, inspection photos, certificate number and generated date.</p></div><div class="card"><h2>Generate Certificates</h2><div class="certificateControls"><h3>1. Choose certificate batch type</h3><label>Certificate batch type</label><select id="certBatchType" onchange="renderCertificateControls()"><option value="selected">Selected individual items</option><option value="type">All items of selected equipment type</option><option value="date_range">Inspections within selected date range</option><option value="result">Inspections by selected result</option><option value="due">Due / overdue items</option></select><div class="certActionBox"><button id="certGenerateBtn" class="primary" onclick="generateCertificates()"><span class="miniSpinner"></span>Generate certificates</button><div id="certModeHelp" class="certModeHelp">Choose a certificate type to see the required options.</div></div><div id="certTypePanel" class="certPanel"><h3>2. Equipment type</h3><label>Equipment type</label><select id="certEquipmentType"></select></div><div id="certDatePanel" class="certPanel"><h3>2. Inspection date range</h3><div class="grid two"><div><label>Inspection start date</label><input id="certStartDate" type="date"></div><div><label>Inspection end date</label><input id="certEndDate" type="date"></div></div></div><div id="certResultPanel" class="certPanel"><h3>2. Inspection result</h3><label>Inspection result</label><select id="certResult"><option>Pass</option><option>Fail - Repair Required</option><option>Fail - Remove From Service / Disposal</option></select></div><div id="certSelectedPanel" class="certPanel"><h3>2. Select individual items</h3><p class="muted">Tick one or more items below. Items marked as having no inspection history cannot generate a certificate yet.</p><div class="certSelectionTools"><span id="certSelectedCount" class="selectedCount">0 selected</span><button onclick="selectAllCertificateItems()">Select all with inspections</button><button onclick="clearCertificateSelection()">Clear selection</button></div><div id="certIndividualSelect" class="certSelectList"></div></div><div class="certPanel"><h3>3. Photo options</h3><div class="grid two"><div><label>Include equipment photos</label><select id="certIncludeEquipmentPhotos"><option value="yes" selected>Yes</option><option value="no">No</option></select></div><div><label>Include inspection photos</label><select id="certIncludeInspectionPhotos"><option value="yes" selected>Yes</option><option value="no">No</option></select></div></div></div><div id="certValidation" class="certValidation warn">Choose certificate options.</div></div></div><div class="card"><h2>Certificate History</h2><div class="row"><button class="primary" onclick="loadCertificateHistory()">Refresh history</button><button onclick="exportCertificatesCSV()">Export certificate history CSV</button></div><div id="certificateHistory"></div></div></section>
+    <section id="certificates" class="tabpane hidden">
+  <div class="card">
+    <h2>Inspection Certificates</h2>
+    <p class="muted">Generate branded height-safety inspection certificates. Certificates open in a printable page; use Print to save as PDF.</p>
+  </div>
+  <div class="card">
+    <h2>Generate Certificates</h2>
+    <div class="certificateControls">
+      <h3>1. Choose certificate batch type</h3>
+      <label>Certificate batch type</label>
+      <select id="certMode" onchange="updateCertificateUI()">
+        <option value="selected_items">Selected individual items</option>
+        <option value="type_latest">All active items of selected equipment type</option>
+        <option value="inspection_date_range">Inspections within selected date range</option>
+        <option value="inspection_result">Inspections by selected result</option>
+        <option value="due_overdue">Due / overdue items</option>
+      </select>
+      <div class="certActionBox">
+        <button id="certGenerateBtn" class="primary" onclick="generateCertificates()"><span class="miniSpinner"></span>Generate certificates</button>
+        <div id="certModeHelp" class="certModeHelp">Choose a certificate type to see the required options.</div>
+      </div>
+      <div id="certTypePanel" class="certPanel hidden">
+        <h3>2. Equipment type</h3>
+        <label>Equipment type</label>
+        <select id="certTypeFilter" onchange="updateCertificateUI()"></select>
+      </div>
+      <div id="certDatePanel" class="certPanel hidden">
+        <h3>2. Inspection date range</h3>
+        <div class="grid two">
+          <div><label>Inspection start date</label><input id="certStartDate" type="date" onchange="updateCertificateUI()"></div>
+          <div><label>Inspection end date</label><input id="certEndDate" type="date" onchange="updateCertificateUI()"></div>
+        </div>
+      </div>
+      <div id="certResultPanel" class="certPanel hidden">
+        <h3>2. Inspection result</h3>
+        <label>Inspection result</label>
+        <select id="certResult" onchange="updateCertificateUI()">
+          <option>Pass</option>
+          <option>Fail - Repair Required</option>
+          <option>Fail - Remove From Service / Disposal</option>
+        </select>
+      </div>
+      <div id="certItemsPanel" class="certPanel">
+        <h3>2. Select individual items</h3>
+        <p class="muted">Tick one or more items below. Items marked as having no inspection history cannot generate a certificate yet.</p>
+        <div class="certSelectionTools row">
+          <span id="certSelectedCount" class="selectedCount">0 selected</span>
+          <button type="button" onclick="selectAllCertItems(true)">Select all with inspections</button>
+          <button type="button" onclick="selectAllCertItems(false)">Clear selection</button>
+        </div>
+        <div id="certItemList" class="certSelectList"></div>
+      </div>
+      <div class="certPanel">
+        <h3>3. Photo options</h3>
+        <div class="grid two">
+          <div><label>Include equipment photos</label><select id="certIncludeEquipmentPhotos"><option value="yes" selected>Yes</option><option value="no">No</option></select></div>
+          <div><label>Include inspection photos</label><select id="certIncludeInspectionPhotos"><option value="yes" selected>Yes</option><option value="no">No</option></select></div>
+        </div>
+      </div>
+      <div id="certValidation" class="certValidation warn">Choose certificate options.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Certificate History</h2>
+    <div class="row"><button class="primary" onclick="loadCertificateHistory()">Refresh history</button><button onclick="exportCertificatesCSV()">Export certificate history CSV</button></div>
+    <div id="certificateHistory"></div>
+  </div>
+</section>
     <section id="export" class="tabpane hidden"><div class="card"><h2>Reports <span id="reportCountOut" class="reportCount">0 rows</span></h2><p class="muted">View reports on screen or export CSV. Use the full JSON backup before major upgrades.</p><div class="reportPanel"><h3>Quick reports</h3><div class="row"><button class="primary" onclick="runReport('equipment_register')">Equipment Register</button><button onclick="runReport('inspection_history')">Inspection History</button><button onclick="runReport('due_overdue')">Due / Overdue</button><button onclick="runReport('failed_quarantined')">Failed / Quarantined</button><button onclick="runReport('archived_disposed')">Archived / Disposed</button><button onclick="runReport('no_equipment_photos')">No Equipment Photos</button><button onclick="runReport('no_inspection_history')">No Inspection History</button></div></div><div class="reportPanel"><h3>Filtered reports</h3><div class="grid three"><div><label>Equipment type</label><select id="reportTypeFilter"></select><button onclick="runReport('equipment_type')">Run type report</button></div><div><label>Manufacturer</label><select id="reportManufacturer"></select><button onclick="runReport('equipment_manufacturer')">Run manufacturer report</button></div><div><label>Model</label><select id="reportModel"></select><button onclick="runReport('equipment_model')">Run model report</button></div><div><label>Inspection start date</label><input id="reportStartDate" type="date"></div><div><label>Inspection end date</label><input id="reportEndDate" type="date"></div><div><label>&nbsp;</label><button onclick="runReport('inspection_date_range')">Run date range</button></div><div><label>Inspection result</label><select id="reportResult"><option value="Pass">Pass</option><option value="Fail - Repair Required">Fail - Repair Required</option><option value="Fail - Remove From Service / Disposal">Fail - Remove From Service / Disposal</option></select><button onclick="runReport('inspection_result')">Run result report</button></div><div><label>Inspection type</label><select id="reportInspectionType"></select><button onclick="runReport('inspection_type')">Run inspection type</button></div><div><label>Due within</label><select id="reportDueDays"><option value="7">7 days</option><option value="14">14 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select><button onclick="runReport('due_within')">Run due report</button></div></div></div><div class="card"><h3 id="reportTitleOut">Report</h3><div class="row"><button class="primary" onclick="exportCurrentReportCSV()">Export current report CSV</button><button onclick="exportCSV('equipment')">Raw equipment CSV</button><button onclick="exportCSV('inspections')">Raw inspections CSV</button><button onclick="exportJSONBackup()">Full JSON backup</button></div><div id="reportPreview" style="margin-top:12px"></div></div></div></section>
   </div>
 </main>
@@ -68,6 +135,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
-<script src="./operations-v4.js?v=4.0.2"></script>
+<script src="./operations-v4.js?v=4.0.3"></script>
 </body>
 </html>
