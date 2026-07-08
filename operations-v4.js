@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.6
+/* Spray & Wash Operations App V4.0.7
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.6';
+  const VERSION = '4.0.7';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -1206,7 +1206,7 @@
     if(before > 0) return `Found ${before} matching item${before === 1 ? '' : 's'}, but none had inspection history to certify.`;
     if(kind === 'type_latest') return `No active equipment items were found for type “${type || 'selected type'}”. Check type spelling/status, or use selected items.`;
     if(kind === 'selected_items') return 'Select at least one item with inspection history.';
-    return 'No matching certificate items were found for the selected parameters.';
+    return 'No matching certificate items were found for the selected parameters. Please check the selected certificate mode and items.';
   }
   function certIsDueFromPair(pair){
     const i = pair.inspection;
@@ -1258,6 +1258,7 @@
     return { pairs, before, type };
   }
   async function generateCertificatesV405(kind){
+    kind = kind || document.getElementById('certMode')?.value || 'selected_items';
     const btn = document.getElementById('certGenerateBtn');
     try{
       if(btn) btn.disabled = true;

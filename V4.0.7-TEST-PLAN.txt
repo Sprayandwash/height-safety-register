@@ -1,0 +1,14 @@
+V4.0.7 Test Plan
+
+1. Confirm app header shows Version 4.0.7.
+2. Confirm Home button still appears consistently in modules.
+3. Open Height Equipment > Certificates.
+4. Select certificate mode: Selected individual items.
+5. Search equipment items for "helmet".
+6. Confirm 2 Helmet items appear.
+7. Tick both Helmet items.
+8. Click Generate certificates.
+9. Confirm certificate window/download is created.
+10. Test All active items of selected equipment type > Helmet.
+11. Confirm the app shows matching item count and generates where inspection history exists.
+12. Confirm no config.js changes were made.
