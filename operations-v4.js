@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.7
+/* Spray & Wash Operations App V4.0.8
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.7';
+  const VERSION = '4.0.8';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -89,7 +89,8 @@
   function canUseManagement(){ return hasAny(['Equipment Manager','Office / Reports','Viewer']); }
   function canUseHeight(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer','Certificate Approver']); }
   function canUseVehicleChecks(){ return hasAny(['Inspector','Equipment Manager']); }
-  function isManagementView(view){ return ['management-dashboard','vehicles','washing','history','maintenance','schedules','guides','users'].includes(view); }
+  function isManagementView(view){ return ['management-dashboard','assets','history','tasks','schedules','guides'].includes(view) || ['vehicles','washing','maintenance'].includes(view); }
+  function isAdminView(view){ return ['admin-dashboard','admin-users','admin-settings'].includes(view); }
   function displayStatusLabel(value){
     const v = String(value || '—');
     if(v === 'Pass') return 'Completed OK';
@@ -118,6 +119,11 @@
       #operations.ops-v4 { padding-bottom: 3rem; }
       .ops-shell { max-width: 1200px; margin: 0 auto; }
       .ops-header { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:1rem; }
+      .ops-module-title { display:flex; flex-direction:column; gap:.15rem; }
+      .ops-section-title { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+      .ops-search { margin:.75rem 0; }
+      .ops-search input { width:100%; border:1px solid #cfd8e3; border-radius:.7rem; padding:.68rem .75rem; font:inherit; }
+      .ops-actions .ops-btn, .ops-nav button, .ops-btn { text-align:center; }
       .ops-header h2 { margin:.1rem 0; }
       .ops-subtle { color:#65758b; font-size:.92rem; }
       .ops-nav { display:flex; flex-wrap:wrap; gap:.45rem; margin:1rem 0; }
@@ -204,11 +210,19 @@
     window.openHeightModule = openHeightModule;
     window.openVehicleChecksModule = openVehicleChecksModule;
     window.openOpsManagementModule = openOpsManagementModule;
+    window.openAdminModule = openAdminModule;
+    window.openLegacyAdminTools = openLegacyAdminTools;
+    window.openLegacyUserTools = openLegacyUserTools;
     if(originalShowTab){
       window.showTab = function(id){
+        if((id === 'users' || id === 'admin') && state.currentModule !== 'admin'){
+          if(isAdmin()) return openAdminModule(id === 'users' ? 'admin-users' : 'admin-settings');
+          return alert('Admin access is required.');
+        }
         state.currentModule = 'height';
         originalShowTab(id);
         setTopTabsMode('height');
+        refreshTopUserSummary();
         if(id === 'certificates') setTimeout(()=>{ enhanceCertificateSelector(); installCertificateV405Patch(); }, 80);
         if(id === 'users') setTimeout(enhanceLegacyUserUI, 80);
       };
@@ -272,7 +286,7 @@
       const note = document.createElement('div');
       note.id = 'opsLegacyUserNote';
       note.className = 'permissionNote';
-      note.innerHTML = `<b>Tip:</b> Admins can now pre-load users from <b>Ops Management → Users</b> using compact role presets. The role checkbox grid below remains available for advanced/manual changes.`;
+      note.innerHTML = `<b>Tip:</b> Users and permissions now sit in the <b>Admin</b> module. The role checkbox grid below remains available for advanced/manual changes.`;
       if(firstCard) firstCard.insertBefore(note, firstCard.children[1] || null);
     }
     users.querySelectorAll('.userCard .roleGrid').forEach((grid, idx) => {
@@ -290,15 +304,22 @@
   function setTopTabsMode(mode){
     const tabs = document.querySelector('.tabs');
     if(!tabs) return;
-    tabs.style.display = mode === 'height' ? 'flex' : 'none';
-    const homeBtn = byId('moduleHomeTabButton');
-    if(homeBtn) homeBtn.style.display = mode === 'height' ? '' : 'none';
+    tabs.style.display = (mode === 'height' || mode === 'legacy-admin') ? 'flex' : 'none';
     if(mode === 'height'){
       ensureHeightHomeButton();
+      const homeBtn = byId('moduleHomeTabButton');
+      if(homeBtn) homeBtn.style.display = '';
       tabs.querySelectorAll('.tab').forEach(btn => {
+        if(btn.id === 'moduleHomeTabButton'){ btn.style.display = ''; return; }
         const tab = btn.dataset.tab || '';
-        btn.style.display = ['dashboard','equipment','inspect','export','certificates','users','admin'].includes(tab) || !tab ? '' : 'none';
+        btn.style.display = ['dashboard','equipment','inspect','due','export','certificates'].includes(tab) ? '' : 'none';
       });
+    } else if(mode === 'legacy-admin'){
+      ensureHeightHomeButton();
+      tabs.querySelectorAll('.tab').forEach(btn => { btn.style.display = btn.id === 'moduleHomeTabButton' ? '' : 'none'; });
+    } else {
+      const homeBtn = byId('moduleHomeTabButton');
+      if(homeBtn) homeBtn.style.display = 'none';
     }
   }
 
@@ -309,6 +330,7 @@
     byId('moduleHome')?.classList.remove('hidden');
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     renderModuleHome();
+    refreshTopUserSummary();
     setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
   }
 
@@ -336,6 +358,26 @@
     showOperations('management-dashboard');
   }
 
+  function openAdminModule(view){
+    if(!state.user) return alert('Sign in first.');
+    if(!isAdmin()) return alert('Admin access is required.');
+    state.currentModule = 'admin';
+    setTopTabsMode('none');
+    showOperations(view || 'admin-dashboard');
+  }
+
+  function openLegacyAdminTools(){
+    if(!isAdmin()) return alert('Admin access is required.');
+    state.currentModule = 'admin';
+    if(originalShowTab){ originalShowTab('admin'); if(typeof window.renderAdmin === 'function') window.renderAdmin(); setTopTabsMode('legacy-admin'); }
+  }
+
+  function openLegacyUserTools(){
+    if(!isAdmin()) return alert('Admin access is required.');
+    state.currentModule = 'admin';
+    if(originalShowTab){ originalShowTab('users'); if(typeof window.loadUsers === 'function') window.loadUsers(); setTopTabsMode('legacy-admin'); setTimeout(enhanceLegacyUserUI, 80); }
+  }
+
   function renderModuleHome(){
     const shell = byId('moduleHomeShell');
     if(!shell) return;
@@ -346,13 +388,13 @@
     } else {
       if(canUseHeight()) cards.push(moduleCard('Height Equipment', 'Height safety register, height-safety equipment, inspections, certificates and reports.', 'openHeightModule()'));
       if(canUseVehicleChecks()) cards.push(moduleCard('Vehicle Checks', 'Complete the staff Vehicle Inspection Checklist only.', 'openVehicleChecksModule()'));
-      if(canUseManagement()) cards.push(moduleCard('Ops Management', 'Vehicles, washing equipment, maintenance tasks, preventive maintenance, guides and management reports.', 'openOpsManagementModule()'));
+      if(canUseManagement()) cards.push(moduleCard('Ops Management', 'Assets, tasks, preventive maintenance, guides and management reports.', 'openOpsManagementModule()'));
+      if(isAdmin()) cards.push(moduleCard('Admin', 'Users, roles, permissions, settings, audit log and backup controls.', 'openAdminModule()'));
       if(!cards.length) cards.push(`<div class="ops-card"><h3>No app access yet</h3><p class="ops-subtle">Your account needs an assigned role before modules will appear.</p></div>`);
     }
     shell.innerHTML = `
       <div class="ops-header">
-        <div><h2>Spray &amp; Wash Operations</h2><div class="ops-subtle">Choose the area you need.</div></div>
-        <div class="ops-subtle">${state.user ? `Signed in as ${esc(state.user.email)}<br>Roles: ${esc(roleText())}` : 'Not signed in'}</div>
+        <div class="ops-module-title"><h2>Spray &amp; Wash Operations</h2><div class="ops-subtle">Choose the area you need.</div></div>
       </div>
       <div class="ops-branch-grid">${cards.join('')}</div>`;
   }
@@ -362,6 +404,9 @@
 
   function showOperations(view){
     state.currentView = view || state.currentView || 'vehicle-checks';
+    if(state.currentView === 'vehicles' || state.currentView === 'washing') state.currentView = 'assets';
+    if(state.currentView === 'maintenance') state.currentView = 'tasks';
+    if(isAdminView(state.currentView) && !isAdmin()) state.currentView = 'vehicle-checks';
     if(isManagementView(state.currentView) && !canUseManagement()) state.currentView = 'vehicle-checks';
     setTopTabsMode('none');
     document.querySelectorAll('.tabpane').forEach(x => x.classList.add('hidden'));
@@ -417,6 +462,7 @@
     const p = await state.sb.from('profiles').select('*').eq('user_id', state.user.id).maybeSingle();
     if(!p.error) state.profile = p.data || null;
     renderModuleHome();
+    refreshTopUserSummary();
   }
 
   async function loadTable(table, select='*', order){
@@ -463,28 +509,34 @@
     updateExternalTabVisibility();
     shell.innerHTML = headerHtml() + (state.lastError ? `<div class="ops-error">${esc(state.lastError)}</div>` : '') + bodyHtml();
     bindRenderedEvents();
+    refreshTopUserSummary();
     if(state.currentModule === 'home') renderModuleHome();
   }
 
   function headerHtml(){
-    const managementNav = canUseManagement() && state.currentView !== 'vehicle-checks' ? `
-        ${navButton('management-dashboard','Management Dashboard')}
-        ${navButton('vehicles','Vehicles')}
-        ${navButton('washing','Washing Equipment')}
+    const isVehicle = state.currentView === 'vehicle-checks';
+    const isAdminModule = isAdminView(state.currentView);
+    const managementNav = canUseManagement() && !isVehicle && !isAdminModule ? `
+        ${navButton('management-dashboard','Dashboard')}
+        ${navButton('assets','Assets')}
         ${navButton('history','Inspection History')}
-        ${navButton('maintenance','Maintenance')}
+        ${navButton('tasks','Tasks')}
         ${navButton('schedules','Preventive Maintenance')}
-        ${navButton('guides','Guides')}
-        ${isAdmin() ? navButton('users','Users') : ''}` : '';
-    const staffNav = state.currentView === 'vehicle-checks' ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : managementNav;
+        ${navButton('guides','Guides')}` : '';
+    const adminNav = isAdminModule ? `
+        ${navButton('admin-dashboard','Dashboard')}
+        ${navButton('admin-users','Users & Permissions')}
+        ${navButton('admin-settings','Settings, Audit & Backups')}` : '';
+    const staffNav = isVehicle ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : (isAdminModule ? adminNav : managementNav);
+    const title = isVehicle ? 'Vehicle Checks' : isAdminModule ? 'Admin' : 'Ops Management';
+    const note = isVehicle ? 'Staff vehicle inspection checklist' : isAdminModule ? 'Users, permissions, settings and audit controls' : 'Assets, tasks, schedules and guides';
     return `
       <div class="ops-header">
-        <div>
+        <div class="ops-module-title">
           <button type="button" class="ops-btn ghost" onclick="showModuleHome()">← Home</button>
-          <h2>${state.currentView === 'vehicle-checks' ? 'Vehicle Checks' : 'Operations Management'}</h2>
-          <div class="ops-subtle">V${VERSION} • ${state.currentView === 'vehicle-checks' ? 'Staff vehicle inspection checklist' : 'Maintenance, schedules and management'}</div>
+          <h2>${title}</h2>
+          <div class="ops-subtle">V${VERSION} • ${note}</div>
         </div>
-        <div class="ops-subtle">${state.user ? `Signed in as ${esc(state.user.email)}<br>Roles: ${esc(roleText())}` : 'Sign in to use Operations.'}</div>
       </div>
       <div class="ops-nav" id="opsNav">${staffNav}</div>`;
   }
@@ -495,14 +547,18 @@
     if(!state.user) return `<div class="ops-card"><h3>Sign in required</h3><p>Use the existing sign-in area first, then open Vehicle Checks or Operations Management.</p></div>`;
     if(!canView()) return `<div class="ops-card"><h3>No Operations access yet</h3><p>Your account needs one of these existing roles: Admin, Inspector, Equipment Manager, Office / Reports, or Viewer.</p></div>`;
     if(state.currentView === 'vehicle-checks') return periodicVehicleChecksHtml();
-    if(isManagementView(state.currentView) && !canUseManagement()) return `<div class="ops-card"><h3>Operations Management access required</h3><p>Use Periodic Vehicle Checks for staff vehicle checks. Management views require Admin, Equipment Manager, Office / Reports, or Viewer access.</p></div>`;
-    if(state.currentView === 'vehicles') return vehiclesHtml();
-    if(state.currentView === 'washing') return washingHtml();
+    if(isAdminView(state.currentView)){
+      if(!isAdmin()) return `<div class="ops-card"><h3>Admin access required</h3><p>This module is only available to Admin users.</p></div>`;
+      if(state.currentView === 'admin-users') return usersHtml();
+      if(state.currentView === 'admin-settings') return adminSettingsHtml();
+      return adminDashboardHtml();
+    }
+    if(isManagementView(state.currentView) && !canUseManagement()) return `<div class="ops-card"><h3>Ops Management access required</h3><p>Use Vehicle Checks for staff vehicle checks. Management views require Admin, Equipment Manager, Office / Reports, or Viewer access.</p></div>`;
+    if(state.currentView === 'assets') return assetsHtml();
     if(state.currentView === 'history') return historyHtml();
-    if(state.currentView === 'maintenance') return maintenanceHtml();
+    if(state.currentView === 'tasks') return tasksHtml();
     if(state.currentView === 'schedules') return schedulesHtml();
     if(state.currentView === 'guides') return guidesHtml();
-    if(state.currentView === 'users') return usersHtml();
     return dashboardHtml();
   }
 
@@ -539,13 +595,13 @@
       <div class="ops-grid">
         ${statCard('Vehicles due/overdue', vehicleDue.length, 'Fortnightly vehicle checks needing action')}
         ${statCard('Washing gear due/overdue', washDue.length, 'Water blasters, pumps and gear needing checks')}
-        ${statCard('Open maintenance', open.length, 'Reactive, scheduled and manual tasks')}
+        ${statCard('Open tasks', open.length, 'Reactive, scheduled and manual work items')}
         ${statCard('Waiting on parts', waiting.length, 'Tasks blocked by parts or supplies')}
         ${statCard('Preventive services due', scheduledDue.length, 'Scheduled date-based maintenance')}
       </div>
       <div class="ops-grid" style="margin-top:1rem">
         <div class="ops-card"><h3>Overdue / due inspections</h3>${dueListHtml()}</div>
-        <div class="ops-card"><h3>Open maintenance items</h3>${taskMiniListHtml(open.slice(0,8))}</div>
+        <div class="ops-card"><h3>Open tasks</h3>${taskMiniListHtml(open.slice(0,8))}</div>
       </div>`;
   }
   function statCard(title, value, note){ return `<div class="ops-card"><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div><div class="ops-subtle">${esc(note)}</div></div>`; }
@@ -581,9 +637,10 @@
       <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save vehicle</button><button class="ops-btn ghost" type="button" data-ops-action="clearVehicle">Clear</button></div>
     </form>`;
   }
-  function vehicleTableHtml(){
-    if(!state.vehicles.length) return '<p class="ops-subtle">No vehicles added yet.</p>';
-    return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Rego</th><th>Name</th><th>Status</th><th>Last inspection</th><th>Next due</th><th>Actions</th></tr>${state.vehicles.map(v=>{ const latest=latestInspectionFor('vehicle',v.id); const due=dueDateFor('vehicle',v); return `<tr><td><strong>${esc(v.rego)}</strong></td><td>${esc(v.name||v.make_model||'')}</td><td>${statusPill(v.status)}</td><td>${latest?nzDate(latest.inspection_date):'—'}</td><td>${nzDate(due)} ${targetDueStatus(daysUntil(due))}</td><td>${canManage()?`<button class="ops-btn ghost" data-ops-edit-vehicle="${v.id}">Edit</button>`:''}</td></tr>`; }).join('')}</table></div>`;
+  function vehicleTableHtml(rows){
+    rows = rows || state.vehicles;
+    if(!rows.length) return '<p class="ops-subtle">No vehicles added yet.</p>';
+    return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Rego</th><th>Name</th><th>Status</th><th>Last inspection</th><th>Next due</th><th>Actions</th></tr>${rows.map(v=>{ const latest=latestInspectionFor('vehicle',v.id); const due=dueDateFor('vehicle',v); return `<tr><td><strong>${esc(v.rego)}</strong></td><td>${esc(v.name||v.make_model||'')}</td><td>${statusPill(v.status)}</td><td>${latest?nzDate(latest.inspection_date):'—'}</td><td>${nzDate(due)} ${targetDueStatus(daysUntil(due))}</td><td>${canManage()?`<button class="ops-btn ghost" data-ops-edit-vehicle="${v.id}">Edit</button>`:''}</td></tr>`; }).join('')}</table></div>`;
   }
 
   function washingHtml(){
@@ -610,9 +667,33 @@
       <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save washing equipment</button><button class="ops-btn ghost" type="button" data-ops-action="clearWash">Clear</button></div>
     </form>`;
   }
-  function washingTableHtml(){
-    if(!state.washEquipment.length) return '<p class="ops-subtle">No washing equipment added yet.</p>';
-    return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Type</th><th>Vehicle</th><th>Status</th><th>Engine / pump</th><th>Next due</th><th>Actions</th></tr>${state.washEquipment.map(w=>{ const v=state.vehicles.find(x=>x.id===w.assigned_vehicle_id); const due=dueDateFor('washing_equipment',w); return `<tr><td><strong>${esc(w.name)}</strong><br><span class="ops-subtle">${esc(w.serial_number||'')}</span></td><td>${esc(w.equipment_type)}</td><td>${esc(v?.rego || v?.name || '—')}</td><td>${statusPill(w.status)}</td><td>${esc(w.engine_make_model||'—')}<br><span class="ops-subtle">${esc(w.pump_make_model||'—')}</span></td><td>${nzDate(due)} ${targetDueStatus(daysUntil(due))}</td><td>${canManage()?`<button class="ops-btn ghost" data-ops-edit-wash="${w.id}">Edit</button>`:''}</td></tr>`; }).join('')}</table></div>`;
+  function washingTableHtml(rows){
+    rows = rows || state.washEquipment;
+    if(!rows.length) return '<p class="ops-subtle">No washing equipment added yet.</p>';
+    return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Type</th><th>Vehicle</th><th>Status</th><th>Engine / pump</th><th>Next due</th><th>Actions</th></tr>${rows.map(w=>{ const v=state.vehicles.find(x=>x.id===w.assigned_vehicle_id); const due=dueDateFor('washing_equipment',w); return `<tr><td><strong>${esc(w.name)}</strong><br><span class="ops-subtle">${esc(w.serial_number||'')}</span></td><td>${esc(w.equipment_type)}</td><td>${esc(v?.rego || v?.name || '—')}</td><td>${statusPill(w.status)}</td><td>${esc(w.engine_make_model||'—')}<br><span class="ops-subtle">${esc(w.pump_make_model||'—')}</span></td><td>${nzDate(due)} ${targetDueStatus(daysUntil(due))}</td><td>${canManage()?`<button class="ops-btn ghost" data-ops-edit-wash="${w.id}">Edit</button>`:''}</td></tr>`; }).join('')}</table></div>`;
+  }
+
+
+  function assetSearchHaystack(kind, item){
+    if(kind === 'vehicle') return [item.rego,item.name,item.make_model,item.year,item.status,item.assigned_driver,item.notes,'vehicle'].join(' ').toLowerCase();
+    const v = state.vehicles.find(x=>x.id===item.assigned_vehicle_id);
+    return [item.name,item.equipment_type,item.serial_number,item.status,item.engine_make_model,item.pump_make_model,item.notes,v?.rego,v?.name,'washing equipment','water blaster'].join(' ').toLowerCase();
+  }
+  function assetMatches(kind, item){
+    const q = String(state.assetSearch || '').trim().toLowerCase();
+    return !q || assetSearchHaystack(kind, item).includes(q);
+  }
+  function assetsHtml(){
+    const vehicleRows = state.vehicles.filter(v => assetMatches('vehicle', v));
+    const washRows = state.washEquipment.filter(w => assetMatches('washing', w));
+    return `<div class="ops-card">
+      <div class="ops-section-title"><div><h3>Assets</h3><p class="ops-subtle">Vehicle and washing equipment registers in one searchable place.</p></div></div>
+      <div class="ops-search"><label>Search assets</label><input id="opsAssetSearch" type="search" value="${esc(state.assetSearch||'')}" placeholder="Search by rego, name, type, serial, engine, pump, assigned vehicle or status"></div>
+      <div class="ops-subtle">${vehicleRows.length} vehicle${vehicleRows.length===1?'':'s'} and ${washRows.length} washing equipment item${washRows.length===1?'':'s'} shown.</div>
+    </div>
+    ${canManage() ? `<div class="ops-grid"><div class="ops-card"><details ${state.editingVehicleId?'open':''}><summary><strong>${state.editingVehicleId ? 'Edit vehicle' : 'Add vehicle'}</strong></summary><div style="margin-top:.8rem">${vehicleFormHtml()}</div></details></div><div class="ops-card"><details ${state.editingWashId?'open':''}><summary><strong>${state.editingWashId ? 'Edit washing equipment' : 'Add washing equipment'}</strong></summary><div style="margin-top:.8rem">${washingFormHtml()}</div></details></div></div>` : '<div class="ops-card"><p class="ops-subtle">Read-only. Ask an Admin or Equipment Manager to edit assets.</p></div>'}
+    <div class="ops-card"><h3>Vehicles</h3>${vehicleTableHtml(vehicleRows)}</div>
+    <div class="ops-card"><h3>Washing equipment</h3>${washingTableHtml(washRows)}</div>`;
   }
 
   function inspectionHtml(){
@@ -671,11 +752,11 @@
     return `<div class="ops-card"><h3>Inspection history</h3><div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Target</th><th>Inspector</th><th>Result</th><th>Problems</th><th>Notes</th></tr>${rows.map(i=>{ const problems=state.answers.filter(a=>a.inspection_id===i.id && a.is_problem).length; return `<tr><td>${nzDate(i.inspection_date)}</td><td>${esc(targetName(i))}</td><td>${esc(i.inspector_name||i.submitted_by_email||'')}</td><td>${statusPill(i.overall_result)}</td><td>${problems}</td><td>${esc(i.notes||'')}</td></tr>`; }).join('')}</table></div></div>`;
   }
 
-  function maintenanceHtml(){
-    return `<div class="ops-card"><h3>Maintenance to-do list</h3>${canMaintain()?manualTaskFormHtml():''}${taskTableHtml()}</div>${state.openTaskId ? taskDetailHtml(state.openTaskId) : ''}`;
+  function tasksHtml(){
+    return `<div class="ops-card"><h3>Tasks</h3>${canMaintain()?manualTaskFormHtml():''}${taskTableHtml()}</div>${state.openTaskId ? taskDetailHtml(state.openTaskId) : ''}`;
   }
   function manualTaskFormHtml(){
-    return `<details><summary><strong>Add manual maintenance task</strong></summary><form id="opsManualTaskForm" class="ops-form" style="margin-top:.8rem">
+    return `<details><summary><strong>Add manual task</strong></summary><form id="opsManualTaskForm" class="ops-form" style="margin-top:.8rem">
       <label>Target type<select id="opsManualTargetType"><option value="washing_equipment">Washing equipment</option><option value="vehicle">Vehicle</option></select></label>
       <label>Washing equipment<select id="opsManualWash"><option value="">None</option>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>
       <label>Vehicle<select id="opsManualVehicle"><option value="">None</option>${state.vehicles.map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>
@@ -688,12 +769,12 @@
     </form></details>`;
   }
   function taskMiniListHtml(rows){
-    if(!rows.length) return '<p class="ops-subtle">No open maintenance items.</p>';
+    if(!rows.length) return '<p class="ops-subtle">No open tasks.</p>';
     return rows.map(t=>`<div class="ops-step"><strong>${esc(t.title)}</strong><br>${statusPill(t.status)} ${statusPill(t.priority)}<br><span class="ops-subtle">${esc(targetName(t))} · Due ${nzDate(t.due_date)}</span></div>`).join('');
   }
   function taskTableHtml(){
     const rows = state.tasks.slice().sort((a,b)=> statusRank(a.status)-statusRank(b.status) || String(a.due_date||'9999').localeCompare(String(b.due_date||'9999')));
-    if(!rows.length) return '<p class="ops-subtle">No maintenance tasks yet.</p>';
+    if(!rows.length) return '<p class="ops-subtle">No tasks yet.</p>';
     return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Status</th><th>Priority</th><th>Task</th><th>Target</th><th>Source</th><th>Due</th><th>Actions</th></tr>${rows.map(t=>`<tr><td>${statusPill(t.status)}</td><td>${statusPill(t.priority)}</td><td><strong>${esc(t.title)}</strong><br><span class="ops-subtle">${esc(t.description||'')}</span></td><td>${esc(targetName(t))}</td><td>${esc(t.source_type)}</td><td>${nzDate(t.due_date)}</td><td><button class="ops-btn ghost" data-ops-open-task="${t.id}">Open</button></td></tr>`).join('')}</table></div>`;
   }
   function statusRank(s){ return {'Open':0,'In Progress':1,'Waiting on Parts':2,'Waiting on Someone':3,'Deferred':4,'Completed':5}[s] ?? 5; }
@@ -794,6 +875,18 @@
 
   function rolesForPreset(preset){ return ROLE_PRESETS[preset] || []; }
   function presetOptions(selected){ return Object.keys(ROLE_PRESETS).map(p=>`<option value="${esc(p)}" ${p===selected?'selected':''}>${esc(p)}</option>`).join(''); }
+  function adminDashboardHtml(){
+    return `<div class="ops-grid">
+      <div class="ops-card"><h3>Users & permissions</h3><p class="ops-subtle">Pre-load new users, apply role presets and keep user terminology in one Admin module.</p><button class="ops-btn primary" data-ops-view="admin-users">Open users</button></div>
+      <div class="ops-card"><h3>Settings, audit & backups</h3><p class="ops-subtle">Open the existing app settings, audit log and backup tools. These controls are visible only to Admin users.</p><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open admin tools</button></div>
+      <div class="ops-card"><h3>Role presets</h3><p class="ops-subtle"><strong>Field Staff</strong> can use Height Equipment and Vehicle Checks. <strong>Ops Manager</strong> can manage assets, tasks and schedules. <strong>Admin</strong> has full access.</p></div>
+    </div>`;
+  }
+
+  function adminSettingsHtml(){
+    return `<div class="ops-card"><h3>Settings, audit log and backups</h3><p class="ops-subtle">These controls remain powered by the existing Height Equipment app settings and audit log. They are now accessed from the Admin module.</p><div class="ops-actions"><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open settings, audit log and backup tools</button><button class="ops-btn ghost" data-ops-action="legacyUserTools">Open detailed user role manager</button></div></div>`;
+  }
+
   function usersHtml(){
     if(!isAdmin()) return `<div class="ops-card"><h3>Users</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
@@ -836,6 +929,7 @@
     const r = await state.sb.from('operations_preloaded_users').upsert(row, { onConflict:'email' }).select().single();
     if(r.error) return alert(r.error.message);
     alert('User pre-loaded. When they sign in with this email, their profile and roles will be applied.');
+    state.currentView = 'admin-users';
     await loadAll();
   }
 
@@ -860,7 +954,7 @@
 
 
   function bindRenderedEvents(){
-    byId('opsNav')?.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
+    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
     byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
     byId('opsWashingForm')?.addEventListener('submit', saveWashing);
     byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
@@ -870,6 +964,7 @@
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
     byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
     byId('opsPreloadPreset')?.addEventListener('change', updatePreloadRolePreview);
+    byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
     updatePreloadRolePreview();
     document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
     document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
@@ -883,6 +978,8 @@
     if(action === 'generateDueTasks'){ await generateDueTasks(); }
     if(action === 'applyStdSelected'){ await applyStandardSchedules('selected'); }
     if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
+    if(action === 'legacyAdminTools'){ openLegacyAdminTools(); }
+    if(action === 'legacyUserTools'){ openLegacyUserTools(); }
   }
 
   async function saveVehicle(e){
@@ -1032,7 +1129,7 @@
   }
 
   async function createManualTask(e){
-    e.preventDefault(); if(!canMaintain()) return alert('Only Admin or Equipment Manager users can create maintenance tasks.');
+    e.preventDefault(); if(!canMaintain()) return alert('Only Admin or Equipment Manager users can create tasks.');
     const targetType = byId('opsManualTargetType').value;
     const row = {
       source_type: 'Manual',
@@ -1061,7 +1158,7 @@
   }
 
   async function saveTaskUpdate(e){
-    e.preventDefault(); if(!canMaintain()) return alert('Only Admin or Equipment Manager users can update maintenance tasks.');
+    e.preventDefault(); if(!canMaintain()) return alert('Only Admin or Equipment Manager users can update tasks.');
     const task = state.tasks.find(t=>t.id===state.openTaskId); if(!task) return;
     const status = byId('opsTaskStatus').value;
     const update = {
@@ -1142,8 +1239,8 @@
       const r = await state.sb.from('operations_maintenance_tasks').insert(row);
       if(!r.error) created++;
     }
-    alert(`Created ${created} due maintenance task${created===1?'':'s'}.`);
-    state.currentView = 'maintenance';
+    alert(`Created ${created} due task${created===1?'':'s'}.`);
+    state.currentView = 'tasks';
     await loadAll();
   }
 
@@ -1325,12 +1422,34 @@
     refreshCertificateTypeCountsV405();
   }
 
+  function refreshTopUserSummary(){
+    let el = document.getElementById('topUserSummary');
+    if(!el){
+      const header = document.querySelector('header');
+      if(header){
+        el = document.createElement('div');
+        el.id = 'topUserSummary';
+        el.className = 'topUserSummary';
+        const titleBlock = header.querySelector('h1')?.parentElement || header;
+        titleBlock.appendChild(el);
+      }
+    }
+    if(!el) return;
+    if(state.user){
+      const roles = roleText();
+      el.textContent = `Signed in: ${state.user.email}${roles ? ' | ' + roles : ''}`;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = 'Not signed in';
+    }
+  }
+
   function boot(){
     injectTab();
     installModulePortal();
     installCertificateV405Patch();
     initSupabase().catch(err => { state.lastError = err.message; render(); });
-    window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state };
+    window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state, setAssetSearch: v => { state.assetSearch = v || ''; render(); } };
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

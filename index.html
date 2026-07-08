@@ -20,7 +20,7 @@
     body{margin:0;background:radial-gradient(circle at top left,#d9f6f1 0,#eef5f5 38%,#f8fafc 100%);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
     header{position:sticky;top:0;z-index:20;background:linear-gradient(135deg,var(--brand),var(--brand2));color:white;padding:14px max(14px,env(safe-area-inset-left));display:flex;align-items:center;gap:14px;box-shadow:0 10px 26px rgba(15,23,42,.20)}
     .logo{width:72px;height:60px;border-radius:14px;background:white;object-fit:contain;padding:5px;box-shadow:0 4px 15px #0002}
-    h1{font-size:20px;margin:0;letter-spacing:-.02em} h2{margin:.1rem 0 .8rem;font-size:20px} h3{margin:1rem 0 .5rem}.tagline{font-size:13px;opacity:.9}
+    h1{font-size:20px;margin:0;letter-spacing:-.02em} h2{margin:.1rem 0 .8rem;font-size:20px} h3{margin:1rem 0 .5rem}.tagline{font-size:13px;opacity:.9}.topUserSummary{font-size:11px;opacity:.78;margin-top:2px;line-height:1.25;font-weight:650;max-width:620px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     main{max-width:1120px;margin:auto;padding:14px}.card{background:rgba(255,255,255,.94);border:1px solid rgba(226,232,240,.8);border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
     .grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:820px){.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}.five{grid-template-columns:repeat(5,1fr)}}
     .tabs{display:flex;gap:8px;overflow:auto;padding:4px 0 10px;position:sticky;top:88px;z-index:15;background:linear-gradient(to bottom,rgba(238,245,245,.96),rgba(238,245,245,.78))}
@@ -43,7 +43,7 @@
 <body>
 <header>
   <img class="logo" src="assets/logo.png" onerror="this.src='assets/icon.svg'" alt="Spray & Wash logo">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.7 • Height Safety • Vehicle Checks • Equipment • Maintenance</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.8 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -135,6 +135,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
-<script src="./operations-v4.js?v=4.0.7"></script>
+<script src="./operations-v4.js?v=4.0.8"></script>
 </body>
 </html>

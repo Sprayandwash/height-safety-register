@@ -1,0 +1,18 @@
+V4.0.8 test plan
+
+1. Open https://sprayandwash.github.io/height-safety-register/?v=4.0.8 and hard refresh.
+2. Confirm top header shows Version 4.0.8.
+3. Confirm signed-in email/roles are shown in small text in the top banner.
+4. Confirm home screen shows module cards based on role.
+5. As Admin, confirm Height Equipment, Vehicle Checks, Ops Management and Admin are visible.
+6. As non-admin field staff, confirm Admin is not visible and Ops Management is not visible unless role permits.
+7. Open Height Equipment and confirm Users/Admin tabs are no longer shown there.
+8. Confirm Height Equipment dashboard, equipment, inspection, due/failed, reports and certificates still open.
+9. Generate a selected-item certificate to confirm V4.0.7 fix still works.
+10. Open Ops Management and confirm nav labels are Dashboard, Assets, Inspection History, Tasks, Preventive Maintenance and Guides.
+11. Open Assets and search by vehicle rego, asset name, washing equipment type, serial, engine/pump text and status.
+12. Confirm vehicle and washing equipment edit forms still save.
+13. Open Tasks and confirm manual task creation and task status updates still work.
+14. Open Admin > Users & Permissions and confirm user pre-load UI works.
+15. Open Admin > Settings, Audit & Backups and confirm the existing admin tools can be opened.
+16. Confirm all modules have a clear Home button back to the module dashboard.

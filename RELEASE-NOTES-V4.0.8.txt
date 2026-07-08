@@ -1,0 +1,13 @@
+V4.0.8 - Layout, Admin and Asset Register Polish
+
+- Standardised look and feel across the module dashboard and Operations module screens.
+- Added Admin as a separate home-screen module.
+- Admin module contains Users & Permissions plus access to settings, audit and backups.
+- Admin module is visible only to Admin users.
+- Removed User/Admin controls from the Height Equipment module navigation.
+- Moved signed-in user/role display into the top banner and reduced prominence.
+- Combined Vehicles and Washing Equipment into Ops Management > Assets.
+- Added searchable asset register covering vehicles and washing equipment.
+- Renamed Maintenance to Tasks.
+- Renamed Management Dashboard to Dashboard.
+- Retained V4.0.7 certificate selected-item generation fix.
