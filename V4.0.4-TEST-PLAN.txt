@@ -1,0 +1,66 @@
+V4.0.4 Test Plan
+
+Pre-checks
+----------
+- Confirm V4.0.1/4.0.2 app is currently working.
+- Back up GitHub repo ZIP and Supabase data.
+- Confirm config.js is not touched.
+
+SQL
+---
+1. Run supabase-migration-v4.0.4-admin-maintenance-guides.sql.
+2. Confirm it completes successfully.
+3. In Supabase, confirm operations_preloaded_users exists.
+4. Confirm operations_module_version app setting is 4.0.4.
+
+Front-end
+---------
+1. Replace index.html, operations-v4.js and service-worker.js.
+2. Open app with ?v=4.0.4 and hard refresh.
+3. Confirm Home Dashboard loads.
+4. Confirm Height Equipment, Vehicle Checks and Ops Management appear according to roles.
+
+Certificate search
+------------------
+1. Open Height Equipment > Certificates.
+2. Select Selected individual items.
+3. Confirm search box appears above item list.
+4. Search by serial number.
+5. Search by type.
+6. Search by manufacturer/make/model text.
+7. Confirm selected count still works.
+8. Generate a certificate from a selected searched item.
+
+Admin user pre-load
+-------------------
+1. Log in as Admin.
+2. Open Ops Management > Users.
+3. Pre-load a test user with Field Staff preset.
+4. Confirm it appears in Pre-loaded users table.
+5. Later, sign in as that user and confirm roles are applied.
+6. Confirm Field Staff sees Height Equipment and Vehicle Checks, not Ops Management.
+
+Navigation
+----------
+1. From Home Dashboard open Height Equipment.
+2. Confirm Home Dashboard button is visible in the height tabs.
+3. Click it and confirm return to module dashboard.
+4. Open Vehicle Checks and Ops Management and confirm Module dashboard button works.
+
+Preventive maintenance
+----------------------
+1. Open Ops Management > Preventive Maintenance.
+2. Confirm standard templates include common water blaster tasks.
+3. Apply selected templates to one item.
+4. Apply selected templates to all equipment of same type.
+5. Confirm schedules are created/updated.
+6. Open Guides and confirm ladder guides are present.
+
+Regression
+----------
+- Existing Height Equipment dashboard loads.
+- Equipment records load.
+- Inspections load.
+- Certificates still generate.
+- Vehicle Inspection Checklist still submits.
+- Issue to report still creates maintenance tasks.

@@ -1,0 +1,24 @@
+V4.0.4 - Admin, Certificate Search & Preventive Maintenance Guides
+
+Added
+-----
+- Search box in Certificate > Selected individual items.
+- Admin pre-load user function in Ops Management > Users.
+- Compact role presets for user setup.
+- Home Dashboard navigation button in Height Equipment module.
+- Expanded preventive maintenance procedure templates and draft guide steps.
+- Ladder inspection, ladder levelling feet, and ladder storage/clean-down guides.
+- Ladder type reference list without requiring ladder IDs.
+
+Improved
+--------
+- Legacy Users role checkbox grid is collapsed as advanced permissions.
+- Preventive maintenance standard templates now include more common water blaster tasks.
+- New users can have roles ready before first login via pre-loaded email matching.
+
+Still intentionally not included
+--------------------------------
+- Full chemical inventory module.
+- Full employee portal module.
+- Final manufacturer-specific service specs.
+- Unique ladder asset ID workflow.

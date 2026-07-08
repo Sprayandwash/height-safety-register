@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.3
+/* Spray & Wash Operations App V4.0.4
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,10 +6,18 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.3';
+  const VERSION = '4.0.4';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
+  const ROLE_DEFS = ['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer'];
+  const ROLE_PRESETS = {
+    'Field Staff': ['Inspector'],
+    'Ops Manager': ['Inspector','Equipment Manager','Office / Reports','Certificate Approver'],
+    'Office / Reports': ['Office / Reports','Certificate Approver','Viewer'],
+    'Viewer': ['Viewer'],
+    'Admin': ['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer']
+  };
   const state = {
     sb: null,
     user: null,
@@ -29,6 +37,7 @@
     tasks: [],
     taskSteps: [],
     parts: [],
+    pendingUsers: [],
     currentView: 'vehicle-checks',
     editingVehicleId: '',
     editingWashId: '',
@@ -80,7 +89,7 @@
   function canUseManagement(){ return hasAny(['Equipment Manager','Office / Reports','Viewer']); }
   function canUseHeight(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer','Certificate Approver']); }
   function canUseVehicleChecks(){ return hasAny(['Inspector','Equipment Manager']); }
-  function isManagementView(view){ return ['management-dashboard','vehicles','washing','history','maintenance','schedules','guides'].includes(view); }
+  function isManagementView(view){ return ['management-dashboard','vehicles','washing','history','maintenance','schedules','guides','users'].includes(view); }
   function displayStatusLabel(value){
     const v = String(value || '—');
     if(v === 'Pass') return 'Completed OK';
@@ -151,6 +160,13 @@
       .ops-check-section h4 { margin:.1rem 0 .6rem; }
       .ops-check { display:flex; gap:.5rem; align-items:center; font-weight:700; margin:.35rem 0; }
       .ops-check input { width:auto; }
+
+      .ops-user-card { border:1px solid #dbe3ec; border-radius:.85rem; padding:.8rem; margin:.7rem 0; background:#fff; }
+      .ops-role-chip { display:inline-block; border-radius:999px; padding:.2rem .55rem; margin:.12rem; background:#e0f2fe; color:#075985; font-size:.78rem; font-weight:800; }
+      .ops-cert-search { border:2px solid #0f766e; background:#ecfdf5; border-radius:14px; padding:12px; margin:10px 0; }
+      .ops-home-tab { background:#0f766e !important; color:white !important; flex:0 0 auto; }
+      #users .roleGrid { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); }
+      #users details.ops-legacy-roles { margin-top:.5rem; }
       @media (max-width: 720px){ .ops-header { flex-direction:column; } .ops-table { min-width:620px; } }
     `;
     const style = document.createElement('style');
@@ -193,16 +209,92 @@
         state.currentModule = 'height';
         originalShowTab(id);
         setTopTabsMode('height');
+        if(id === 'certificates') setTimeout(enhanceCertificateSelector, 80);
+        if(id === 'users') setTimeout(enhanceLegacyUserUI, 80);
       };
     }
     setTimeout(showModuleHome, 450);
+  }
+
+
+
+  function ensureHeightHomeButton(){
+    const tabs = document.querySelector('.tabs');
+    if(!tabs) return;
+    let btn = byId('moduleHomeTabButton');
+    if(!btn){
+      btn = document.createElement('button');
+      btn.id = 'moduleHomeTabButton';
+      btn.type = 'button';
+      btn.className = 'tab ops-home-tab';
+      btn.textContent = '← Home Dashboard';
+      btn.addEventListener('click', showModuleHome);
+      tabs.insertBefore(btn, tabs.firstChild);
+    }
+    btn.style.display = '';
+  }
+
+  function enhanceCertificateSelector(){
+    const panel = byId('certItemsPanel');
+    const list = byId('certItemList');
+    if(!panel || !list) return;
+    let box = byId('certEquipmentSearchBox');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'certEquipmentSearchBox';
+      box.className = 'ops-cert-search';
+      box.innerHTML = `<label style="margin-top:0">Search equipment items</label><input id="certEquipmentSearch" type="search" placeholder="Search by serial, make, model, type or description"><div id="certEquipmentSearchCount" class="muted" style="margin-top:6px"></div>`;
+      const tools = panel.querySelector('.certSelectionTools') || list;
+      panel.insertBefore(box, tools);
+      byId('certEquipmentSearch')?.addEventListener('input', filterCertificateItems);
+    }
+    filterCertificateItems();
+  }
+
+  function filterCertificateItems(){
+    const q = String(byId('certEquipmentSearch')?.value || '').trim().toLowerCase();
+    const rows = Array.from(document.querySelectorAll('#certItemList .certItemCheckRow'));
+    let shown = 0;
+    rows.forEach(row => {
+      const match = !q || row.textContent.toLowerCase().includes(q);
+      row.style.display = match ? '' : 'none';
+      if(match) shown++;
+    });
+    const count = byId('certEquipmentSearchCount');
+    if(count) count.textContent = rows.length ? `${shown} of ${rows.length} items shown` : 'No equipment items loaded yet.';
+  }
+
+  function enhanceLegacyUserUI(){
+    const users = byId('users');
+    if(!users) return;
+    if(!byId('opsLegacyUserNote')){
+      const firstCard = users.querySelector('.card');
+      const note = document.createElement('div');
+      note.id = 'opsLegacyUserNote';
+      note.className = 'permissionNote';
+      note.innerHTML = `<b>Tip:</b> Admins can now pre-load users from <b>Ops Management → Users</b> using compact role presets. The role checkbox grid below remains available for advanced/manual changes.`;
+      if(firstCard) firstCard.insertBefore(note, firstCard.children[1] || null);
+    }
+    users.querySelectorAll('.userCard .roleGrid').forEach((grid, idx) => {
+      if(grid.closest('details.ops-legacy-roles')) return;
+      const details = document.createElement('details');
+      details.className = 'ops-legacy-roles';
+      const summary = document.createElement('summary');
+      summary.innerHTML = '<strong>Advanced role checkboxes</strong>';
+      grid.parentNode.insertBefore(details, grid);
+      details.appendChild(summary);
+      details.appendChild(grid);
+    });
   }
 
   function setTopTabsMode(mode){
     const tabs = document.querySelector('.tabs');
     if(!tabs) return;
     tabs.style.display = mode === 'height' ? 'flex' : 'none';
+    const homeBtn = byId('moduleHomeTabButton');
+    if(homeBtn) homeBtn.style.display = mode === 'height' ? '' : 'none';
     if(mode === 'height'){
+      ensureHeightHomeButton();
       tabs.querySelectorAll('.tab').forEach(btn => {
         const tab = btn.dataset.tab || '';
         btn.style.display = ['dashboard','equipment','inspect','export','certificates','users','admin'].includes(tab) || !tab ? '' : 'none';
@@ -305,9 +397,21 @@
     await loadAll();
   }
 
+
+
+  async function claimPreloadedUserSetup(){
+    if(!state.user?.email || !state.sb) return;
+    try{
+      const r = await state.sb.rpc('claim_preloaded_user_setup');
+      if(r.error && !/does not exist|Could not find/i.test(r.error.message || '')) console.warn('Preloaded user setup skipped:', r.error.message);
+      if(!r.error && typeof window.loadRoles === 'function') setTimeout(()=>window.loadRoles().catch?.(()=>{}), 300);
+    }catch(err){ console.warn('Preloaded user setup skipped:', err.message); }
+  }
+
   async function loadRoles(){
     state.roles = [];
     state.profile = null;
+    await claimPreloadedUserSetup();
     const r = await state.sb.from('user_roles').select('role').eq('user_id', state.user.id).order('role');
     if(!r.error) state.roles = (r.data || []).map(x => x.role).filter(Boolean);
     const p = await state.sb.from('profiles').select('*').eq('user_id', state.user.id).maybeSingle();
@@ -342,6 +446,10 @@
         loadTable('operations_maintenance_parts_used','*',{column:'created_at', ascending:false})
       ]);
       Object.assign(state,{vehicles,washEquipment,templates,checklistItems,inspections,answers,photos,procedures,procedureSteps,schedules,tasks,taskSteps,parts});
+      if(isAdmin()){
+        try { state.pendingUsers = await loadTable('operations_preloaded_users','*',{column:'email'}); }
+        catch(e){ console.warn('Preloaded users table unavailable:', e.message); state.pendingUsers = []; }
+      } else { state.pendingUsers = []; }
       render();
     }catch(err){
       state.lastError = `V4 tables are not ready or access is blocked. Run supabase-schema-v4.0-operations.sql first. Details: ${err.message}`;
@@ -366,7 +474,8 @@
         ${navButton('history','Inspection History')}
         ${navButton('maintenance','Maintenance')}
         ${navButton('schedules','Preventive Maintenance')}
-        ${navButton('guides','Guides')}` : '';
+        ${navButton('guides','Guides')}
+        ${isAdmin() ? navButton('users','Users') : ''}` : '';
     const staffNav = state.currentView === 'vehicle-checks' ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : managementNav;
     return `
       <div class="ops-header">
@@ -393,6 +502,7 @@
     if(state.currentView === 'maintenance') return maintenanceHtml();
     if(state.currentView === 'schedules') return schedulesHtml();
     if(state.currentView === 'guides') return guidesHtml();
+    if(state.currentView === 'users') return usersHtml();
     return dashboardHtml();
   }
 
@@ -616,14 +726,14 @@
     return `<div class="ops-card"><h3>Preventive maintenance</h3><p class="ops-subtle">Use standard templates for water blaster engines, pumps, hose reels and unloaders, or add a standalone schedule.</p>${canMaintain()?standardMaintenanceHtml()+scheduleFormHtml():''}${scheduleTableHtml()}${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" data-ops-action="generateDueTasks">Generate due tasks</button></div>':''}</div>`;
   }
   function standardProcedures(){
-    const names = ['Engine oil change','Air filter check/replacement','Spark plug inspection/replacement','Pump oil change','Pump leak and fitting check','Unloader valve check','Hose reel inspection','Fuel tank water/grit removal with syringe'];
+    const names = ['Engine pre-start inspection','Engine oil level check','Engine oil change','Air filter check/replacement','Spark plug inspection/replacement','Fuel tank water/grit removal with syringe','Fuel line and leak inspection','Pump oil level and condition check','Pump oil change','Pump leak and fitting check','Unloader valve check','Hose reel inspection','Trigger gun and lance inspection','Quick-connect fitting and O-ring replacement','Nozzle inspection and replacement','End-of-day rinse-down and storage procedure'];
     return state.procedures.filter(p => p.is_active !== false && names.includes(p.name));
   }
   function standardMaintenanceHtml(){
     return `<details open><summary><strong>Standard maintenance templates</strong></summary><div class="ops-form" style="margin-top:.8rem">
       <label>Equipment<select id="opsStdWash">${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)} (${esc(w.equipment_type||'')})</option>`).join('')}</select></label>
       <label>Default next due date<input id="opsStdNextDate" type="date" value="${addDays(today(), 30)}"></label>
-      <div class="ops-span-2"><div class="ops-subtle">These procedure templates will be attached as date-based schedules. Adding a new Water Blaster item also automatically receives these templates.</div>${standardProcedures().map(p=>`<label class="ops-check"><input type="checkbox" class="ops-std-proc" value="${p.id}" checked> ${esc(p.name)} ${p.frequency_days?`(${p.frequency_days} days)`:''}</label>`).join('') || '<p class="ops-subtle">No standard procedures found. Run the V4.0.3 migration.</p>'}</div>
+      <div class="ops-span-2"><div class="ops-subtle">These procedure templates will be attached as date-based schedules. Adding a new Water Blaster item also automatically receives these templates.</div>${standardProcedures().map(p=>`<label class="ops-check"><input type="checkbox" class="ops-std-proc" value="${p.id}" checked> ${esc(p.name)} ${p.frequency_days?`(${p.frequency_days} days)`:''}</label>`).join('') || '<p class="ops-subtle">No standard procedures found. Run the V4.0.4 migration.</p>'}</div>
       <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="button" data-ops-action="applyStdSelected">Apply to selected equipment</button><button class="ops-btn ghost" type="button" data-ops-action="applyStdSameType">Apply to all equipment of same type</button></div>
     </div></details>`;
   }
@@ -680,6 +790,55 @@
     if(rows.length) await state.sb.from('operations_equipment_maintenance_schedules').insert(rows);
   }
 
+
+
+  function rolesForPreset(preset){ return ROLE_PRESETS[preset] || []; }
+  function presetOptions(selected){ return Object.keys(ROLE_PRESETS).map(p=>`<option value="${esc(p)}" ${p===selected?'selected':''}>${esc(p)}</option>`).join(''); }
+  function usersHtml(){
+    if(!isAdmin()) return `<div class="ops-card"><h3>Users</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
+    const rows = state.pendingUsers || [];
+    return `<div class="ops-card">
+      <h3>User management</h3>
+      <p class="ops-subtle">Pre-load staff so their role setup is ready before their first login. Supabase Auth still controls the actual login account; this prepares their app profile and roles.</p>
+      <form id="opsPreloadUserForm" class="ops-form">
+        <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
+        <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
+        <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
+        <label>Role preset<select id="opsPreloadPreset">${presetOptions('Field Staff')}</select></label>
+        <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
+        <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
+        <div class="ops-span-2"><strong>Preset roles:</strong> <span id="opsPreloadRolePreview">${rolesForPreset('Field Staff').map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('')}</span></div>
+        <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Pre-load user</button></div>
+      </form>
+    </div>
+    <div class="ops-card">
+      <h3>Pre-loaded users</h3>
+      ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Preset</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${esc(u.role_preset||'')}</td><td>${(u.roles||[]).map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('')}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
+    </div>`;
+  }
+
+  function updatePreloadRolePreview(){
+    const el = byId('opsPreloadRolePreview');
+    const preset = byId('opsPreloadPreset')?.value || 'Field Staff';
+    if(el) el.innerHTML = rolesForPreset(preset).map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('');
+  }
+
+  async function savePreloadedUser(e){
+    e.preventDefault();
+    if(!isAdmin()) return alert('Only Admin users can pre-load users.');
+    const first = titleCaseName(byId('opsPreloadFirst')?.value || '');
+    const last = titleCaseName(byId('opsPreloadLast')?.value || '');
+    const email = String(byId('opsPreloadEmail')?.value || '').trim().toLowerCase();
+    const preset = byId('opsPreloadPreset')?.value || 'Field Staff';
+    const roles = rolesForPreset(preset);
+    if(!first || !last || !email) return alert('First name, last name and email are required.');
+    const row = { first_name:first, last_name:last, display_name:`${first} ${last}`, email, role_preset:preset, roles, active: byId('opsPreloadActive')?.value !== 'false', notes: byId('opsPreloadNotes')?.value || null, created_by: state.user.id };
+    const r = await state.sb.from('operations_preloaded_users').upsert(row, { onConflict:'email' }).select().single();
+    if(r.error) return alert(r.error.message);
+    alert('User pre-loaded. When they sign in with this email, their profile and roles will be applied.');
+    await loadAll();
+  }
+
   function guidesHtml(){
     if(!state.procedures.length) return '<div class="ops-card"><h3>Maintenance guides</h3><p>No guides found. Run the V4 SQL seed.</p></div>';
     return `<div class="ops-card"><h3>Maintenance guides</h3><p class="ops-subtle">General guide templates. Confirm exact service intervals, oil types, quantities, spark plug specs and torque settings from the actual engine/pump manuals before relying on these.</p>${state.procedures.map(p=>guideCardHtml(p)).join('')}</div>`;
@@ -709,6 +868,9 @@
     byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
+    byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
+    byId('opsPreloadPreset')?.addEventListener('change', updatePreloadRolePreview);
+    updatePreloadRolePreview();
     document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
     document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
     document.querySelectorAll('[data-ops-open-task]').forEach(b => b.addEventListener('click', () => { state.openTaskId = b.dataset.opsOpenTask; render(); }));
@@ -777,7 +939,7 @@
   async function submitInspection(e){
     e.preventDefault(); if(!canSubmit()) return alert('Your role cannot submit Operations inspections.');
     const template = state.templates.find(t=>t.id===byId('opsInspectionTemplate').value) || vehicleChecklistTemplate();
-    if(!template || !template.id) return alert('Vehicle Inspection Checklist is not available. Run the V4.0.3 migration.');
+    if(!template || !template.id) return alert('Vehicle Inspection Checklist is not available. Run the V4.0.4 migration.');
     const targetType = template.target_type;
     const vehicleId = byId('opsInspectionVehicle')?.value || null;
     const washId = byId('opsInspectionWash')?.value || null;
