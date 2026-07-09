@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.15
+/* Spray & Wash Operations App V4.0.16
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.15';
+  const VERSION = '4.0.16';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -2358,7 +2358,7 @@
 
 
 
-  // V4.0.15 - Height dashboard cleanup and certificate flow simplification.
+  // V4.0.16 - Height dashboard cleanup and certificate flow simplification.
   function postHeightEnhancementsV415(activeId){
     try{
       hideHeightActionTabsV415();
@@ -2367,7 +2367,7 @@
       if(id === 'dashboard') enhanceHeightDashboardV415();
       if(id === 'equipment') enhanceHeightEquipmentTabV415();
       if(id === 'certificates') enhanceCertificatesV415();
-    }catch(err){ console.warn('V4.0.15 UI enhancement skipped:', err); }
+    }catch(err){ console.warn('V4.0.16 UI enhancement skipped:', err); }
   }
 
   function hideHeightActionTabsV415(){
@@ -2465,7 +2465,7 @@
   function enhanceCertificatesV415(){
     const certs = byId('certificates');
     if(!certs) return;
-    // Hide old batch controls; V4.0.15 certificate generation is filter/search/list based.
+    // Hide old batch controls; V4.0.16 certificate generation is filter/search/list based.
     const mode = byId('certMode');
     if(mode){ mode.value = 'selected_items'; const modeLabel = mode.closest('label') || mode.previousElementSibling; if(modeLabel) modeLabel.style.display = 'none'; mode.style.display='none'; }
     ['certTypePanel','certDatePanel','certResultPanel'].forEach(id => { const el = byId(id); if(el) el.style.display = 'none'; });

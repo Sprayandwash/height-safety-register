@@ -1,0 +1,10 @@
+V4.0.16 - Height/Certificate Static Fix
+
+- Corrects V4.0.15 by applying key UI changes directly to index.html.
+- Removes Height Due / Failed tab from static tab row.
+- Removes Height New Inspection tab from static tab row and adds dashboard action button.
+- Removes Notification Centre from Height dashboard.
+- Moves Equipment by Type into Equipment tab.
+- Makes Recent Inspection History collapsible in static markup.
+- Moves Generate Certificates to Step 4 in static markup.
+- Keeps V4.0.15 operations-v4 enhancements.

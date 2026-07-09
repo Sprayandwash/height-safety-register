@@ -1,0 +1,10 @@
+V4.0.16 Test Plan
+
+1. Confirm header shows Version 4.0.16.
+2. Confirm Height tabs do not include Due / Failed or New Inspection.
+3. Confirm Height dashboard has + New Inspection action button.
+4. Confirm Notification Centre is not on the Height dashboard.
+5. Confirm Equipment by Type appears in Equipment tab.
+6. Confirm Recent Inspection History is collapsible.
+7. Confirm Certificates has Generate as Step 4 at the bottom.
+8. Confirm certificate generation still works for selected items.

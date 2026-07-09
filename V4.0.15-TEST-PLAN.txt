@@ -1,6 +1,6 @@
-V4.0.15 Test Plan
+V4.0.16 Test Plan
 
-1. Confirm header shows Version 4.0.15.
+1. Confirm header shows Version 4.0.16.
 2. Open Height Equipment.
 3. Confirm Due / Failed tab is gone.
 4. Confirm New Inspection tab is gone.

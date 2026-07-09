@@ -1,4 +1,4 @@
-Spray & Wash Operations V4.0.15 - Height Dashboard & Certificate Flow Cleanup
+Spray & Wash Operations V4.0.16 - Height Dashboard & Certificate Flow Cleanup
 
 Install
 1. No Supabase SQL migration is required for this release.
@@ -8,7 +8,7 @@ Install
    - service-worker.js
 3. Do not replace config.js.
 4. Commit to main.
-5. Open https://sprayandwash.github.io/height-safety-register/?v=4.0.15
+5. Open https://sprayandwash.github.io/height-safety-register/?v=4.0.16
 6. Hard refresh with Ctrl + F5. If the app sticks on an older version, clear site data from DevTools > Application > Storage.
 
 Main changes

@@ -1,2 +1,2 @@
--- V4.0.15 does not require a Supabase migration.
+-- V4.0.16 does not require a Supabase migration.
 -- This release changes front-end layout and certificate workflow only.
