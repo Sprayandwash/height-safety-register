@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.13
+/* Spray & Wash Operations App V4.0.14
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.13';
+  const VERSION = '4.0.14';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -41,6 +41,13 @@
     actualUsers: [],
     actualUserRoles: [],
     qualifications: [],
+    certFilterType: '',
+    certFilterStatus: '',
+    certFilterResult: '',
+    certFilterDue: '',
+    certFilterSearch: '',
+    certSelectedIds: new Set(),
+    serviceRunAssetId: '',
     assetFilterClass: '',
     assetFilterStatus: '',
     assetFilterDue: '',
@@ -97,7 +104,7 @@
   function canUseHeight(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer','Certificate Approver']); }
   function canUseVehicleChecks(){ return hasAny(['Inspector','Equipment Manager']); }
   function isManagementView(view){ return ['management-dashboard','assets','history','tasks','schedules','guides'].includes(view) || ['vehicles','washing','maintenance'].includes(view); }
-  function isAdminView(view){ return ['admin-dashboard','admin-users','admin-settings'].includes(view); }
+  function isAdminView(view){ return ['admin-dashboard','admin-users','admin-settings','admin-notifications'].includes(view); }
   function displayStatusLabel(value){
     const v = String(value || '—');
     if(v === 'Pass') return 'Completed OK';
@@ -413,16 +420,20 @@
     }catch(e){ console.warn('Certificate number patch skipped', e); }
   }
 
+
   function enhanceQualificationCertificatePanel(){
     const section = byId('certificates');
     const history = byId('certificateHistory')?.closest('.card');
-    if(!section || byId('qualificationCertPanel')) return;
-    const panel = document.createElement('div');
-    panel.id = 'qualificationCertPanel';
-    panel.className = 'card';
+    if(!section) return;
+    let panel = byId('qualificationCertPanel');
+    if(!panel){
+      panel = document.createElement('div');
+      panel.id = 'qualificationCertPanel';
+      panel.className = 'card';
+      if(history) section.insertBefore(panel, history);
+      else section.appendChild(panel);
+    }
     panel.innerHTML = qualificationCertificatePanelHtml();
-    if(history) section.insertBefore(panel, history);
-    else section.appendChild(panel);
   }
 
   function qualificationCertificatePanelHtml(){
@@ -705,6 +716,7 @@
     if(state.currentModule === 'home') renderModuleHome();
   }
 
+
   function headerHtml(){
     const isVehicle = state.currentView === 'vehicle-checks';
     const isAdminModule = isAdminView(state.currentView);
@@ -715,9 +727,14 @@
         ${navButton('tasks','Tasks')}
         ${navButton('schedules','Preventive Maintenance')}
         ${navButton('guides','Guides')}` : '';
-    const staffNav = isVehicle ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : (isAdminModule ? '' : managementNav);
+    const adminNav = isAdminModule ? `
+        ${navButton('admin-dashboard','Dashboard')}
+        ${navButton('admin-users','Users & Permissions')}
+        ${navButton('admin-settings','Settings, Audit & Backups')}
+        ${navButton('admin-notifications','Notifications & Action Items')}` : '';
+    const staffNav = isVehicle ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : (isAdminModule ? adminNav : managementNav);
     const title = isVehicle ? 'Vehicle Checks' : isAdminModule ? 'Admin' : 'Ops Management';
-    const note = isVehicle ? 'Staff vehicle inspection checklist' : isAdminModule ? '' : 'Assets, tasks, schedules and guides';
+    const note = isVehicle ? 'Staff vehicle inspection checklist' : isAdminModule ? 'Users, permissions, settings, audit controls and app-wide action items' : 'Assets, tasks, schedules and guides';
     return `
       <div class="ops-header">
         <div class="ops-module-title">
@@ -739,6 +756,7 @@
       if(!isAdmin()) return `<div class="ops-card"><h3>Admin access required</h3><p>This module is only available to Admin users.</p></div>`;
       if(state.currentView === 'admin-users') return usersHtml();
       if(state.currentView === 'admin-settings') return adminSettingsHtml();
+      if(state.currentView === 'admin-notifications') return adminNotificationsHtml();
       return adminDashboardHtml();
     }
     if(isManagementView(state.currentView) && !canUseManagement()) return `<div class="ops-card"><h3>Ops Management access required</h3><p>Use Vehicle Checks for staff vehicle checks. Management views require Admin, Equipment Manager, Office / Reports, or Viewer access.</p></div>`;
@@ -1858,19 +1876,29 @@
 
 
 
-  // V4.0.13 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+  // V4.0.14 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+
+  function certSetFilterFromDom(){
+    state.certFilterType = byId('certFilterType')?.value || '';
+    state.certFilterStatus = byId('certFilterStatus')?.value || '';
+    state.certFilterResult = byId('certFilterResult')?.value || '';
+    state.certFilterDue = byId('certFilterDue')?.value || '';
+    state.certFilterSearch = String(byId('certFilterSearch')?.value || '').trim().toLowerCase();
+  }
   function certFilterState(){
-    return {
-      type: byId('certFilterType')?.value || '',
-      status: byId('certFilterStatus')?.value || '',
-      result: byId('certFilterResult')?.value || '',
-      due: byId('certFilterDue')?.value || '',
-      q: String(byId('certFilterSearch')?.value || '').trim().toLowerCase()
-    };
+    return { type: state.certFilterType || '', status: state.certFilterStatus || '', result: state.certFilterResult || '', due: state.certFilterDue || '', q: state.certFilterSearch || '' };
   }
   function certPairHaystack(pair){
     const e = pair.equipment || {}; const i = pair.inspection || {};
     return [e.serial,e.type,e.manufacturer,e.model,e.notes,e.status,i.inspector,i.inspection_date,i.result].join(' ').toLowerCase();
+  }
+  function certStatusMatches(rowStatus, selected){
+    if(!selected) return true;
+    return certNorm(rowStatus) === certNorm(selected);
+  }
+  function certResultMatches(result, selected){
+    if(!selected) return true;
+    return certNorm(result) === certNorm(selected);
   }
   async function renderCertificateFilterSelector(){
     const list = byId('certItemList');
@@ -1887,44 +1915,46 @@
         panel = document.createElement('div');
         panel.id = 'certFilterPanel';
         panel.className = 'ops-cert-search';
-        panel.innerHTML = '<h3 style="margin-top:0">2. Filter and select items</h3><div class="ops-filter-grid"><label>Equipment type<select id="certFilterType"></select></label><label>Status<select id="certFilterStatus"></select></label><label>Inspection result<select id="certFilterResult"><option value="">All results</option><option value="Pass">Pass</option><option value="Fail - Repair Required">Fail - Repair Required</option><option value="Fail - Remove From Service / Disposal">Fail - Remove From Service / Disposal</option></select></label><label>Due status<select id="certFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="certFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="ops-actions"><button class="ops-btn ghost" type="button" id="certFilterClear">Clear filters</button><button class="ops-btn ghost" type="button" id="certSelectVisible">Select visible items with inspections</button><button class="ops-btn ghost" type="button" id="certClearSelected">Clear selected</button></div><div id="certFilterCount" class="muted" style="margin-top:6px"></div>';
         const panelParent = list.parentElement || byId('certItemsPanel') || byId('certificates');
         panelParent.insertBefore(panel, list);
       }
-      const typeSel = byId('certFilterType');
-      if(typeSel){
-        const old = typeSel.value || filters.type;
-        typeSel.innerHTML = '<option value="">All equipment types</option>' + types.map(t=>`<option value="${esc(t)}" ${old===t?'selected':''}>${esc(t)}</option>`).join('');
-      }
-      const statusSel = byId('certFilterStatus');
-      if(statusSel){
-        const old = statusSel.value || filters.status;
-        statusSel.innerHTML = '<option value="">All statuses</option>' + statuses.map(t=>`<option value="${esc(t)}" ${old===t?'selected':''}>${esc(t)}</option>`).join('');
-      }
-      const filterNow = certFilterState();
+      panel.innerHTML = `<h3 style="margin-top:0">2. Filter and select items</h3>
+        <p class="muted">Use filters to narrow the list, then tick only the items you want included.</p>
+        <div class="ops-filter-grid">
+          <label>Equipment type<select id="certFilterType"><option value="">All equipment types</option>${types.map(t=>`<option value="${esc(t)}" ${filters.type===t?'selected':''}>${esc(t)}</option>`).join('')}</select></label>
+          <label>Status<select id="certFilterStatus"><option value="">All statuses</option>${statuses.map(t=>`<option value="${esc(t)}" ${filters.status===t?'selected':''}>${esc(t)}</option>`).join('')}</select></label>
+          <label>Inspection result<select id="certFilterResult"><option value="" ${!filters.result?'selected':''}>All results</option><option value="Pass" ${filters.result==='Pass'?'selected':''}>Completed OK</option><option value="Fail - Repair Required" ${filters.result==='Fail - Repair Required'?'selected':''}>Issue - repair required</option><option value="Fail - Remove From Service / Disposal" ${filters.result==='Fail - Remove From Service / Disposal'?'selected':''}>Remove from service / disposal</option></select></label>
+          <label>Due status<select id="certFilterDue"><option value="" ${!filters.due?'selected':''}>All due states</option><option value="due" ${filters.due==='due'?'selected':''}>Due / overdue</option><option value="ok" ${filters.due==='ok'?'selected':''}>Not due</option><option value="no_inspection" ${filters.due==='no_inspection'?'selected':''}>No inspection history</option></select></label>
+          <label>Keyword search<input id="certFilterSearch" type="search" value="${esc(filters.q)}" placeholder="Serial, type, manufacturer, model"></label>
+        </div>
+        <div class="ops-actions"><button class="ops-btn ghost" type="button" id="certFilterClear">Clear filters</button><button class="ops-btn ghost" type="button" id="certSelectVisible">Select visible items with inspections</button><button class="ops-btn ghost" type="button" id="certClearSelected">Clear selected</button></div>
+        <div id="certFilterCount" class="muted" style="margin-top:6px"></div>`;
       let pairs = allPairs.filter(pair => {
         const e = pair.equipment || {}; const i = pair.inspection || null;
-        if(filterNow.type && certTypeNorm(e.type) !== certTypeNorm(filterNow.type)) return false;
-        if(filterNow.status && String(e.status || '') !== filterNow.status) return false;
-        if(filterNow.result && (!i || String(i.result || '') !== filterNow.result)) return false;
-        if(filterNow.due === 'due' && !certIsDueFromPair(pair)) return false;
-        if(filterNow.due === 'ok' && certIsDueFromPair(pair)) return false;
-        if(filterNow.due === 'no_inspection' && i) return false;
-        if(filterNow.q && !certPairHaystack(pair).includes(filterNow.q)) return false;
+        if(filters.type && certTypeNorm(e.type) !== certTypeNorm(filters.type)) return false;
+        if(filters.status && !certStatusMatches(e.status, filters.status)) return false;
+        if(filters.result && (!i || !certResultMatches(i.result, filters.result))) return false;
+        if(filters.due === 'due' && !certIsDueFromPair(pair)) return false;
+        if(filters.due === 'ok' && certIsDueFromPair(pair)) return false;
+        if(filters.due === 'no_inspection' && i) return false;
+        if(filters.q && !certPairHaystack(pair).includes(filters.q)) return false;
         return true;
       });
       list.innerHTML = pairs.map(pair => {
         const e = pair.equipment || {}; const i = pair.inspection;
         const disabled = i ? '' : 'disabled';
         const disabledText = i ? '' : ' <span class="ops-pill ops-warn">No inspection history</span>';
-        return `<label class="certItemCheckRow ops-cert-row"><input type="checkbox" class="certItemCheck" value="${esc(e.id)}" ${disabled}> <span><strong>${esc(e.serial || 'No serial')} ${esc(e.type || '')}</strong><br><span class="muted">${esc(e.manufacturer || '')} ${esc(e.model || '')} · ${esc(e.status || '')} · Latest: ${i ? nzDate(i.inspection_date) + ' ' + displayStatusLabel(i.result) : 'none'}</span>${disabledText}</span></label>`;
+        const checked = state.certSelectedIds.has(String(e.id)) ? 'checked' : '';
+        return `<label class="certItemCheckRow ops-cert-row"><input type="checkbox" class="certItemCheck" value="${esc(e.id)}" ${checked} ${disabled}> <span><strong>${esc(e.serial || 'No serial')} ${esc(e.type || '')}</strong><br><span class="muted">${esc(e.manufacturer || '')} ${esc(e.model || '')} · ${esc(e.status || '')} · Latest: ${i ? nzDate(i.inspection_date) + ' ' + displayStatusLabel(i.result) : 'none'}</span>${disabledText}</span></label>`;
       }).join('') || '<p class="muted">No items match the current filters.</p>';
       const count = byId('certFilterCount');
-      if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown; ${pairs.filter(p=>p.inspection).length} with inspection history.`;
+      if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown; ${pairs.filter(p=>p.inspection).length} with inspection history; ${state.certSelectedIds.size} selected.`;
+      if(byId('certMode')) byId('certMode').value = 'selected_items';
     }catch(err){
       list.innerHTML = `<div class="ops-error">Could not load certificate items: ${esc(err.message || err)}</div>`;
     }
   }
+
   function hideCertificateHistoryPanel(){
     const history = byId('certificateHistory')?.closest('.card');
     if(history) history.style.display = 'none';
@@ -2063,49 +2093,105 @@
     const tasks = state.tasks.filter(t=>String(t.source_inspection_id)===String(id));
     return `<div class="ops-card"><div class="ops-section-title"><div><h3>Inspection record</h3><p class="ops-subtle">Read-only record from ${esc(nzDate(i.inspection_date))}</p></div><button class="ops-btn ghost" type="button" data-ops-action="closeInspectionRecord">Close record</button></div><div class="ops-grid two"><div><strong>Target</strong><br>${esc(targetName(i))}</div><div><strong>Inspector</strong><br>${esc(i.inspector_name || i.submitted_by_email || '—')}</div><div><strong>Result</strong><br>${statusPill(i.overall_result)}</div><div><strong>Odometer</strong><br>${esc(i.odometer || '—')}</div></div><h3>Checklist answers</h3>${answers.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Question</th><th>Answer</th><th>Issue?</th><th>Notes</th></tr>${answers.map(a=>`<tr><td>${esc(a.question_text)}</td><td>${esc(displayStatusLabel(a.answer_value))}</td><td>${a.is_problem ? statusPill('Issue to report') : statusPill('Completed OK')}</td><td>${esc(a.notes || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No answers recorded.</p>'}<h3>Photos</h3>${photos.length ? photos.map(p=>`<div class="ops-step"><strong>${esc(p.caption || 'Inspection photo')}</strong><br><span class="ops-subtle">${esc(p.file_name || p.storage_path || '')}</span></div>`).join('') : '<p class="ops-subtle">No photos recorded.</p>'}<h3>Tasks generated</h3>${tasks.length ? taskMiniListHtml(tasks) : '<p class="ops-subtle">No tasks generated from this inspection.</p>'}</div>`;
   }
+
   function scheduleSubnav(){
-    const current = state.pmView || (state.scheduleQuickFilter === 'due' ? 'due' : 'due');
+    const current = state.pmView || 'due';
     const tab = (id,label) => `<button type="button" class="${current===id?'active':''}" data-ops-pm-view="${id}">${label}</button>`;
-    return `<div class="ops-nav ops-subnav">${tab('due','Due Now')}${tab('schedules','Schedules')}${tab('templates','Task Templates')}${tab('completed','Completed Services')}</div>`;
+    return `<div class="ops-nav ops-subnav">${tab('due','Due Now')}${tab('service','Record Service')}${tab('items','Service Items')}${tab('completed','Completed Services')}</div>`;
   }
   function schedulesHtml(){
     const current = state.pmView || 'due';
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Daily use starts with Due Now. Use Schedules and Task Templates for setup.</p></div></div>${scheduleSubnav()}${preventiveBodyHtml(current)}</div>`;
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Use Due Now to see upcoming work, Record Service when you actually service equipment, and Service Items to define the routine work list.</p></div></div>${scheduleSubnav()}${preventiveBodyHtml(current)}</div>`;
   }
   function preventiveBodyHtml(view){
-    if(view === 'schedules') return `${canMaintain()?standardMaintenanceHtml()+scheduleFormHtml():''}${scheduleTableHtml()}`;
-    if(view === 'templates') return preventiveTemplatesHtml();
+    if(view === 'service') return serviceRunHtml();
+    if(view === 'items') return serviceItemsHtml();
     if(view === 'completed') return completedServicesHtml();
     return dueNowPreventiveHtml();
   }
   function dueNowPreventiveHtml(){
     const due = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
-    return `<div class="ops-grid four" style="margin:.8rem 0"><div class="ops-card"><span class="ops-subtle">Due / overdue</span><div class="ops-stat">${due.length}</div></div><div class="ops-card"><span class="ops-subtle">Due soon</span><div class="ops-stat">${state.schedules.filter(s=>s.next_due_at && daysUntil(s.next_due_at)>0 && daysUntil(s.next_due_at)<=14).length}</div></div><div class="ops-card"><span class="ops-subtle">Active schedules</span><div class="ops-stat">${state.schedules.filter(s=>s.is_active!==false).length}</div></div><div class="ops-card"><span class="ops-subtle">Completed this month</span><div class="ops-stat">${completedServiceRows().length}</div></div></div>${due.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Service</th><th>Due</th><th>Guide</th><th>Action</th></tr>${due.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name || 'Unknown')}</td><td><strong>${esc(p?.name || 'Unknown')}</strong><br><span class="ops-subtle">${esc(p?.category || '')}</span></td><td>${nzDate(s.next_due_at)} ${targetDueStatus(daysUntil(s.next_due_at))}</td><td>${p ? 'Guide available' : '—'}</td><td>${canMaintain()?`<button class="ops-btn primary" data-ops-create-schedule-task="${esc(s.id)}">Create task</button>`:''}</td></tr>`; }).join('')}</table></div>` : '<p class="ops-subtle">No preventive services are due right now.</p>'}<div class="ops-actions"><button class="ops-btn ghost" data-ops-action="pmSchedules">Manage schedules</button><button class="ops-btn ghost" data-ops-action="pmTemplates">Manage templates</button><button class="ops-btn ghost" data-ops-action="pmCompleted">Completed services</button></div>`;
+    const soon = state.schedules.filter(s=>s.next_due_at && daysUntil(s.next_due_at)>0 && daysUntil(s.next_due_at)<=14);
+    return `<div class="ops-grid four" style="margin:.8rem 0"><div class="ops-card ops-dashboard-stat ops-stat-amber"><span>Due / overdue</span><div class="ops-stat">${due.length}</div><small>Service intervals that need attention</small></div><div class="ops-card ops-dashboard-stat ops-stat-total"><span>Due soon</span><div class="ops-stat">${soon.length}</div><small>Due within 14 days</small></div><div class="ops-card ops-dashboard-stat ops-stat-green"><span>Active schedules</span><div class="ops-stat">${state.schedules.filter(s=>s.is_active!==false).length}</div><small>Current scheduled items</small></div><div class="ops-card ops-dashboard-stat ops-stat-blue"><span>Completed this month</span><div class="ops-stat">${completedServiceRows().length}</div><small>Completed service records</small></div></div>${due.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Service item</th><th>Due</th><th>Action</th></tr>${due.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name || 'Unknown')}</td><td><strong>${esc(p?.name || 'Unknown')}</strong><br><span class="ops-subtle">${esc(p?.category || '')}</span></td><td>${nzDate(s.next_due_at)} ${targetDueStatus(daysUntil(s.next_due_at))}</td><td>${canMaintain()?`<button class="ops-btn primary" data-ops-pm-view="service" onclick="SWOperationsV4.state.serviceRunAssetId='${esc(w?.id||'')}';">Record service</button>`:''}</td></tr>`; }).join('')}</table></div>` : '<p class="ops-subtle">No preventive service items are due right now.</p>'}<div class="ops-actions"><button class="ops-btn primary" data-ops-pm-view="service">Record a service</button><button class="ops-btn ghost" data-ops-pm-view="items">Manage service items</button></div>`;
   }
-  function preventiveTemplatesHtml(){
+  function serviceItemAppliesTo(proc, asset){
+    if(!proc || !asset) return false;
+    const cat = certNorm(proc.category || 'General');
+    const type = certNorm(asset.equipment_type || asset.type || '');
+    if(!cat || cat === 'general' || cat === 'all' || cat === 'washing equipment') return true;
+    return cat === type || type.includes(cat) || cat.includes(type);
+  }
+  function applicableServiceItemsForAsset(assetId){
+    const asset = state.washEquipment.find(w=>String(w.id)===String(assetId));
+    if(!asset) return [];
+    return state.procedures.filter(p=>p.is_active!==false && p.target_type !== 'vehicle' && serviceItemAppliesTo(p, asset)).sort((a,b)=>String(a.category||'').localeCompare(String(b.category||'')) || String(a.name||'').localeCompare(String(b.name||'')));
+  }
+  function serviceRunHtml(){
+    const activeAssets = state.washEquipment.filter(w=>w.status !== 'Inactive' && w.status !== 'Retired').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    if(!state.serviceRunAssetId && activeAssets[0]) state.serviceRunAssetId = activeAssets[0].id;
+    const asset = activeAssets.find(w=>String(w.id)===String(state.serviceRunAssetId)) || activeAssets[0] || null;
+    const items = asset ? applicableServiceItemsForAsset(asset.id) : [];
+    return `<h3>Record service</h3><p class="ops-subtle">Choose the asset being serviced. The app lists service items that match that asset type. Tick what you actually completed, add any one-off items, then save. Completed routine items reset their date-based service interval.</p>
+      <form id="opsServiceRunForm">
+        <div class="ops-form"><label>Asset being serviced<select id="opsServiceRunAsset" required><option value="">Select asset</option>${activeAssets.map(w=>`<option value="${esc(w.id)}" ${asset && w.id===asset.id?'selected':''}>${esc(w.name)}${w.equipment_type?' - '+esc(w.equipment_type):''}</option>`).join('')}</select></label><label>Service date<input id="opsServiceRunDate" type="date" value="${esc(today())}"></label></div>
+        ${asset ? `<div class="ops-card" style="margin-top:1rem"><h4>Routine service items for ${esc(asset.name)}</h4>${items.length ? items.map(p=>`<label class="ops-check"><input type="checkbox" data-service-item="${esc(p.id)}"> <span><strong>${esc(p.name)}</strong><br><span class="ops-subtle">${esc(p.category || 'General')} · every ${esc(p.frequency_days || '—')} days</span></span></label>`).join('') : '<p class="ops-subtle">No service items match this asset type yet. Add them under Service Items.</p>'}</div>` : '<p class="ops-subtle">Add an asset first.</p>'}
+        <label style="margin-top:1rem">Additional one-off service items completed<textarea id="opsServiceRunAdhoc" placeholder="One item per line, e.g. Replaced cracked hose fitting"></textarea></label>
+        <label>Service notes<textarea id="opsServiceRunNotes" placeholder="General service notes"></textarea></label>
+        <div class="ops-actions"><button class="ops-btn primary" type="submit">Save completed service</button></div>
+      </form>`;
+  }
+  function serviceItemsHtml(){
+    const types = uniqueValues(state.washEquipment.map(w=>w.equipment_type || 'Washing Equipment')).concat(['General']);
     const rows = state.procedures.filter(p=>p.is_active!==false).sort((a,b)=>String(a.category||'').localeCompare(String(b.category||'')) || String(a.name||'').localeCompare(String(b.name||'')));
-    return `<h3>Task templates</h3><p class="ops-subtle">Templates define repeatable preventive maintenance jobs. Apply selected templates from the Schedules tab.</p>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Template</th><th>Category</th><th>Default frequency</th><th>Skill</th><th>Guide</th></tr>${rows.map(p=>`<tr><td><strong>${esc(p.name)}</strong><br><span class="ops-subtle">${esc(p.description || '')}</span></td><td>${esc(p.category || '—')}</td><td>${esc(p.frequency_days || '—')} days</td><td>${esc(p.skill_level || '—')}</td><td>${state.procedureSteps.some(s=>s.procedure_id===p.id) ? 'Steps saved' : 'No steps yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No task templates found.</p>'}`;
+    return `<h3>Service items</h3><p class="ops-subtle">Create routine service items once. Each item has an equipment type/tag, a task description and a date-based interval.</p>${canMaintain()?`<form id="opsServiceItemForm" class="ops-form"><label>Equipment type / tag<select id="opsServiceItemCategory"><option value="General">General / all equipment</option>${types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label><label>Service item / task<input id="opsServiceItemName" required placeholder="e.g. Engine oil change"></label><label>Frequency days<input id="opsServiceItemFrequency" type="number" min="1" value="90"></label><label>Priority<select id="opsServiceItemPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></label><label class="ops-span-2">Description / notes<textarea id="opsServiceItemDescription" placeholder="What is done and anything important to check"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Add service item</button></div></form>`:''}${rows.length ? `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment type / tag</th><th>Service item</th><th>Frequency</th><th>Description</th></tr>${rows.map(p=>`<tr><td>${esc(p.category || 'General')}</td><td><strong>${esc(p.name)}</strong></td><td>${esc(p.frequency_days || '—')} days</td><td>${esc(p.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No service items saved yet.</p>'}`;
   }
   function completedServiceRows(){
     const firstDay = new Date(); firstDay.setDate(1); const start = firstDay.toISOString().slice(0,10);
-    return state.tasks.filter(t => t.status === 'Completed' && (t.procedure_id || t.schedule_id) && String(t.completed_at || t.updated_at || t.created_at || '').slice(0,10) >= start);
+    return state.tasks.filter(t => t.status === 'Completed' && (t.procedure_id || t.schedule_id || t.source_type === 'Manual') && String(t.completed_at || t.updated_at || t.created_at || '').slice(0,10) >= start);
   }
   function completedServicesHtml(){
-    const rows = state.tasks.filter(t => t.status === 'Completed' && (t.procedure_id || t.schedule_id)).sort((a,b)=>String(b.completed_at||b.updated_at||b.created_at||'').localeCompare(String(a.completed_at||a.updated_at||a.created_at||'')));
-    return `<h3>Completed services</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Asset</th><th>Service</th><th>Notes</th></tr>${rows.map(t=>`<tr><td>${nzDate(t.completed_at || t.updated_at || t.created_at)}</td><td>${esc(targetName(t))}</td><td>${esc(t.title)}</td><td>${esc(t.completion_notes || t.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No completed preventive services yet.</p>'}`;
+    const rows = state.tasks.filter(t => t.status === 'Completed').sort((a,b)=>String(b.completed_at||b.updated_at||b.created_at||'').localeCompare(String(a.completed_at||a.updated_at||a.created_at||'')));
+    return `<h3>Completed services</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Asset</th><th>Service item</th><th>Notes</th></tr>${rows.map(t=>`<tr><td>${nzDate(t.completed_at || t.updated_at || t.created_at)}</td><td>${esc(targetName(t))}</td><td>${esc(t.title)}</td><td>${esc(t.completion_notes || t.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No completed service records yet.</p>'}`;
   }
-  async function createTaskFromSchedule(scheduleId){
-    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can create preventive maintenance tasks.');
-    const s = state.schedules.find(x=>String(x.id)===String(scheduleId));
-    if(!s) return alert('Schedule not found.');
-    const p = state.procedures.find(x=>x.id===s.procedure_id) || {};
-    const w = state.washEquipment.find(x=>x.id===s.washing_equipment_id) || {};
-    const row = { source_type:'Scheduled', procedure_id:s.procedure_id, schedule_id:s.id, target_type:'washing_equipment', washing_equipment_id:s.washing_equipment_id, title:p.name || 'Preventive maintenance', description:p.description || 'Scheduled preventive maintenance.', status:'Open', priority:p.default_priority || 'Medium', due_date:s.next_due_at || today(), created_by:state.user.id };
-    const r = await state.sb.from('operations_maintenance_tasks').insert(row);
+  async function saveServiceItem(e){
+    e.preventDefault();
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can create service items.');
+    const row = { name: byId('opsServiceItemName')?.value || '', category: byId('opsServiceItemCategory')?.value || 'General', target_type:'washing_equipment', description: byId('opsServiceItemDescription')?.value || null, frequency_days: Number(byId('opsServiceItemFrequency')?.value || 0) || null, skill_level:'Basic', requires_signoff:false, is_active:true, created_by: state.user.id };
+    if(!row.name) return alert('Service item name is required.');
+    const r = await state.sb.from('operations_maintenance_procedures').upsert(row, { onConflict:'name' });
     if(r.error) return alert(r.error.message);
-    alert(`Task created for ${w.name || 'equipment'}.`);
-    state.currentView = 'tasks'; state.taskQuickFilter = 'open'; await loadAll();
+    alert('Service item saved.');
+    await loadAll(); state.pmView='items'; render();
   }
+  async function saveServiceRun(e){
+    e.preventDefault();
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can record services.');
+    const assetId = byId('opsServiceRunAsset')?.value || '';
+    if(!assetId) return alert('Choose an asset.');
+    const serviceDate = byId('opsServiceRunDate')?.value || today();
+    const notes = byId('opsServiceRunNotes')?.value || '';
+    const selected = Array.from(document.querySelectorAll('input[data-service-item]:checked')).map(i=>i.dataset.serviceItem);
+    const adhoc = String(byId('opsServiceRunAdhoc')?.value || '').split('\n').map(x=>x.trim()).filter(Boolean);
+    if(!selected.length && !adhoc.length) return alert('Tick at least one service item or enter a one-off service item.');
+    let created = 0;
+    for(const procId of selected){
+      const p = state.procedures.find(x=>String(x.id)===String(procId)); if(!p) continue;
+      let schedule = state.schedules.find(s=>String(s.washing_equipment_id)===String(assetId) && String(s.procedure_id)===String(procId));
+      const freq = Number(p.frequency_days || schedule?.frequency_days || 0) || null;
+      const schedRow = { washing_equipment_id:assetId, procedure_id:procId, frequency_days:freq, last_completed_at:serviceDate, next_due_at:freq?addDays(serviceDate, freq):null, is_active:true, created_by:state.user.id };
+      if(schedule){ const up = await state.sb.from('operations_equipment_maintenance_schedules').update(schedRow).eq('id', schedule.id); if(up.error) return alert(up.error.message); }
+      else { const ins = await state.sb.from('operations_equipment_maintenance_schedules').insert(schedRow).select().single(); if(ins.error) return alert(ins.error.message); schedule = ins.data; }
+      const task = { source_type:'Manual', procedure_id:procId, schedule_id:schedule?.id || null, target_type:'washing_equipment', washing_equipment_id:assetId, title:p.name, description:p.description || null, status:'Completed', priority:'Medium', completed_at:serviceDate, completed_by:state.user.id, completion_notes:notes || null, created_by:state.user.id };
+      const tr = await state.sb.from('operations_maintenance_tasks').insert(task); if(tr.error) return alert(tr.error.message); created++;
+    }
+    for(const title of adhoc){
+      const tr = await state.sb.from('operations_maintenance_tasks').insert({ source_type:'Manual', target_type:'washing_equipment', washing_equipment_id:assetId, title, description:'One-off service item recorded during service.', status:'Completed', priority:'Medium', completed_at:serviceDate, completed_by:state.user.id, completion_notes:notes || null, created_by:state.user.id });
+      if(tr.error) return alert(tr.error.message); created++;
+    }
+    alert(`Recorded ${created} service item${created===1?'':'s'}.`);
+    state.pmView='completed'; await loadAll();
+  }
+
   function bindRenderedEvents(){
     document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
     document.querySelectorAll('[data-ops-pm-view]').forEach(btn => btn.addEventListener('click', () => { state.pmView = btn.dataset.opsPmView; state.scheduleQuickFilter=''; render(); }));
@@ -2156,6 +2242,107 @@
 
   function adminDashboardHtml(){
     return `<div class="ops-card"><h3>Admin</h3><p class="ops-subtle">Use the sections below to manage users, permissions, settings, audit logs and backups. Admin tools open full width rather than in narrow columns.</p></div>${usersHtml()}${adminSettingsHtml()}`;
+  }
+
+
+  // V4.0.14 - certificate filter fix, admin tab cleanup, service-item workflow.
+  function certSelectedIds(){
+    return Array.from(state.certSelectedIds || []);
+  }
+
+  function adminDashboardHtml(){
+    return `<div class="ops-grid three">
+      <button class="ops-branch-card ops-home-admin" type="button" data-ops-view="admin-users"><strong>Users & Permissions</strong><span class="ops-subtle">Add/pre-load users and edit one standard set of role checkboxes.</span></button>
+      <button class="ops-branch-card ops-home-management" type="button" data-ops-view="admin-settings"><strong>Settings, Audit & Backups</strong><span class="ops-subtle">Open system settings, audit log and backup tools.</span></button>
+      <button class="ops-branch-card ops-home-height" type="button" data-ops-view="admin-notifications"><strong>Notifications & Action Items</strong><span class="ops-subtle">Review app-wide action items from height equipment, vehicle checks and operations.</span></button>
+    </div>`;
+  }
+
+  function adminSettingsHtml(){
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Settings, audit log and backups</h3><p class="ops-subtle">These controls open the existing admin tools and are visible only to Admin users.</p></div><button class="ops-btn ghost" type="button" data-ops-view="admin-dashboard">← Back to Admin</button></div><div class="ops-actions"><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open settings, audit log and backup tools</button></div></div>`;
+  }
+
+  function usersHtml(){
+    if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
+    const rows = state.pendingUsers || [];
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Users & Permissions</h3><p class="ops-subtle">Use one standard role list across the whole app. Permission presets have been removed.</p></div><button class="ops-btn ghost" type="button" data-ops-view="admin-dashboard">← Back to Admin</button></div>
+      <details class="ops-card" style="box-shadow:none;margin-top:1rem"><summary class="ops-btn primary" style="display:inline-flex;align-items:center;cursor:pointer">Add / pre-load user</summary>
+        <form id="opsPreloadUserForm" class="ops-form" style="margin-top:1rem">
+          <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
+          <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
+          <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
+          <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
+          <div class="ops-span-2"><strong>Permissions</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(['Inspector'])}</div></div>
+          <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
+          <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save pre-loaded user</button></div>
+        </form>
+      </details>
+      <h3>Current signed-in users</h3><p class="ops-subtle">Edit roles directly here. These are the live permissions used by the app.</p>${actualUsersHtml()}
+      <h3>Pre-loaded users</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
+    </div>`;
+  }
+
+  function adminNotificationsHtml(){
+    const openOpsTasks = openTasks();
+    const duePreventive = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
+    const vehicleDue = state.vehicles.filter(v => v.status === 'Active').filter(v => { const d = daysUntil(dueDateFor('vehicle',v)); return d === null || d <= 0; });
+    const washDue = state.washEquipment.filter(w => ['Active','Quarantined'].includes(w.status)).filter(w => { const d = daysUntil(dueDateFor('washing_equipment',w)); return d === null || d <= 0; });
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Notifications & Action Items</h3><p class="ops-subtle">This audit view confirms the Operations module is generating action items. The legacy bell/notification centre still covers the Height Equipment module.</p></div><button class="ops-btn ghost" type="button" data-ops-view="admin-dashboard">← Back to Admin</button></div>
+      <div class="ops-grid four" style="margin-top:1rem"><div class="ops-card ops-dashboard-stat ops-stat-total" data-ops-view="tasks"><span>Open tasks</span><div class="ops-stat">${openOpsTasks.length}</div><small>Operations task list</small></div><div class="ops-card ops-dashboard-stat ops-stat-amber" data-ops-view="schedules"><span>Preventive due</span><div class="ops-stat">${duePreventive.length}</div><small>Date-based service items</small></div><div class="ops-card ops-dashboard-stat ops-stat-green" data-ops-view="management-dashboard"><span>Vehicle checks due</span><div class="ops-stat">${vehicleDue.length}</div><small>Periodic vehicle checks</small></div><div class="ops-card ops-dashboard-stat ops-stat-blue" data-ops-view="assets"><span>Washing gear due</span><div class="ops-stat">${washDue.length}</div><small>Inspection status</small></div></div>
+      <h3>Action item source check</h3><div class="ops-table-wrap"><table class="ops-table"><tr><th>Module</th><th>Action items currently surfaced</th><th>Where they appear</th></tr><tr><td>Height Equipment</td><td>Due/overdue, failed/quarantined, missing photos and inspection warnings</td><td>Height dashboard / notification centre</td></tr><tr><td>Vehicle Checks</td><td>Checklist items marked Issue to report create operations tasks</td><td>Ops Management → Tasks</td></tr><tr><td>Ops Management</td><td>Manual tasks, waiting on parts, preventive service records</td><td>Ops Management → Tasks / Preventive Maintenance</td></tr><tr><td>Admin</td><td>User/admin actions are not currently converted into tasks</td><td>Audit log / Admin controls</td></tr></table></div></div>`;
+  }
+
+  function bindRenderedEvents(){
+    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
+    document.querySelectorAll('[data-ops-pm-view]').forEach(btn => btn.addEventListener('click', () => { state.pmView = btn.dataset.opsPmView; state.scheduleQuickFilter=''; render(); }));
+    document.querySelectorAll('[data-ops-shortcut]').forEach(card => { const go = () => handleDashboardShortcut(card.dataset.opsShortcut); card.addEventListener('click', go); card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
+    byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
+    byId('opsWashingForm')?.addEventListener('submit', saveWashing);
+    byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
+    byId('opsManualTaskForm')?.addEventListener('submit', createManualTask);
+    byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
+    byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
+    byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
+    byId('opsServiceItemForm')?.addEventListener('submit', saveServiceItem);
+    byId('opsServiceRunForm')?.addEventListener('submit', saveServiceRun);
+    byId('opsServiceRunAsset')?.addEventListener('change', e => { state.serviceRunAssetId = e.target.value; state.pmView='service'; render(); });
+    byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
+    document.querySelectorAll('[data-ops-save-user-roles]').forEach(b => b.addEventListener('click', () => saveActualUserRoles(b.dataset.opsSaveUserRoles)));
+    document.querySelectorAll('[data-ops-open-inspection]').forEach(r => { const go = () => { state.openInspectionId = r.dataset.opsOpenInspection; render(); }; r.addEventListener('click', go); r.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
+    document.querySelectorAll('[data-ops-create-schedule-task]').forEach(b => b.addEventListener('click', () => createTaskFromSchedule(b.dataset.opsCreateScheduleTask)));
+    ['certFilterType','certFilterStatus','certFilterResult','certFilterDue'].forEach(id => byId(id)?.addEventListener('change', () => { certSetFilterFromDom(); renderCertificateFilterSelector(); }));
+    byId('certFilterSearch')?.addEventListener('input', () => { certSetFilterFromDom(); renderCertificateFilterSelector(); });
+    byId('certFilterClear')?.addEventListener('click', () => { state.certFilterType=''; state.certFilterStatus=''; state.certFilterResult=''; state.certFilterDue=''; state.certFilterSearch=''; state.certSelectedIds = new Set(); renderCertificateFilterSelector(); });
+    byId('certSelectVisible')?.addEventListener('click', () => { document.querySelectorAll('#certItemList .certItemCheck:not(:disabled)').forEach(i=>{ i.checked=true; state.certSelectedIds.add(String(i.value)); }); renderCertificateFilterSelector(); });
+    byId('certClearSelected')?.addEventListener('click', () => { state.certSelectedIds = new Set(); renderCertificateFilterSelector(); });
+    document.querySelectorAll('#certItemList .certItemCheck').forEach(i => i.addEventListener('change', () => { if(i.checked) state.certSelectedIds.add(String(i.value)); else state.certSelectedIds.delete(String(i.value)); renderCertificateFilterSelector(); }));
+    byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
+    byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
+    byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
+    byId('opsAssetFilterDue')?.addEventListener('change', e => { state.assetFilterDue = e.target.value; render(); });
+    byId('opsAssetFilterTasks')?.addEventListener('change', e => { state.assetFilterTasks = e.target.value; render(); });
+    document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
+    document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
+    document.querySelectorAll('[data-ops-open-task]').forEach(b => b.addEventListener('click', () => { state.openTaskId = b.dataset.opsOpenTask; render(); }));
+    document.querySelectorAll('[data-ops-action]').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.opsAction)));
+  }
+
+  async function handleAction(action){
+    if(action === 'clearVehicle'){ state.editingVehicleId=''; render(); }
+    if(action === 'clearWash'){ state.editingWashId=''; render(); }
+    if(action === 'closeTask'){ state.openTaskId=''; render(); }
+    if(action === 'closeInspectionRecord'){ state.openInspectionId=''; render(); }
+    if(action === 'generateDueTasks'){ await generateDueTasks(); }
+    if(action === 'applyStdSelected'){ await applyStandardSchedules('selected'); }
+    if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
+    if(action === 'legacyAdminTools'){ openLegacyAdminTools(); }
+    if(action === 'legacyUserTools'){ openLegacyUserTools(); }
+    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
+    if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
+    if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; state.pmView='due'; render(); }
+    if(action === 'pmSchedules'){ state.pmView='items'; render(); }
+    if(action === 'pmTemplates'){ state.pmView='items'; render(); }
+    if(action === 'pmCompleted'){ state.pmView='completed'; render(); }
   }
 
   function boot(){

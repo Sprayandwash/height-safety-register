@@ -1,0 +1,19 @@
+V4.0.14 - Certificate Filter, Admin Tabs & Service Items
+
+Fixed:
+- Certificate filter panel now keeps filter state and correctly narrows the selectable list.
+- Certificate selected-item generation now respects the ticked items.
+- Inspector qualification certificate dropdown refreshes properly.
+
+Changed:
+- Admin now has module-style tabs.
+- Permissions presets removed from the active UI.
+- Users & Permissions uses one clean standard role checkbox list.
+- Pre-load user form is collapsed until opened.
+- Preventive Maintenance now uses Service Items and Record Service workflows instead of template-based workflow.
+
+Added:
+- Service Item editor: equipment type/tag, task, frequency and description.
+- Record Service: choose asset, tick completed service items, add manual one-off items, save completion.
+- Completion automatically updates/creates schedules and records completed tasks.
+- Admin Notifications & Action Items audit view.

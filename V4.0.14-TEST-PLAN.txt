@@ -1,0 +1,48 @@
+V4.0.14 Test Plan
+
+1. Confirm version
+- Open ?v=4.0.14 and hard refresh.
+- Confirm header shows Version 4.0.14.
+
+2. Certificates
+- Go to Height Equipment > Certificates.
+- Use equipment type filter, e.g. Helmet or Carabiner / Connector.
+- Confirm the list changes to only matching items.
+- Tick only one or two items.
+- Generate certificates.
+- Confirm only the selected items generate.
+
+3. Inspector qualification certificate
+- Confirm an inspector qualification has been saved under Height Equipment > Qualifications.
+- Open Certificates.
+- Confirm the inspector dropdown lists inspector names only.
+- Generate an inspector qualification certificate.
+
+4. Admin
+- Open Admin.
+- Confirm tabs appear: Dashboard, Users & Permissions, Settings/Audit/Backups, Notifications & Action Items.
+- Open Users & Permissions.
+- Confirm pre-load form is collapsed until opened.
+- Confirm there are no permission presets.
+- Confirm user permissions use one clean role checkbox list.
+
+5. Preventive Maintenance
+- Open Ops Management > Preventive Maintenance.
+- Open Service Items.
+- Add a service item for an equipment type, e.g. Pump or Water Blaster Engine.
+- Open Record Service.
+- Choose an asset of that type.
+- Confirm applicable service items appear.
+- Tick one or more service items and add a one-off manual item.
+- Save.
+- Confirm completed service records appear.
+- Confirm schedules are updated/created and due dates reset.
+
+6. Notifications/action items
+- Open Admin > Notifications & Action Items.
+- Confirm open tasks, preventive due, vehicle checks due and washing gear due are displayed.
+
+7. Regression
+- Confirm Vehicle Inspection Checklist still opens.
+- Confirm Height Equipment dashboard still loads.
+- Confirm Ops Tasks list still loads.

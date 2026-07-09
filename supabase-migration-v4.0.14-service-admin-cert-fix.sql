@@ -1,0 +1,10 @@
+-- Spray & Wash Operations V4.0.14
+-- No database migration required.
+-- This release uses existing V4.0.13 tables/columns:
+--   height_inspector_qualifications
+--   operations_maintenance_procedures
+--   operations_equipment_maintenance_schedules
+--   operations_maintenance_tasks
+--   operations_vehicles.photo_path / photo_file_name
+--   operations_washing_equipment.photo_path / photo_file_name
+-- Run no SQL for this release if V4.0.13 has already been installed.
