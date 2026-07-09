@@ -1,0 +1,24 @@
+V4.0.9 Test Plan
+
+1. Open app with ?v=4.0.9 and hard refresh.
+2. Confirm Home dashboard appears.
+3. Click app logo from Home and from each module. It should return to Home.
+4. Confirm Height Equipment module still opens and dashboard cards still load.
+5. In Height Equipment > Equipment, type a search, then click Clear search and confirm the whole list returns.
+6. In Height Equipment, open Qualifications and save a test qualification without a file.
+7. Save a test qualification with a PDF or image file and confirm it appears in the saved list.
+8. Open Certificates and confirm Generate Certificates is Step 4 at the bottom.
+9. Generate selected individual item certificates to confirm the V4.0.7 fix still works.
+10. Open Vehicle Checks and confirm checklist still loads.
+11. Open Ops Management > Dashboard and confirm coloured cards are displayed.
+12. Open Ops Management > Assets and test filters:
+    - Asset class
+    - Status
+    - Due status
+    - Task state
+    - Keyword
+    - Clear filters
+13. Open Admin and confirm there are no redundant Admin tabs and no version subtitle under Admin.
+14. Confirm Users & Permissions contains pre-load form, role preset guide and pre-loaded user table.
+15. Confirm existing admin tools still open from Admin.
+16. Confirm non-admin user cannot see/use Admin module.

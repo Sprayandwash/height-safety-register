@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.8
+/* Spray & Wash Operations App V4.0.9
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.8';
+  const VERSION = '4.0.9';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -38,6 +38,11 @@
     taskSteps: [],
     parts: [],
     pendingUsers: [],
+    qualifications: [],
+    assetFilterClass: '',
+    assetFilterStatus: '',
+    assetFilterDue: '',
+    assetFilterTasks: '',
     currentView: 'vehicle-checks',
     editingVehicleId: '',
     editingWashId: '',
@@ -173,6 +178,28 @@
       .ops-home-tab { background:#0f766e !important; color:white !important; flex:0 0 auto; }
       #users .roleGrid { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); }
       #users details.ops-legacy-roles { margin-top:.5rem; }
+      .ops-home-row { display:flex; justify-content:flex-start; margin-bottom:.45rem; }
+      .ops-home-btn { min-width:150px; border-radius:.85rem; background:#0f766e !important; color:white !important; box-shadow:0 6px 16px rgba(15,23,42,.08); }
+      .ops-dashboard-stat { color:white; min-height:118px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; border:0; box-shadow:0 14px 35px rgba(15,23,42,.14); }
+      .ops-dashboard-stat::after { content:""; position:absolute; right:-28px; top:-28px; width:115px; height:115px; border-radius:999px; background:rgba(255,255,255,.16); }
+      .ops-dashboard-stat .ops-subtle { color:rgba(255,255,255,.92); }
+      .ops-stat-total { background:linear-gradient(135deg,#0f766e,#14b8a6); }
+      .ops-stat-green { background:linear-gradient(135deg,#15803d,#22c55e); }
+      .ops-stat-amber { background:linear-gradient(135deg,#c2410c,#f59e0b); }
+      .ops-stat-red { background:linear-gradient(135deg,#991b1b,#ef4444); }
+      .ops-stat-blue { background:linear-gradient(135deg,#334155,#64748b); }
+      .ops-branch-card { color:white; border:0; min-height:128px; box-shadow:0 14px 35px rgba(15,23,42,.14); position:relative; overflow:hidden; }
+      .ops-branch-card .ops-subtle { color:rgba(255,255,255,.92); font-weight:700; }
+      .ops-branch-card::after { content:""; position:absolute; right:-30px; top:-30px; width:120px; height:120px; border-radius:999px; background:rgba(255,255,255,.15); }
+      .ops-home-height { background:linear-gradient(135deg,#0f766e,#14b8a6); }
+      .ops-home-vehicle { background:linear-gradient(135deg,#15803d,#22c55e); }
+      .ops-home-management { background:linear-gradient(135deg,#c2410c,#f59e0b); }
+      .ops-home-admin { background:linear-gradient(135deg,#334155,#64748b); }
+      .ops-filter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.75rem; margin:.75rem 0; }
+      .ops-filter-grid label { display:flex; flex-direction:column; gap:.25rem; font-size:.86rem; font-weight:800; color:#334155; }
+      .ops-filter-grid select,.ops-filter-grid input { border:1px solid #cfd8e3; border-radius:.65rem; padding:.58rem .65rem; font:inherit; background:white; }
+      .ops-cert-generate-step { margin-top:1rem; }
+      .ops-cert-generate-step button { width:100%; }
       @media (max-width: 720px){ .ops-header { flex-direction:column; } .ops-table { min-width:620px; } }
     `;
     const style = document.createElement('style');
@@ -213,6 +240,8 @@
     window.openAdminModule = openAdminModule;
     window.openLegacyAdminTools = openLegacyAdminTools;
     window.openLegacyUserTools = openLegacyUserTools;
+    window.openHeightQualifications = openHeightQualifications;
+    setupLogoHomeClick();
     if(originalShowTab){
       window.showTab = function(id){
         if((id === 'users' || id === 'admin') && state.currentModule !== 'admin'){
@@ -248,6 +277,59 @@
     btn.style.display = '';
   }
 
+
+  function setupLogoHomeClick(){
+    const logo = document.querySelector('header .logo');
+    if(!logo || logo.dataset.homeClick === '1') return;
+    logo.dataset.homeClick = '1';
+    logo.setAttribute('role','button');
+    logo.setAttribute('tabindex','0');
+    logo.setAttribute('title','Home');
+    logo.style.cursor = 'pointer';
+    logo.addEventListener('click', showModuleHome);
+    logo.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); showModuleHome(); } });
+  }
+
+  function ensureHeightQualificationTab(){
+    const tabs = document.querySelector('.tabs');
+    if(!tabs) return;
+    let btn = byId('heightQualTabButton');
+    if(!btn){
+      btn = document.createElement('button');
+      btn.id = 'heightQualTabButton';
+      btn.type = 'button';
+      btn.className = 'tab';
+      btn.dataset.tab = 'heightQualifications';
+      btn.textContent = 'Qualifications';
+      btn.addEventListener('click', openHeightQualifications);
+      const certBtn = byId('certificateTabButton');
+      if(certBtn && certBtn.nextSibling) tabs.insertBefore(btn, certBtn.nextSibling); else tabs.appendChild(btn);
+    }
+    btn.style.display = '';
+  }
+
+  function openHeightQualifications(){
+    if(!state.user) return alert('Sign in first.');
+    if(!canUseHeight()) return alert('Your account does not have Height Equipment access.');
+    state.currentModule = 'height';
+    setTopTabsMode('height');
+    document.querySelectorAll('.tabpane').forEach(x => x.classList.add('hidden'));
+    let pane = byId('heightQualifications');
+    if(!pane){
+      const main = byId('appMain') || document.querySelector('main') || document.body;
+      pane = document.createElement('section');
+      pane.id = 'heightQualifications';
+      pane.className = 'tabpane';
+      main.appendChild(pane);
+    }
+    pane.classList.remove('hidden');
+    pane.innerHTML = heightQualificationsHtml();
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    byId('heightQualTabButton')?.classList.add('active');
+    byId('heightQualForm')?.addEventListener('submit', saveHeightQualification);
+    setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
+  }
+
   function enhanceCertificateSelector(){
     const panel = byId('certItemsPanel');
     const list = byId('certItemList');
@@ -263,6 +345,20 @@
       byId('certEquipmentSearch')?.addEventListener('input', filterCertificateItems);
     }
     filterCertificateItems();
+    reorderCertificateGenerateStep();
+  }
+
+  function reorderCertificateGenerateStep(){
+    const box = document.querySelector('.certActionBox');
+    const validation = document.getElementById('certValidation');
+    if(!box || !validation || box.dataset.v409Moved) return;
+    box.dataset.v409Moved = '1';
+    box.classList.add('ops-cert-generate-step');
+    const h = document.createElement('h3');
+    h.textContent = '4. Generate certificates';
+    h.className = 'ops-cert-step-title';
+    box.insertBefore(h, box.firstChild);
+    validation.parentElement?.insertBefore(box, validation.nextSibling);
   }
 
   function filterCertificateItems(){
@@ -307,12 +403,13 @@
     tabs.style.display = (mode === 'height' || mode === 'legacy-admin') ? 'flex' : 'none';
     if(mode === 'height'){
       ensureHeightHomeButton();
+      ensureHeightQualificationTab();
       const homeBtn = byId('moduleHomeTabButton');
       if(homeBtn) homeBtn.style.display = '';
       tabs.querySelectorAll('.tab').forEach(btn => {
         if(btn.id === 'moduleHomeTabButton'){ btn.style.display = ''; return; }
         const tab = btn.dataset.tab || '';
-        btn.style.display = ['dashboard','equipment','inspect','due','export','certificates'].includes(tab) ? '' : 'none';
+        btn.style.display = ['dashboard','equipment','inspect','due','export','certificates','heightQualifications'].includes(tab) ? '' : 'none';
       });
     } else if(mode === 'legacy-admin'){
       ensureHeightHomeButton();
@@ -399,7 +496,8 @@
       <div class="ops-branch-grid">${cards.join('')}</div>`;
   }
   function moduleCard(title, body, action){
-    return `<button type="button" class="ops-branch-card" onclick="${action}"><strong>${esc(title)}</strong><span class="ops-subtle">${esc(body)}</span></button>`;
+    const cls = /Height/i.test(title) ? 'ops-home-height' : /Vehicle/i.test(title) ? 'ops-home-vehicle' : /Ops/i.test(title) ? 'ops-home-management' : 'ops-home-admin';
+    return `<button type="button" class="ops-branch-card ${cls}" onclick="${action}"><strong>${esc(title)}</strong><span class="ops-subtle">${esc(body)}</span></button>`;
   }
 
   function showOperations(view){
@@ -496,6 +594,8 @@
         try { state.pendingUsers = await loadTable('operations_preloaded_users','*',{column:'email'}); }
         catch(e){ console.warn('Preloaded users table unavailable:', e.message); state.pendingUsers = []; }
       } else { state.pendingUsers = []; }
+      try { state.qualifications = await loadTable('height_inspector_qualifications','*',{column:'expiry_date'}); }
+      catch(e){ console.warn('Height inspector qualifications table unavailable:', e.message); state.qualifications = []; }
       render();
     }catch(err){
       state.lastError = `V4 tables are not ready or access is blocked. Run supabase-schema-v4.0-operations.sql first. Details: ${err.message}`;
@@ -523,22 +623,18 @@
         ${navButton('tasks','Tasks')}
         ${navButton('schedules','Preventive Maintenance')}
         ${navButton('guides','Guides')}` : '';
-    const adminNav = isAdminModule ? `
-        ${navButton('admin-dashboard','Dashboard')}
-        ${navButton('admin-users','Users & Permissions')}
-        ${navButton('admin-settings','Settings, Audit & Backups')}` : '';
-    const staffNav = isVehicle ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : (isAdminModule ? adminNav : managementNav);
+    const staffNav = isVehicle ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : (isAdminModule ? '' : managementNav);
     const title = isVehicle ? 'Vehicle Checks' : isAdminModule ? 'Admin' : 'Ops Management';
-    const note = isVehicle ? 'Staff vehicle inspection checklist' : isAdminModule ? 'Users, permissions, settings and audit controls' : 'Assets, tasks, schedules and guides';
+    const note = isVehicle ? 'Staff vehicle inspection checklist' : isAdminModule ? '' : 'Assets, tasks, schedules and guides';
     return `
       <div class="ops-header">
         <div class="ops-module-title">
-          <button type="button" class="ops-btn ghost" onclick="showModuleHome()">← Home</button>
+          <div class="ops-home-row"><button type="button" class="ops-btn ops-home-btn" onclick="showModuleHome()">← Home</button></div>
           <h2>${title}</h2>
-          <div class="ops-subtle">V${VERSION} • ${note}</div>
+          ${note ? `<div class="ops-subtle">${note}</div>` : ''}
         </div>
       </div>
-      <div class="ops-nav" id="opsNav">${staffNav}</div>`;
+      ${staffNav ? `<div class="ops-nav" id="opsNav">${staffNav}</div>` : ''}`;
   }
 
   function navButton(id, label){ return `<button type="button" class="${state.currentView===id?'active':''}" data-ops-view="${id}">${label}</button>`; }
@@ -593,18 +689,18 @@
     const scheduledDue = state.schedules.filter(s => s.is_active !== false).filter(s => scheduleIsDue(s));
     return `
       <div class="ops-grid">
-        ${statCard('Vehicles due/overdue', vehicleDue.length, 'Fortnightly vehicle checks needing action')}
-        ${statCard('Washing gear due/overdue', washDue.length, 'Water blasters, pumps and gear needing checks')}
-        ${statCard('Open tasks', open.length, 'Reactive, scheduled and manual work items')}
-        ${statCard('Waiting on parts', waiting.length, 'Tasks blocked by parts or supplies')}
-        ${statCard('Preventive services due', scheduledDue.length, 'Scheduled date-based maintenance')}
+        ${statCard('Vehicles due/overdue', vehicleDue.length, 'Fortnightly vehicle checks needing action','ops-stat-amber')}
+        ${statCard('Washing gear due/overdue', washDue.length, 'Water blasters, pumps and gear needing checks','ops-stat-green')}
+        ${statCard('Open tasks', open.length, 'Reactive, scheduled and manual work items','ops-stat-total')}
+        ${statCard('Waiting on parts', waiting.length, 'Tasks blocked by parts or supplies','ops-stat-red')}
+        ${statCard('Preventive services due', scheduledDue.length, 'Scheduled date-based maintenance','ops-stat-blue')}
       </div>
       <div class="ops-grid" style="margin-top:1rem">
         <div class="ops-card"><h3>Overdue / due inspections</h3>${dueListHtml()}</div>
         <div class="ops-card"><h3>Open tasks</h3>${taskMiniListHtml(open.slice(0,8))}</div>
       </div>`;
   }
-  function statCard(title, value, note){ return `<div class="ops-card"><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div><div class="ops-subtle">${esc(note)}</div></div>`; }
+  function statCard(title, value, note, variant){ return `<div class="ops-card ops-dashboard-stat ${variant || 'ops-stat-total'}"><div><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div></div><div class="ops-subtle">${esc(note)}</div></div>`; }
   function dueListHtml(){
     const rows = [];
     state.vehicles.filter(v=>v.status==='Active').forEach(v => rows.push({type:'Vehicle', name:v.rego || v.name, due:dueDateFor('vehicle',v)}));
@@ -674,6 +770,8 @@
   }
 
 
+  function uniqueValues(values){ return Array.from(new Set(values.map(v=>String(v||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b)); }
+
   function assetSearchHaystack(kind, item){
     if(kind === 'vehicle') return [item.rego,item.name,item.make_model,item.year,item.status,item.assigned_driver,item.notes,'vehicle'].join(' ').toLowerCase();
     const v = state.vehicles.find(x=>x.id===item.assigned_vehicle_id);
@@ -681,14 +779,47 @@
   }
   function assetMatches(kind, item){
     const q = String(state.assetSearch || '').trim().toLowerCase();
-    return !q || assetSearchHaystack(kind, item).includes(q);
+    if(q && !assetSearchHaystack(kind, item).includes(q)) return false;
+    const cls = state.assetFilterClass || '';
+    if(cls){
+      if(cls === 'Vehicle' && kind !== 'vehicle') return false;
+      if(cls !== 'Vehicle' && kind === 'vehicle') return false;
+      if(cls !== 'Vehicle' && kind === 'washing' && String(item.equipment_type || '') !== cls) return false;
+    }
+    const status = state.assetFilterStatus || '';
+    if(status && String(item.status || '') !== status) return false;
+    const due = state.assetFilterDue || '';
+    if(due){
+      const d = daysUntil(dueDateFor(kind === 'vehicle' ? 'vehicle' : 'washing_equipment', item));
+      if(due === 'overdue' && !(d !== null && d < 0)) return false;
+      if(due === 'due' && !(d === null || d <= 0)) return false;
+      if(due === 'ok' && !(d !== null && d > 0)) return false;
+      if(due === 'no-history' && d !== null) return false;
+    }
+    const taskFilter = state.assetFilterTasks || '';
+    if(taskFilter){
+      const itemTasks = openTasks().filter(t => kind === 'vehicle' ? t.vehicle_id === item.id : t.washing_equipment_id === item.id);
+      if(taskFilter === 'open' && !itemTasks.length) return false;
+      if(taskFilter === 'none' && itemTasks.length) return false;
+      if(taskFilter === 'waiting' && !itemTasks.some(t=>t.status === 'Waiting on Parts' || t.status === 'Waiting on Someone')) return false;
+    }
+    return true;
   }
   function assetsHtml(){
+    const assetClasses = ['Vehicle'].concat(uniqueValues(state.washEquipment.map(w=>w.equipment_type || 'Washing Equipment')));
+    const statuses = uniqueValues(state.vehicles.map(v=>v.status).concat(state.washEquipment.map(w=>w.status)));
     const vehicleRows = state.vehicles.filter(v => assetMatches('vehicle', v));
     const washRows = state.washEquipment.filter(w => assetMatches('washing', w));
     return `<div class="ops-card">
-      <div class="ops-section-title"><div><h3>Assets</h3><p class="ops-subtle">Vehicle and washing equipment registers in one searchable place.</p></div></div>
-      <div class="ops-search"><label>Search assets</label><input id="opsAssetSearch" type="search" value="${esc(state.assetSearch||'')}" placeholder="Search by rego, name, type, serial, engine, pump, assigned vehicle or status"></div>
+      <div class="ops-section-title"><div><h3>Assets</h3><p class="ops-subtle">Filter the vehicle and washing equipment registers by asset class, status, due items and open tasks.</p></div></div>
+      <div class="ops-filter-grid">
+        <label>Asset class<select id="opsAssetFilterClass"><option value="">All asset classes</option>${assetClasses.map(v=>`<option value="${esc(v)}" ${state.assetFilterClass===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+        <label>Status<select id="opsAssetFilterStatus"><option value="">All statuses</option>${statuses.map(v=>`<option value="${esc(v)}" ${state.assetFilterStatus===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+        <label>Due status<select id="opsAssetFilterDue"><option value="">All due states</option><option value="due" ${state.assetFilterDue==='due'?'selected':''}>Due / overdue / no history</option><option value="overdue" ${state.assetFilterDue==='overdue'?'selected':''}>Overdue only</option><option value="no-history" ${state.assetFilterDue==='no-history'?'selected':''}>No history</option><option value="ok" ${state.assetFilterDue==='ok'?'selected':''}>Not due</option></select></label>
+        <label>Tasks<select id="opsAssetFilterTasks"><option value="">All task states</option><option value="open" ${state.assetFilterTasks==='open'?'selected':''}>Has open tasks</option><option value="waiting" ${state.assetFilterTasks==='waiting'?'selected':''}>Waiting on someone/parts</option><option value="none" ${state.assetFilterTasks==='none'?'selected':''}>No open tasks</option></select></label>
+        <label>Keyword<input id="opsAssetSearch" type="search" value="${esc(state.assetSearch||'')}" placeholder="Rego, serial, model, notes"></label>
+      </div>
+      <div class="ops-actions"><button class="ops-btn ghost" type="button" data-ops-action="clearAssetFilters">Clear filters</button></div>
       <div class="ops-subtle">${vehicleRows.length} vehicle${vehicleRows.length===1?'':'s'} and ${washRows.length} washing equipment item${washRows.length===1?'':'s'} shown.</div>
     </div>
     ${canManage() ? `<div class="ops-grid"><div class="ops-card"><details ${state.editingVehicleId?'open':''}><summary><strong>${state.editingVehicleId ? 'Edit vehicle' : 'Add vehicle'}</strong></summary><div style="margin-top:.8rem">${vehicleFormHtml()}</div></details></div><div class="ops-card"><details ${state.editingWashId?'open':''}><summary><strong>${state.editingWashId ? 'Edit washing equipment' : 'Add washing equipment'}</strong></summary><div style="margin-top:.8rem">${washingFormHtml()}</div></details></div></div>` : '<div class="ops-card"><p class="ops-subtle">Read-only. Ask an Admin or Equipment Manager to edit assets.</p></div>'}
@@ -876,35 +1007,34 @@
   function rolesForPreset(preset){ return ROLE_PRESETS[preset] || []; }
   function presetOptions(selected){ return Object.keys(ROLE_PRESETS).map(p=>`<option value="${esc(p)}" ${p===selected?'selected':''}>${esc(p)}</option>`).join(''); }
   function adminDashboardHtml(){
-    return `<div class="ops-grid">
-      <div class="ops-card"><h3>Users & permissions</h3><p class="ops-subtle">Pre-load new users, apply role presets and keep user terminology in one Admin module.</p><button class="ops-btn primary" data-ops-view="admin-users">Open users</button></div>
-      <div class="ops-card"><h3>Settings, audit & backups</h3><p class="ops-subtle">Open the existing app settings, audit log and backup tools. These controls are visible only to Admin users.</p><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open admin tools</button></div>
-      <div class="ops-card"><h3>Role presets</h3><p class="ops-subtle"><strong>Field Staff</strong> can use Height Equipment and Vehicle Checks. <strong>Ops Manager</strong> can manage assets, tasks and schedules. <strong>Admin</strong> has full access.</p></div>
+    return `<div class="ops-grid two">
+      ${usersHtml()}
+      ${adminSettingsHtml()}
     </div>`;
   }
 
   function adminSettingsHtml(){
-    return `<div class="ops-card"><h3>Settings, audit log and backups</h3><p class="ops-subtle">These controls remain powered by the existing Height Equipment app settings and audit log. They are now accessed from the Admin module.</p><div class="ops-actions"><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open settings, audit log and backup tools</button><button class="ops-btn ghost" data-ops-action="legacyUserTools">Open detailed user role manager</button></div></div>`;
+    return `<div class="ops-card"><h3>Settings, audit log and backups</h3><p class="ops-subtle">Open the existing app settings, audit log and backup tools. These controls are visible only to Admin users.</p><div class="ops-actions"><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open settings, audit log and backup tools</button></div></div>`;
   }
 
   function usersHtml(){
-    if(!isAdmin()) return `<div class="ops-card"><h3>Users</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
+    if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
+    const rolePresetGuide = Object.entries(ROLE_PRESETS).map(([preset, roles]) => `<tr><td><strong>${esc(preset)}</strong></td><td>${roles.map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('')}</td></tr>`).join('');
     return `<div class="ops-card">
-      <h3>User management</h3>
-      <p class="ops-subtle">Pre-load staff so their role setup is ready before their first login. Supabase Auth still controls the actual login account; this prepares their app profile and roles.</p>
+      <h3>Users & permissions</h3>
+      <p class="ops-subtle">Pre-load staff, choose a role preset and keep user terminology in one place. Supabase Auth still controls the actual login account; this prepares their app profile and roles.</p>
       <form id="opsPreloadUserForm" class="ops-form">
         <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
         <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
         <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
-        <label>Role preset<select id="opsPreloadPreset">${presetOptions('Field Staff')}</select></label>
+        <label>Permission preset<select id="opsPreloadPreset">${presetOptions('Field Staff')}</select></label>
         <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
         <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
-        <div class="ops-span-2"><strong>Preset roles:</strong> <span id="opsPreloadRolePreview">${rolesForPreset('Field Staff').map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('')}</span></div>
-        <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Pre-load user</button></div>
+        <div class="ops-span-2"><strong>Roles applied by preset:</strong> <span id="opsPreloadRolePreview">${rolesForPreset('Field Staff').map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('')}</span></div>
+        <details class="ops-span-2"><summary><strong>Role preset guide</strong></summary><div class="ops-table-wrap" style="margin-top:.75rem"><table class="ops-table"><tr><th>Preset</th><th>Roles</th></tr>${rolePresetGuide}</table></div></details>
+        <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Pre-load user</button><button class="ops-btn ghost" type="button" data-ops-action="legacyUserTools">Open detailed role manager</button></div>
       </form>
-    </div>
-    <div class="ops-card">
       <h3>Pre-loaded users</h3>
       ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Preset</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${esc(u.role_preset||'')}</td><td>${(u.roles||[]).map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('')}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
     </div>`;
@@ -953,6 +1083,71 @@
   }
 
 
+
+  function heightQualificationsHtml(){
+    const rows = state.qualifications || [];
+    return `<div class="card">
+      <h2>Inspector Qualifications</h2>
+      <p class="muted">Record height-safety inspector qualification details and upload a PDF, scan or photo. Files are stored in the existing inspection photos storage bucket under height-inspector-qualifications.</p>
+      <form id="heightQualForm" class="ops-form">
+        <label>Inspector name *<input id="heightQualName" required placeholder="e.g. Brendan Harris"></label>
+        <label>Email<input id="heightQualEmail" type="email" placeholder="name@example.com"></label>
+        <label>Qualification type *<input id="heightQualType" required placeholder="e.g. Height Safety Inspector"></label>
+        <label>Provider<input id="heightQualProvider" placeholder="Training provider"></label>
+        <label>Reference / certificate number<input id="heightQualRef"></label>
+        <label>Issue date<input id="heightQualIssue" type="date"></label>
+        <label>Expiry date<input id="heightQualExpiry" type="date"></label>
+        <label>PDF / scan / photo<input id="heightQualFile" type="file" accept="application/pdf,image/*"></label>
+        <label class="ops-span-2">Notes<textarea id="heightQualNotes"></textarea></label>
+        <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save qualification</button></div>
+      </form>
+    </div>
+    <div class="card"><h2>Saved inspector qualifications</h2>
+      ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>File</th><th>Notes</th></tr>${rows.map(r=>`<tr><td>${esc(r.inspector_name)}<br><span class="ops-subtle">${esc(r.email||'')}</span></td><td>${esc(r.qualification_type)}</td><td>${esc(r.provider||'—')}</td><td>${esc(r.reference_number||'—')}</td><td>${nzDate(r.expiry_date)}</td><td>${r.storage_path ? `<button type="button" class="ops-btn ghost" onclick="SWOperationsV4.openQualificationFile('${esc(r.storage_path)}')">Open file</button>` : '—'}</td><td>${esc(r.notes||'')}</td></tr>`).join('')}</table></div>` : '<p class="muted">No inspector qualifications saved yet.</p>'}
+    </div>`;
+  }
+
+  async function saveHeightQualification(e){
+    e.preventDefault();
+    if(!state.user || !hasAny(['Admin','Equipment Manager','Office / Reports','Certificate Approver'])) return alert('You do not have permission to save qualifications.');
+    const file = byId('heightQualFile')?.files?.[0] || null;
+    let storagePath = null;
+    let fileName = file?.name || null;
+    if(file){
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      storagePath = `height-inspector-qualifications/${Date.now()}-${safeName}`;
+      const up = await state.sb.storage.from(PHOTO_BUCKET).upload(storagePath, file, { upsert:false, contentType:file.type || undefined });
+      if(up.error) return alert('File upload failed: ' + up.error.message);
+    }
+    const row = {
+      inspector_name: titleCaseName(byId('heightQualName')?.value || ''),
+      email: String(byId('heightQualEmail')?.value || '').trim().toLowerCase() || null,
+      qualification_type: byId('heightQualType')?.value || '',
+      provider: byId('heightQualProvider')?.value || null,
+      reference_number: byId('heightQualRef')?.value || null,
+      issue_date: byId('heightQualIssue')?.value || null,
+      expiry_date: byId('heightQualExpiry')?.value || null,
+      storage_path: storagePath,
+      file_name: fileName,
+      notes: byId('heightQualNotes')?.value || null,
+      created_by: state.user.id
+    };
+    if(!row.inspector_name || !row.qualification_type) return alert('Inspector name and qualification type are required.');
+    const r = await state.sb.from('height_inspector_qualifications').insert(row);
+    if(r.error) return alert(r.error.message);
+    alert('Inspector qualification saved.');
+    state.qualifications = await loadTable('height_inspector_qualifications','*',{column:'expiry_date'});
+    openHeightQualifications();
+  }
+
+  async function openQualificationFile(path){
+    try{
+      const r = await state.sb.storage.from(PHOTO_BUCKET).createSignedUrl(path, 60 * 10);
+      if(r.error) throw r.error;
+      window.open(r.data.signedUrl, '_blank');
+    }catch(err){ alert('Could not open file: ' + (err.message || err)); }
+  }
+
   function bindRenderedEvents(){
     document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
     byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
@@ -965,6 +1160,10 @@
     byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
     byId('opsPreloadPreset')?.addEventListener('change', updatePreloadRolePreview);
     byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
+    byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
+    byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
+    byId('opsAssetFilterDue')?.addEventListener('change', e => { state.assetFilterDue = e.target.value; render(); });
+    byId('opsAssetFilterTasks')?.addEventListener('change', e => { state.assetFilterTasks = e.target.value; render(); });
     updatePreloadRolePreview();
     document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
     document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
@@ -980,6 +1179,7 @@
     if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
     if(action === 'legacyAdminTools'){ openLegacyAdminTools(); }
     if(action === 'legacyUserTools'){ openLegacyUserTools(); }
+    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
   }
 
   async function saveVehicle(e){
@@ -1420,6 +1620,7 @@
       sel.addEventListener('change', refreshCertificateTypeCountsV405);
     }
     refreshCertificateTypeCountsV405();
+    reorderCertificateGenerateStep();
   }
 
   function refreshTopUserSummary(){
@@ -1449,7 +1650,8 @@
     installModulePortal();
     installCertificateV405Patch();
     initSupabase().catch(err => { state.lastError = err.message; render(); });
-    window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state, setAssetSearch: v => { state.assetSearch = v || ''; render(); } };
+    window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state, setAssetSearch: v => { state.assetSearch = v || ''; render(); }, openQualificationFile };
+    setupLogoHomeClick();
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

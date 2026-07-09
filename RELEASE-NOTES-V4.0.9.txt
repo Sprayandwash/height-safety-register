@@ -1,0 +1,23 @@
+V4.0.9 Release Notes
+
+Main changes:
+- Standardised look and feel across modules using the coloured Height Equipment dashboard card style.
+- Made the app logo clickable to return to the main Home dashboard.
+- Standardised Home navigation button styling.
+- Simplified the Admin module:
+  - Removed redundant Admin tabs.
+  - Removed version info under Admin heading.
+  - Merged user pre-load, role presets and role terminology into Users & Permissions.
+  - Kept access to existing settings, audit log and backup tools.
+- Improved Ops Management > Assets:
+  - Combined filter controls for asset class, status, due state, task state and keyword.
+  - Added clear filters action.
+- Improved Height Equipment register with a Clear search button.
+- Added Height Inspector Qualifications record area with PDF/scan/photo upload.
+- Reordered certificate generation flow so Generate Certificates is Step 4 at the bottom.
+
+SQL:
+- Adds public.height_inspector_qualifications.
+- Adds RLS policies for viewing and managing qualification records.
+
+No config.js changes.
