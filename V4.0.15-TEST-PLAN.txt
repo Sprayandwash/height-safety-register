@@ -1,0 +1,19 @@
+V4.0.15 Test Plan
+
+1. Confirm header shows Version 4.0.15.
+2. Open Height Equipment.
+3. Confirm Due / Failed tab is gone.
+4. Confirm New Inspection tab is gone.
+5. Confirm a New Inspection action button appears on the Height dashboard and opens the inspection form.
+6. Confirm Notification Centre card is no longer on the Height dashboard.
+7. Confirm Equipment by Type is not on the Dashboard and appears in the Equipment tab.
+8. Confirm Recent Inspection History is collapsible and limit selector works for 10 / 20 / 30 / 50.
+9. Open Certificates.
+10. Confirm filter/search panel displays a selectable item list.
+11. Tick one or more items and confirm the selected count updates.
+12. Confirm select-all buttons are removed.
+13. Confirm photo options appear as checkboxes.
+14. Generate certificates and confirm only ticked items are generated.
+15. Confirm Inspector Details dropdown lists inspector names only.
+16. Generate Inspector Details and confirm no certificate number appears.
+17. Confirm Vehicle Checks, Ops Management and Admin still open.

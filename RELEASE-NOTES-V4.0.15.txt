@@ -1,0 +1,16 @@
+V4.0.15 - Height Dashboard & Certificate Flow Cleanup
+
+Changed
+- Removed Height Due / Failed tab; dashboard cards remain the access point for due/failed lists.
+- Moved Height New Inspection from a tab to a dashboard action button.
+- Removed the Height dashboard Notification Centre card.
+- Moved Equipment by Type into the Equipment register area.
+- Recent Inspection History is now collapsible and can be limited to 10, 20, 30 or 50 items.
+- Certificate workflow now uses filter/search plus manual item selection.
+- Removed unclear Select all / Select visible certificate buttons.
+- Certificate selected count now updates from selected items.
+- Photo options are compact checkboxes.
+- Inspector Qualification Certificate renamed to Inspector Details.
+- Inspector Details output has no certificate number.
+
+No Supabase SQL migration required.
