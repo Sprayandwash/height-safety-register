@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.9
+/* Spray & Wash Operations App V4.0.10
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.9';
+  const VERSION = '4.0.10';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -131,9 +131,12 @@
       .ops-actions .ops-btn, .ops-nav button, .ops-btn { text-align:center; }
       .ops-header h2 { margin:.1rem 0; }
       .ops-subtle { color:#65758b; font-size:.92rem; }
-      .ops-nav { display:flex; flex-wrap:wrap; gap:.45rem; margin:1rem 0; }
-      .ops-nav button, .ops-btn { border:0; border-radius:.65rem; padding:.62rem .85rem; background:#eef3f7; color:#1f2937; font-weight:700; cursor:pointer; }
-      .ops-nav button.active, .ops-btn.primary { background:#1f6feb; color:white; }
+      .ops-nav { display:flex; flex-wrap:wrap; gap:.5rem; margin:1rem 0; align-items:center; }
+      .ops-nav button, .ops-btn { border:0; border-radius:12px; padding:11px 14px; background:#e2e8f0; color:#0f172a; font-weight:800; cursor:pointer; min-height:42px; }
+      .ops-nav button.active, .ops-btn.primary { background:#0f766e; color:white; }
+      .tabs { align-items:center; gap:.5rem !important; padding:6px 0 12px !important; }
+      .tabs .tab, .tabs button.tab { border:0; border-radius:12px !important; padding:11px 14px !important; background:#e2e8f0 !important; color:#0f172a !important; font-weight:800 !important; min-height:42px; white-space:nowrap; }
+      .tabs .tab.active, .tabs button.tab.active { background:#0f766e !important; color:white !important; }
       .ops-btn.danger { background:#fee2e2; color:#991b1b; }
       .ops-btn.ghost { background:transparent; border:1px solid #d7dee8; }
       .ops-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; }
@@ -180,7 +183,8 @@
       #users details.ops-legacy-roles { margin-top:.5rem; }
       .ops-home-row { display:flex; justify-content:flex-start; margin-bottom:.45rem; }
       .ops-home-btn { min-width:150px; border-radius:.85rem; background:#0f766e !important; color:white !important; box-shadow:0 6px 16px rgba(15,23,42,.08); }
-      .ops-dashboard-stat { color:white; min-height:118px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; border:0; box-shadow:0 14px 35px rgba(15,23,42,.14); }
+      .ops-dashboard-stat { color:white; min-height:118px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; border:0; box-shadow:0 14px 35px rgba(15,23,42,.14); cursor:pointer; }
+      .ops-dashboard-stat:focus { outline:3px solid rgba(15,118,110,.35); outline-offset:3px; }
       .ops-dashboard-stat::after { content:""; position:absolute; right:-28px; top:-28px; width:115px; height:115px; border-radius:999px; background:rgba(255,255,255,.16); }
       .ops-dashboard-stat .ops-subtle { color:rgba(255,255,255,.92); }
       .ops-stat-total { background:linear-gradient(135deg,#0f766e,#14b8a6); }
@@ -252,7 +256,7 @@
         originalShowTab(id);
         setTopTabsMode('height');
         refreshTopUserSummary();
-        if(id === 'certificates') setTimeout(()=>{ enhanceCertificateSelector(); installCertificateV405Patch(); }, 80);
+        if(id === 'certificates') setTimeout(()=>{ enhanceCertificateSelector(); enhanceQualificationCertificatePanel(); installCertificateV405Patch(); }, 80);
         if(id === 'users') setTimeout(enhanceLegacyUserUI, 80);
       };
     }
@@ -346,6 +350,7 @@
     }
     filterCertificateItems();
     reorderCertificateGenerateStep();
+    enhanceQualificationCertificatePanel();
   }
 
   function reorderCertificateGenerateStep(){
@@ -372,6 +377,93 @@
     });
     const count = byId('certEquipmentSearchCount');
     if(count) count.textContent = rows.length ? `${shown} of ${rows.length} items shown` : 'No equipment items loaded yet.';
+  }
+
+  function shortCertificateNumber(seed){
+    const d = new Date();
+    const stamp = d.getFullYear();
+    const clean = String(seed || 'CERT').replace(/[^a-zA-Z0-9]+/g,'').toUpperCase().slice(0, 8) || 'CERT';
+    const suffix = String(Date.now()).slice(-4);
+    return `SW-${stamp}-${clean}-${suffix}`;
+  }
+
+  function installShortCertificateNumberPatch(){
+    try{
+      if('certNumber' in window) window.certNumber = shortCertificateNumber;
+    }catch(e){ console.warn('Certificate number patch skipped', e); }
+  }
+
+  function enhanceQualificationCertificatePanel(){
+    const section = byId('certificates');
+    const history = byId('certificateHistory')?.closest('.card');
+    if(!section || byId('qualificationCertPanel')) return;
+    const panel = document.createElement('div');
+    panel.id = 'qualificationCertPanel';
+    panel.className = 'card';
+    panel.innerHTML = qualificationCertificatePanelHtml();
+    if(history) section.insertBefore(panel, history);
+    else section.appendChild(panel);
+  }
+
+  function qualificationCertificatePanelHtml(){
+    const rows = (state.qualifications || []).filter(q => q.active !== false);
+    const options = rows.map(q => `<option value="${esc(q.id)}">${esc(q.inspector_name)} - ${esc(q.qualification_type)}${q.expiry_date ? ' - exp ' + esc(nzDate(q.expiry_date)) : ''}</option>`).join('');
+    return `<h2>Inspector Qualification Certificate</h2>
+      <p class="muted">Generate a printable certificate/summary for a saved height inspector qualification.</p>
+      <div class="grid two">
+        <div><label>Inspector qualification</label><select id="qualCertSelect"><option value="">Select qualification</option>${options}</select></div>
+        <div><label>Certificate number style</label><select id="qualCertNumberStyle"><option value="short">Short readable number</option></select></div>
+      </div>
+      <div class="row"><button type="button" class="primary" onclick="SWOperationsV4.generateQualificationCertificate()">Generate inspector qualification certificate</button></div>
+      ${rows.length ? '' : '<p class="muted">No qualifications saved yet. Add qualifications under Height Equipment - Inspector Qualifications first.</p>'}`;
+  }
+
+  async function generateQualificationCertificate(){
+    if(!hasAny(['Admin','Office / Reports','Certificate Approver','Equipment Manager'])) return alert('You do not have permission to generate qualification certificates.');
+    const id = byId('qualCertSelect')?.value || '';
+    if(!id) return alert('Select an inspector qualification first.');
+    const q = (state.qualifications || []).find(x => String(x.id) === String(id));
+    if(!q) return alert('Qualification record not found.');
+    const certNo = shortCertificateNumber(q.reference_number || q.inspector_name || 'QUAL');
+    let fileUrl = '';
+    if(q.storage_path){
+      try{
+        const r = await state.sb.storage.from(PHOTO_BUCKET).createSignedUrl(q.storage_path, 3600);
+        if(!r.error) fileUrl = r.data.signedUrl;
+      }catch(e){ console.warn('Qualification file link skipped', e); }
+    }
+    const html = qualificationCertificateHtml(q, certNo, fileUrl);
+    const w = window.open('', '_blank');
+    if(!w){
+      const blob = new Blob([html], {type:'text/html'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `inspector-qualification-${certNo}.html`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      alert('Popup blocked. The certificate HTML file has been downloaded instead.');
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function qualificationCertificateHtml(q, certNo, fileUrl){
+    const generated = new Date().toLocaleString('en-NZ');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(certNo)}</title><style>
+      body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:40px;color:#0f172a} .cert{max-width:850px;margin:auto;border:1px solid #cbd5e1;padding:34px;border-radius:18px} h1{margin:0 0 8px;color:#0f766e}.muted{color:#64748b}.grid{display:grid;grid-template-columns:180px 1fr;gap:10px;margin-top:24px}.label{font-weight:800;color:#334155;border-bottom:1px solid #e2e8f0;padding:8px}.value{border-bottom:1px solid #e2e8f0;padding:8px}.footer{margin-top:30px;font-size:12px;color:#64748b}.badge{display:inline-block;background:#ecfdf5;color:#0f766e;border-radius:999px;padding:6px 12px;font-weight:800} @media print{button{display:none} body{margin:0}.cert{border:0}}
+    </style></head><body><div class="cert"><button onclick="window.print()">Print / Save as PDF</button><h1>Spray &amp; Wash Inspector Qualification Certificate</h1><div class="muted">Certificate No: <strong>${esc(certNo)}</strong></div><p class="badge">Height Equipment Inspector Qualification</p><div class="grid">
+      <div class="label">Inspector</div><div class="value">${esc(q.inspector_name)}</div>
+      <div class="label">Email</div><div class="value">${esc(q.email || '—')}</div>
+      <div class="label">Qualification</div><div class="value">${esc(q.qualification_type)}</div>
+      <div class="label">Provider</div><div class="value">${esc(q.provider || '—')}</div>
+      <div class="label">Reference</div><div class="value">${esc(q.reference_number || '—')}</div>
+      <div class="label">Issue date</div><div class="value">${esc(nzDate(q.issue_date))}</div>
+      <div class="label">Expiry date</div><div class="value">${esc(nzDate(q.expiry_date))}</div>
+      <div class="label">Uploaded evidence</div><div class="value">${fileUrl ? `<a href="${fileUrl}" target="_blank">Open uploaded PDF / scan</a>` : 'No file attached'}</div>
+      <div class="label">Notes</div><div class="value">${esc(q.notes || '—')}</div>
+    </div><div class="footer">Generated ${esc(generated)} from Spray &amp; Wash Operations. Verify against the live app before relying on a downloaded copy.</div></div></body></html>`;
   }
 
   function enhanceLegacyUserUI(){
@@ -689,18 +781,18 @@
     const scheduledDue = state.schedules.filter(s => s.is_active !== false).filter(s => scheduleIsDue(s));
     return `
       <div class="ops-grid">
-        ${statCard('Vehicles due/overdue', vehicleDue.length, 'Fortnightly vehicle checks needing action','ops-stat-amber')}
-        ${statCard('Washing gear due/overdue', washDue.length, 'Water blasters, pumps and gear needing checks','ops-stat-green')}
-        ${statCard('Open tasks', open.length, 'Reactive, scheduled and manual work items','ops-stat-total')}
-        ${statCard('Waiting on parts', waiting.length, 'Tasks blocked by parts or supplies','ops-stat-red')}
-        ${statCard('Preventive services due', scheduledDue.length, 'Scheduled date-based maintenance','ops-stat-blue')}
+        ${statCard('Vehicles due/overdue', vehicleDue.length, 'Fortnightly vehicle checks needing action','ops-stat-amber','assets-due-vehicles')}
+        ${statCard('Washing gear due/overdue', washDue.length, 'Water blasters, pumps and gear needing checks','ops-stat-green','assets-due-washing')}
+        ${statCard('Open tasks', open.length, 'Reactive, scheduled and manual work items','ops-stat-total','tasks-open')}
+        ${statCard('Waiting on parts', waiting.length, 'Tasks blocked by parts or supplies','ops-stat-red','tasks-waiting')}
+        ${statCard('Preventive services due', scheduledDue.length, 'Scheduled date-based maintenance','ops-stat-blue','schedules-due')}
       </div>
       <div class="ops-grid" style="margin-top:1rem">
         <div class="ops-card"><h3>Overdue / due inspections</h3>${dueListHtml()}</div>
         <div class="ops-card"><h3>Open tasks</h3>${taskMiniListHtml(open.slice(0,8))}</div>
       </div>`;
   }
-  function statCard(title, value, note, variant){ return `<div class="ops-card ops-dashboard-stat ${variant || 'ops-stat-total'}"><div><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div></div><div class="ops-subtle">${esc(note)}</div></div>`; }
+  function statCard(title, value, note, variant, shortcut){ const attr = shortcut ? ` role="button" tabindex="0" data-ops-shortcut="${esc(shortcut)}"` : ''; return `<div class="ops-card ops-dashboard-stat ${variant || 'ops-stat-total'}"${attr}><div><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div></div><div class="ops-subtle">${esc(note)}</div></div>`; }
   function dueListHtml(){
     const rows = [];
     state.vehicles.filter(v=>v.status==='Active').forEach(v => rows.push({type:'Vehicle', name:v.rego || v.name, due:dueDateFor('vehicle',v)}));
@@ -708,6 +800,38 @@
     rows.sort((a,b)=> (a.due || '').localeCompare(b.due || '')).splice(10);
     if(!rows.length) return '<p class="ops-subtle">No registered active items yet.</p>';
     return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Type</th><th>Item</th><th>Due</th><th>Status</th></tr>${rows.map(r=>`<tr><td>${esc(r.type)}</td><td>${esc(r.name || 'Unnamed')}</td><td>${nzDate(r.due)}</td><td>${targetDueStatus(daysUntil(r.due))}</td></tr>`).join('')}</table></div>`;
+  }
+
+
+  function handleDashboardShortcut(shortcut){
+    state.currentModule = 'management';
+    state.currentView = 'management-dashboard';
+    if(shortcut === 'assets-due-vehicles'){
+      state.currentView = 'assets';
+      state.assetFilterClass = 'Vehicle';
+      state.assetFilterDue = 'due';
+      state.assetFilterStatus = '';
+      state.assetFilterTasks = '';
+      state.assetSearch = '';
+    } else if(shortcut === 'assets-due-washing'){
+      state.currentView = 'assets';
+      state.assetFilterClass = '';
+      state.assetFilterDue = 'due';
+      state.assetFilterStatus = '';
+      state.assetFilterTasks = '';
+      state.assetSearch = '';
+    } else if(shortcut === 'tasks-open'){
+      state.currentView = 'tasks';
+      state.taskQuickFilter = 'open';
+    } else if(shortcut === 'tasks-waiting'){
+      state.currentView = 'tasks';
+      state.taskQuickFilter = 'waiting';
+    } else if(shortcut === 'schedules-due'){
+      state.currentView = 'schedules';
+      state.scheduleQuickFilter = 'due';
+    }
+    render();
+    setTimeout(()=>window.scrollTo({top:0,behavior:'smooth'}), 10);
   }
 
   function vehiclesHtml(){
@@ -884,8 +1008,10 @@
   }
 
   function tasksHtml(){
-    return `<div class="ops-card"><h3>Tasks</h3>${canMaintain()?manualTaskFormHtml():''}${taskTableHtml()}</div>${state.openTaskId ? taskDetailHtml(state.openTaskId) : ''}`;
+    const label = state.taskQuickFilter ? `<span class="badge">Filtered: ${esc(taskQuickFilterLabel())}</span> <button class="ops-btn ghost" type="button" data-ops-action="clearTaskFilter">Clear filter</button>` : '';
+    return `<div class="ops-card"><div class="ops-section-title"><h3>Tasks</h3><div>${label}</div></div>${canMaintain()?manualTaskFormHtml():''}${taskTableHtml()}</div>${state.openTaskId ? taskDetailHtml(state.openTaskId) : ''}`;
   }
+  function taskQuickFilterLabel(){ return ({open:'Open tasks', waiting:'Waiting on parts/someone'}[state.taskQuickFilter] || state.taskQuickFilter || 'Filtered'); }
   function manualTaskFormHtml(){
     return `<details><summary><strong>Add manual task</strong></summary><form id="opsManualTaskForm" class="ops-form" style="margin-top:.8rem">
       <label>Target type<select id="opsManualTargetType"><option value="washing_equipment">Washing equipment</option><option value="vehicle">Vehicle</option></select></label>
@@ -904,7 +1030,10 @@
     return rows.map(t=>`<div class="ops-step"><strong>${esc(t.title)}</strong><br>${statusPill(t.status)} ${statusPill(t.priority)}<br><span class="ops-subtle">${esc(targetName(t))} · Due ${nzDate(t.due_date)}</span></div>`).join('');
   }
   function taskTableHtml(){
-    const rows = state.tasks.slice().sort((a,b)=> statusRank(a.status)-statusRank(b.status) || String(a.due_date||'9999').localeCompare(String(b.due_date||'9999')));
+    let rows = state.tasks.slice();
+    if(state.taskQuickFilter === 'open') rows = rows.filter(t => !['Completed','Deferred'].includes(t.status));
+    if(state.taskQuickFilter === 'waiting') rows = rows.filter(t => ['Waiting on Parts','Waiting on Someone'].includes(t.status));
+    rows = rows.sort((a,b)=> statusRank(a.status)-statusRank(b.status) || String(a.due_date||'9999').localeCompare(String(b.due_date||'9999')));
     if(!rows.length) return '<p class="ops-subtle">No tasks yet.</p>';
     return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Status</th><th>Priority</th><th>Task</th><th>Target</th><th>Source</th><th>Due</th><th>Actions</th></tr>${rows.map(t=>`<tr><td>${statusPill(t.status)}</td><td>${statusPill(t.priority)}</td><td><strong>${esc(t.title)}</strong><br><span class="ops-subtle">${esc(t.description||'')}</span></td><td>${esc(targetName(t))}</td><td>${esc(t.source_type)}</td><td>${nzDate(t.due_date)}</td><td><button class="ops-btn ghost" data-ops-open-task="${t.id}">Open</button></td></tr>`).join('')}</table></div>`;
   }
@@ -935,7 +1064,8 @@
   }
 
   function schedulesHtml(){
-    return `<div class="ops-card"><h3>Preventive maintenance</h3><p class="ops-subtle">Use standard templates for water blaster engines, pumps, hose reels and unloaders, or add a standalone schedule.</p>${canMaintain()?standardMaintenanceHtml()+scheduleFormHtml():''}${scheduleTableHtml()}${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" data-ops-action="generateDueTasks">Generate due tasks</button></div>':''}</div>`;
+    const label = state.scheduleQuickFilter === 'due' ? `<span class="badge">Filtered: Due/overdue</span> <button class="ops-btn ghost" type="button" data-ops-action="clearScheduleFilter">Clear filter</button>` : '';
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Use standard templates for water blaster engines, pumps, hose reels and unloaders, or add a standalone schedule.</p></div><div>${label}</div></div>${canMaintain()?standardMaintenanceHtml()+scheduleFormHtml():''}${scheduleTableHtml()}${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" data-ops-action="generateDueTasks">Generate due tasks</button></div>':''}</div>`;
   }
   function standardProcedures(){
     const names = ['Engine pre-start inspection','Engine oil level check','Engine oil change','Air filter check/replacement','Spark plug inspection/replacement','Fuel tank water/grit removal with syringe','Fuel line and leak inspection','Pump oil level and condition check','Pump oil change','Pump leak and fitting check','Unloader valve check','Hose reel inspection','Trigger gun and lance inspection','Quick-connect fitting and O-ring replacement','Nozzle inspection and replacement','End-of-day rinse-down and storage procedure'];
@@ -959,8 +1089,10 @@
     </form></details>`;
   }
   function scheduleTableHtml(){
-    if(!state.schedules.length) return '<p class="ops-subtle">No preventive maintenance schedules yet.</p>';
-    return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment</th><th>Procedure</th><th>Frequency</th><th>Next due</th><th>Status</th></tr>${state.schedules.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name||'Unknown')}</td><td>${esc(p?.name||'Unknown')}</td><td>${esc(s.frequency_days||p?.frequency_days||'—')} days</td><td>${nzDate(s.next_due_at)}</td><td>${scheduleIsDue(s)?'<span class="ops-pill ops-bad">Due</span>':'<span class="ops-pill ops-ok">Scheduled</span>'}</td></tr>`; }).join('')}</table></div>`;
+    let scheduleRows = state.schedules.slice();
+    if(state.scheduleQuickFilter === 'due') scheduleRows = scheduleRows.filter(scheduleIsDue);
+    if(!scheduleRows.length) return '<p class="ops-subtle">No preventive maintenance schedules match the current filter.</p>';
+    return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment</th><th>Procedure</th><th>Frequency</th><th>Next due</th><th>Status</th></tr>${scheduleRows.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name||'Unknown')}</td><td>${esc(p?.name||'Unknown')}</td><td>${esc(s.frequency_days||p?.frequency_days||'—')} days</td><td>${nzDate(s.next_due_at)}</td><td>${scheduleIsDue(s)?'<span class="ops-pill ops-bad">Due</span>':'<span class="ops-pill ops-ok">Scheduled</span>'}</td></tr>`; }).join('')}</table></div>`;
   }
   function scheduleIsDue(s){
     if(s.is_active === false) return false;
@@ -1150,6 +1282,11 @@
 
   function bindRenderedEvents(){
     document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
+    document.querySelectorAll('[data-ops-shortcut]').forEach(card => {
+      const go = () => handleDashboardShortcut(card.dataset.opsShortcut);
+      card.addEventListener('click', go);
+      card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } });
+    });
     byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
     byId('opsWashingForm')?.addEventListener('submit', saveWashing);
     byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
@@ -1180,6 +1317,8 @@
     if(action === 'legacyAdminTools'){ openLegacyAdminTools(); }
     if(action === 'legacyUserTools'){ openLegacyUserTools(); }
     if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
+    if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
+    if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; render(); }
   }
 
   async function saveVehicle(e){
@@ -1621,6 +1760,8 @@
     }
     refreshCertificateTypeCountsV405();
     reorderCertificateGenerateStep();
+    enhanceQualificationCertificatePanel();
+    installShortCertificateNumberPatch();
   }
 
   function refreshTopUserSummary(){
@@ -1648,9 +1789,10 @@
   function boot(){
     injectTab();
     installModulePortal();
+    installShortCertificateNumberPatch();
     installCertificateV405Patch();
     initSupabase().catch(err => { state.lastError = err.message; render(); });
-    window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state, setAssetSearch: v => { state.assetSearch = v || ''; render(); }, openQualificationFile };
+    window.SWOperationsV4 = { refresh: loadAll, show: showOperations, state, setAssetSearch: v => { state.assetSearch = v || ''; render(); }, openQualificationFile, generateQualificationCertificate, handleDashboardShortcut };
     setupLogoHomeClick();
   }
 

@@ -1,0 +1,21 @@
+V4.0.10 Test Plan
+
+1. Load the app at ?v=4.0.10 and hard refresh.
+2. Confirm the app opens to the module Home dashboard.
+3. Confirm clicking/tapping the Spray & Wash app icon returns to Home from each module.
+4. Confirm Height Equipment tab styling is visually aligned with other modules.
+5. In Certificates, generate a certificate for a selected equipment item.
+6. Confirm the new certificate number is shorter/readable.
+7. In Height Equipment > Inspector Qualifications, ensure at least one qualification exists.
+8. In Certificates, use Inspector Qualification Certificate.
+9. Confirm the qualification certificate opens as a printable page.
+10. In Ops Management Dashboard, click each coloured card:
+    - Vehicles due/overdue
+    - Washing gear due/overdue
+    - Open tasks
+    - Waiting on parts
+    - Preventive services due
+11. Confirm each card opens the relevant tab with an appropriate filter.
+12. Confirm Vehicle Checks still opens the Vehicle Inspection Checklist only.
+13. Confirm Admin module is only visible to Admin users.
+14. Confirm existing Height Equipment records and certificate history still load.

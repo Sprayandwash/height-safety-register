@@ -1,0 +1,15 @@
+V4.0.10 - Certificate & Dashboard Routing Polish
+
+- Shortened certificate number format for newly generated equipment certificates.
+- Added Inspector Qualification Certificate generator in Certificates.
+- Added printable qualification certificate output using saved inspector qualification records.
+- Added clickable Ops Management dashboard cards/icons:
+  - Vehicles due/overdue -> Assets filtered to vehicle due items.
+  - Washing gear due/overdue -> Assets filtered to due washing equipment.
+  - Open tasks -> Tasks filtered to open work.
+  - Waiting on parts -> Tasks filtered to waiting items.
+  - Preventive services due -> Preventive Maintenance filtered to due schedules.
+- Standardised tab/button styling so Height module navigation better matches the newer modules.
+- Kept certificate selected-item generation fix from V4.0.7.
+- Kept Admin/Assets layout polish from V4.0.8 and V4.0.9.
+- No Supabase schema changes required beyond V4.0.9.
