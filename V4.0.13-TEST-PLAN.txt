@@ -1,0 +1,54 @@
+V4.0.13 Test Plan
+
+Before testing
+- Run the V4.0.13 SQL migration.
+- Replace index.html, operations-v4.js and service-worker.js.
+- Hard refresh with ?v=4.0.13.
+
+Core smoke tests
+1. App loads and header shows Version 4.0.13.
+2. Home dashboard opens.
+3. Height Equipment opens.
+4. Vehicle Checks opens.
+5. Ops Management opens.
+6. Admin opens for Admin users only.
+7. Existing Height Equipment register still loads.
+8. Existing Vehicle Inspection Checklist can still be submitted.
+
+Certificates
+1. Open Height Equipment > Certificates.
+2. Confirm certificate history list is not shown.
+3. Confirm certificate selection has filters and keyword search.
+4. Filter by equipment type/status/search and confirm items update.
+5. Select one or more items with inspection history.
+6. Generate certificates from the final Step 4 button.
+7. Confirm certificate numbers are shorter and generated automatically.
+8. Generate Inspector Qualification Certificate and confirm dropdown lists inspector names only.
+
+Assets
+1. Open Ops Management > Assets.
+2. Add or edit a vehicle and attach a photo.
+3. Save and confirm there is no database error.
+4. Add or edit a washing equipment item and attach a photo.
+5. Save and confirm there is no database error.
+
+Inspection History
+1. Open Ops Management > Inspection History.
+2. Click a row.
+3. Confirm a read-only inspection record opens showing details, checklist answers, photos and generated tasks.
+4. Close the record.
+
+Preventive Maintenance
+1. Open Ops Management > Preventive Maintenance.
+2. Confirm the tabs show Due Now, Schedules, Task Templates and Completed Services.
+3. Confirm Due Now is the default operational view.
+4. Confirm Schedules shows setup tools and schedules.
+5. Confirm Task Templates lists preventive maintenance templates.
+6. Confirm Completed Services lists completed scheduled maintenance tasks where present.
+7. If a schedule is due, use Create task and confirm it appears in Tasks.
+
+Regression checks
+1. Admin user permissions still save.
+2. Height Users/Admin legacy controls remain removed.
+3. Certificate selected-items workflow from V4.0.7 remains working.
+4. config.js was not replaced.

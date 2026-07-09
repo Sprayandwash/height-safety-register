@@ -1,0 +1,23 @@
+V4.0.13 - Certificates, Assets and Preventive Maintenance Redesign
+
+Changes
+- Simplified inspector qualification certificate generation.
+- Inspector qualification certificate dropdown now shows inspector names only.
+- Removed user-facing certificate number style controls.
+- Certificate numbers now generate automatically in a shorter background format.
+- Removed the certificate history list from the certificate workflow.
+- Reworked certificate item selection into filter/search controls.
+- Added optional asset photos to vehicle and washing equipment add/edit workflows.
+- Added read-only Operations inspection records from Inspection History rows.
+- Redesigned Preventive Maintenance UI around:
+  - Due Now
+  - Schedules
+  - Task Templates
+  - Completed Services
+- Added create-task action from due preventive maintenance schedules.
+- Admin section now renders full-width areas rather than narrow vertical columns.
+
+Database
+- Adds optional photo_path and photo_file_name columns to operations_vehicles and operations_washing_equipment.
+- No destructive table or column changes.
+- No storage bucket changes.

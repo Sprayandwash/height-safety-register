@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.12
+/* Spray & Wash Operations App V4.0.13
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.12';
+  const VERSION = '4.0.13';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -1854,6 +1854,308 @@
     } else {
       el.textContent = 'Not signed in';
     }
+  }
+
+
+
+  // V4.0.13 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+  function certFilterState(){
+    return {
+      type: byId('certFilterType')?.value || '',
+      status: byId('certFilterStatus')?.value || '',
+      result: byId('certFilterResult')?.value || '',
+      due: byId('certFilterDue')?.value || '',
+      q: String(byId('certFilterSearch')?.value || '').trim().toLowerCase()
+    };
+  }
+  function certPairHaystack(pair){
+    const e = pair.equipment || {}; const i = pair.inspection || {};
+    return [e.serial,e.type,e.manufacturer,e.model,e.notes,e.status,i.inspector,i.inspection_date,i.result].join(' ').toLowerCase();
+  }
+  async function renderCertificateFilterSelector(){
+    const list = byId('certItemList');
+    if(!list || !state.sb) return;
+    const filters = certFilterState();
+    try{
+      const { equipmentRows, inspectionRows } = await certFetchHeightData();
+      const activeRows = equipmentRows.filter(certIsActiveEquipment);
+      const allPairs = certLatestInspectionMap(activeRows, inspectionRows);
+      const types = uniqueValues(activeRows.map(e=>e.type));
+      const statuses = uniqueValues(activeRows.map(e=>e.status));
+      let panel = byId('certFilterPanel');
+      if(!panel){
+        panel = document.createElement('div');
+        panel.id = 'certFilterPanel';
+        panel.className = 'ops-cert-search';
+        panel.innerHTML = '<h3 style="margin-top:0">2. Filter and select items</h3><div class="ops-filter-grid"><label>Equipment type<select id="certFilterType"></select></label><label>Status<select id="certFilterStatus"></select></label><label>Inspection result<select id="certFilterResult"><option value="">All results</option><option value="Pass">Pass</option><option value="Fail - Repair Required">Fail - Repair Required</option><option value="Fail - Remove From Service / Disposal">Fail - Remove From Service / Disposal</option></select></label><label>Due status<select id="certFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="certFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="ops-actions"><button class="ops-btn ghost" type="button" id="certFilterClear">Clear filters</button><button class="ops-btn ghost" type="button" id="certSelectVisible">Select visible items with inspections</button><button class="ops-btn ghost" type="button" id="certClearSelected">Clear selected</button></div><div id="certFilterCount" class="muted" style="margin-top:6px"></div>';
+        const panelParent = list.parentElement || byId('certItemsPanel') || byId('certificates');
+        panelParent.insertBefore(panel, list);
+      }
+      const typeSel = byId('certFilterType');
+      if(typeSel){
+        const old = typeSel.value || filters.type;
+        typeSel.innerHTML = '<option value="">All equipment types</option>' + types.map(t=>`<option value="${esc(t)}" ${old===t?'selected':''}>${esc(t)}</option>`).join('');
+      }
+      const statusSel = byId('certFilterStatus');
+      if(statusSel){
+        const old = statusSel.value || filters.status;
+        statusSel.innerHTML = '<option value="">All statuses</option>' + statuses.map(t=>`<option value="${esc(t)}" ${old===t?'selected':''}>${esc(t)}</option>`).join('');
+      }
+      const filterNow = certFilterState();
+      let pairs = allPairs.filter(pair => {
+        const e = pair.equipment || {}; const i = pair.inspection || null;
+        if(filterNow.type && certTypeNorm(e.type) !== certTypeNorm(filterNow.type)) return false;
+        if(filterNow.status && String(e.status || '') !== filterNow.status) return false;
+        if(filterNow.result && (!i || String(i.result || '') !== filterNow.result)) return false;
+        if(filterNow.due === 'due' && !certIsDueFromPair(pair)) return false;
+        if(filterNow.due === 'ok' && certIsDueFromPair(pair)) return false;
+        if(filterNow.due === 'no_inspection' && i) return false;
+        if(filterNow.q && !certPairHaystack(pair).includes(filterNow.q)) return false;
+        return true;
+      });
+      list.innerHTML = pairs.map(pair => {
+        const e = pair.equipment || {}; const i = pair.inspection;
+        const disabled = i ? '' : 'disabled';
+        const disabledText = i ? '' : ' <span class="ops-pill ops-warn">No inspection history</span>';
+        return `<label class="certItemCheckRow ops-cert-row"><input type="checkbox" class="certItemCheck" value="${esc(e.id)}" ${disabled}> <span><strong>${esc(e.serial || 'No serial')} ${esc(e.type || '')}</strong><br><span class="muted">${esc(e.manufacturer || '')} ${esc(e.model || '')} · ${esc(e.status || '')} · Latest: ${i ? nzDate(i.inspection_date) + ' ' + displayStatusLabel(i.result) : 'none'}</span>${disabledText}</span></label>`;
+      }).join('') || '<p class="muted">No items match the current filters.</p>';
+      const count = byId('certFilterCount');
+      if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown; ${pairs.filter(p=>p.inspection).length} with inspection history.`;
+    }catch(err){
+      list.innerHTML = `<div class="ops-error">Could not load certificate items: ${esc(err.message || err)}</div>`;
+    }
+  }
+  function hideCertificateHistoryPanel(){
+    const history = byId('certificateHistory')?.closest('.card');
+    if(history) history.style.display = 'none';
+  }
+  function enhanceCertificateSelector(){
+    hideCertificateHistoryPanel();
+    const mode = byId('certMode');
+    if(mode) mode.value = 'selected_items';
+    const oldSearch = byId('certEquipmentSearchBox');
+    if(oldSearch) oldSearch.style.display = 'none';
+    renderCertificateFilterSelector();
+    reorderCertificateGenerateStep();
+    enhanceQualificationCertificatePanel();
+  }
+  function qualificationNames(){
+    const seen = new Set();
+    return (state.qualifications || []).filter(q=>q.active !== false && q.inspector_name).map(q=>q.inspector_name).filter(name => { const key = certNorm(name); if(seen.has(key)) return false; seen.add(key); return true; }).sort((a,b)=>a.localeCompare(b));
+  }
+  function latestQualificationForInspector(name){
+    const key = certNorm(name);
+    return (state.qualifications || []).filter(q=>q.active !== false && certNorm(q.inspector_name) === key).sort((a,b)=>String(b.expiry_date||'9999').localeCompare(String(a.expiry_date||'9999')) || String(b.issue_date||'').localeCompare(String(a.issue_date||'')))[0] || null;
+  }
+  function qualificationCertificatePanelHtml(){
+    const names = qualificationNames();
+    const options = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    return `<h2>Inspector Qualification Certificate</h2>
+      <p class="muted">Generate a printable certificate/summary for a saved height inspector qualification. Certificate numbers are generated automatically.</p>
+      <div class="grid two">
+        <div><label>Inspector</label><select id="qualCertSelect"><option value="">Select inspector</option>${options}</select></div>
+      </div>
+      <div class="row"><button type="button" class="primary" onclick="SWOperationsV4.generateQualificationCertificate()">Generate inspector qualification certificate</button></div>
+      ${names.length ? '' : '<p class="muted">No qualifications saved yet. Add qualifications under Height Equipment - Inspector Qualifications first.</p>'}`;
+  }
+  async function generateQualificationCertificate(){
+    if(!hasAny(['Admin','Office / Reports','Certificate Approver','Equipment Manager'])) return alert('You do not have permission to generate qualification certificates.');
+    const name = byId('qualCertSelect')?.value || '';
+    if(!name) return alert('Select an inspector first.');
+    const q = latestQualificationForInspector(name);
+    if(!q) return alert('Qualification record not found for this inspector.');
+    const certNo = shortCertificateNumber(q.reference_number || q.inspector_name || 'QUAL');
+    let fileUrl = '';
+    if(q.storage_path){
+      try{ const r = await state.sb.storage.from(PHOTO_BUCKET).createSignedUrl(q.storage_path, 3600); if(!r.error) fileUrl = r.data.signedUrl; }catch(e){ console.warn('Qualification file link skipped', e); }
+    }
+    const html = qualificationCertificateHtml(q, certNo, fileUrl);
+    const w = window.open('', '_blank');
+    if(!w){
+      const blob = new Blob([html], {type:'text/html'}); const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `inspector-qualification-${certNo}.html`; a.click(); URL.revokeObjectURL(a.href);
+      alert('Popup blocked. The certificate HTML file has been downloaded instead.'); return;
+    }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+  function shortCertificateNumber(seed){
+    const yy = String(new Date().getFullYear()).slice(-2);
+    const suffix = String(Date.now()).slice(-4);
+    return `SW-${yy}-${suffix}`;
+  }
+  async function uploadAssetPhoto(file, kind, id){
+    if(!file || !id) return null;
+    const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `operations-assets/${kind}/${id}/${Date.now()}-${clean}`;
+    const up = await state.sb.storage.from(PHOTO_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false, contentType:file.type || 'image/jpeg' });
+    if(up.error){ alert('Asset photo upload failed: ' + up.error.message); return null; }
+    return { path, name: file.name };
+  }
+  function vehicleFormHtml(){
+    const v = state.vehicles.find(x=>x.id===state.editingVehicleId) || {};
+    return `<form id="opsVehicleForm" class="ops-form">
+      <input type="hidden" id="opsVehicleId" value="${esc(v.id||'')}">
+      <label>Rego *<input id="opsVehicleRego" required value="${esc(v.rego||'')}"></label>
+      <label>Name<input id="opsVehicleName" value="${esc(v.name||'')}"></label>
+      <label>Make/model<input id="opsVehicleMake" value="${esc(v.make_model||'')}"></label>
+      <label>Year<input id="opsVehicleYear" type="number" value="${esc(v.year||'')}"></label>
+      <label>Status<select id="opsVehicleStatus">${optionList(['Active','Inactive','Sold','Retired'], v.status||'Active')}</select></label>
+      <label>Assigned driver<input id="opsVehicleDriver" value="${esc(v.assigned_driver||'')}"></label>
+      <label>Inspection frequency days<input id="opsVehicleFreq" type="number" min="1" value="${esc(v.inspection_frequency_days||14)}"></label>
+      <label>Asset photo<input id="opsVehiclePhoto" type="file" accept="image/*"></label>
+      ${v.photo_path ? `<div class="ops-span-2"><span class="ops-pill ops-ok">Photo saved</span></div>` : ''}
+      <label class="ops-span-2">Notes<textarea id="opsVehicleNotes">${esc(v.notes||'')}</textarea></label>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save vehicle</button><button class="ops-btn ghost" type="button" data-ops-action="clearVehicle">Clear</button></div>
+    </form>`;
+  }
+  function washingFormHtml(){
+    const w = state.washEquipment.find(x=>x.id===state.editingWashId) || {};
+    return `<form id="opsWashingForm" class="ops-form">
+      <input type="hidden" id="opsWashId" value="${esc(w.id||'')}">
+      <label>Name *<input id="opsWashName" required value="${esc(w.name||'')}"></label>
+      <label>Type<input id="opsWashType" value="${esc(w.equipment_type||'Water Blaster')}"></label>
+      <label>Serial number<input id="opsWashSerial" value="${esc(w.serial_number||'')}"></label>
+      <label>Assigned vehicle<select id="opsWashVehicle"><option value="">Not assigned</option>${state.vehicles.map(v=>`<option value="${v.id}" ${v.id===w.assigned_vehicle_id?'selected':''}>${esc(v.rego || v.name)}</option>`).join('')}</select></label>
+      <label>Status<select id="opsWashStatus">${optionList(['Active','Inactive','Retired','Quarantined'], w.status||'Active')}</select></label>
+      <label>Inspection frequency days<input id="opsWashFreq" type="number" min="1" value="${esc(w.inspection_frequency_days||14)}"></label>
+      <label>Engine make/model<input id="opsWashEngine" value="${esc(w.engine_make_model||'')}"></label>
+      <label>Pump make/model<input id="opsWashPump" value="${esc(w.pump_make_model||'')}"></label>
+      <label>Asset photo<input id="opsWashPhoto" type="file" accept="image/*"></label>
+      ${w.photo_path ? `<div class="ops-span-2"><span class="ops-pill ops-ok">Photo saved</span></div>` : ''}
+      <label class="ops-span-2">Notes<textarea id="opsWashNotes">${esc(w.notes||'')}</textarea></label>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save washing equipment</button><button class="ops-btn ghost" type="button" data-ops-action="clearWash">Clear</button></div>
+    </form>`;
+  }
+  async function saveVehicle(e){
+    e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save vehicles.');
+    const id = byId('opsVehicleId').value;
+    const row = { rego: byId('opsVehicleRego').value.trim(), name: byId('opsVehicleName').value.trim() || null, make_model: byId('opsVehicleMake').value.trim() || null, year: byId('opsVehicleYear').value ? Number(byId('opsVehicleYear').value) : null, status: byId('opsVehicleStatus').value, assigned_driver: byId('opsVehicleDriver').value.trim() || null, inspection_frequency_days: Number(byId('opsVehicleFreq').value || 14), notes: byId('opsVehicleNotes').value.trim() || null, created_by: state.user.id };
+    if(!row.rego) return alert('Rego is required.');
+    let r = id ? await state.sb.from('operations_vehicles').update(row).eq('id', id).select().single() : await state.sb.from('operations_vehicles').insert(row).select().single();
+    if(r.error) return alert(r.error.message);
+    const file = byId('opsVehiclePhoto')?.files?.[0] || null;
+    if(file){ const up = await uploadAssetPhoto(file, 'vehicles', r.data.id); if(up){ const ur = await state.sb.from('operations_vehicles').update({photo_path: up.path, photo_file_name: up.name}).eq('id', r.data.id); if(ur.error) alert('Vehicle saved, but photo path failed: ' + ur.error.message); } }
+    state.editingVehicleId=''; await loadAll();
+  }
+  async function saveWashing(e){
+    e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save washing equipment.');
+    const id = byId('opsWashId').value;
+    const row = { name: byId('opsWashName').value.trim(), equipment_type: byId('opsWashType').value.trim() || 'Water Blaster', serial_number: byId('opsWashSerial').value.trim() || null, assigned_vehicle_id: byId('opsWashVehicle').value || null, status: byId('opsWashStatus').value, inspection_frequency_days: Number(byId('opsWashFreq').value || 14), engine_make_model: byId('opsWashEngine').value.trim() || null, pump_make_model: byId('opsWashPump').value.trim() || null, notes: byId('opsWashNotes').value.trim() || null, created_by: state.user.id };
+    if(!row.name) return alert('Name is required.');
+    let r = id ? await state.sb.from('operations_washing_equipment').update(row).eq('id', id).select().single() : await state.sb.from('operations_washing_equipment').insert(row).select().single();
+    if(r.error) return alert(r.error.message);
+    const file = byId('opsWashPhoto')?.files?.[0] || null;
+    if(file){ const up = await uploadAssetPhoto(file, 'washing-equipment', r.data.id); if(up){ const ur = await state.sb.from('operations_washing_equipment').update({photo_path: up.path, photo_file_name: up.name}).eq('id', r.data.id); if(ur.error) alert('Washing equipment saved, but photo path failed: ' + ur.error.message); } }
+    if(!id && r.data) await applyDefaultSchedulesForEquipment(r.data);
+    state.editingWashId=''; await loadAll();
+  }
+  function historyHtml(){
+    const rows = state.inspections.slice(0,100);
+    const detail = state.openInspectionId ? inspectionRecordHtml(state.openInspectionId) : '';
+    if(!rows.length) return '<div class="ops-card"><h3>Inspection history</h3><p>No Operations inspections submitted yet.</p></div>';
+    return `<div class="ops-card"><h3>Inspection history</h3><p class="ops-subtle">Click any row to open a read-only inspection record.</p><div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Target</th><th>Inspector</th><th>Result</th><th>Problems</th><th>Notes</th></tr>${rows.map(i=>{ const problems=state.answers.filter(a=>a.inspection_id===i.id && a.is_problem).length; return `<tr class="ops-click-row" role="button" tabindex="0" data-ops-open-inspection="${esc(i.id)}"><td>${nzDate(i.inspection_date)}</td><td>${esc(targetName(i))}</td><td>${esc(i.inspector_name||i.submitted_by_email||'')}</td><td>${statusPill(i.overall_result)}</td><td>${problems}</td><td>${esc(i.notes||'')}</td></tr>`; }).join('')}</table></div></div>${detail}`;
+  }
+  function inspectionRecordHtml(id){
+    const i = state.inspections.find(x=>String(x.id)===String(id));
+    if(!i) return '';
+    const answers = state.answers.filter(a=>String(a.inspection_id)===String(id));
+    const photos = state.photos.filter(p=>String(p.inspection_id)===String(id));
+    const tasks = state.tasks.filter(t=>String(t.source_inspection_id)===String(id));
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Inspection record</h3><p class="ops-subtle">Read-only record from ${esc(nzDate(i.inspection_date))}</p></div><button class="ops-btn ghost" type="button" data-ops-action="closeInspectionRecord">Close record</button></div><div class="ops-grid two"><div><strong>Target</strong><br>${esc(targetName(i))}</div><div><strong>Inspector</strong><br>${esc(i.inspector_name || i.submitted_by_email || '—')}</div><div><strong>Result</strong><br>${statusPill(i.overall_result)}</div><div><strong>Odometer</strong><br>${esc(i.odometer || '—')}</div></div><h3>Checklist answers</h3>${answers.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Question</th><th>Answer</th><th>Issue?</th><th>Notes</th></tr>${answers.map(a=>`<tr><td>${esc(a.question_text)}</td><td>${esc(displayStatusLabel(a.answer_value))}</td><td>${a.is_problem ? statusPill('Issue to report') : statusPill('Completed OK')}</td><td>${esc(a.notes || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No answers recorded.</p>'}<h3>Photos</h3>${photos.length ? photos.map(p=>`<div class="ops-step"><strong>${esc(p.caption || 'Inspection photo')}</strong><br><span class="ops-subtle">${esc(p.file_name || p.storage_path || '')}</span></div>`).join('') : '<p class="ops-subtle">No photos recorded.</p>'}<h3>Tasks generated</h3>${tasks.length ? taskMiniListHtml(tasks) : '<p class="ops-subtle">No tasks generated from this inspection.</p>'}</div>`;
+  }
+  function scheduleSubnav(){
+    const current = state.pmView || (state.scheduleQuickFilter === 'due' ? 'due' : 'due');
+    const tab = (id,label) => `<button type="button" class="${current===id?'active':''}" data-ops-pm-view="${id}">${label}</button>`;
+    return `<div class="ops-nav ops-subnav">${tab('due','Due Now')}${tab('schedules','Schedules')}${tab('templates','Task Templates')}${tab('completed','Completed Services')}</div>`;
+  }
+  function schedulesHtml(){
+    const current = state.pmView || 'due';
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Daily use starts with Due Now. Use Schedules and Task Templates for setup.</p></div></div>${scheduleSubnav()}${preventiveBodyHtml(current)}</div>`;
+  }
+  function preventiveBodyHtml(view){
+    if(view === 'schedules') return `${canMaintain()?standardMaintenanceHtml()+scheduleFormHtml():''}${scheduleTableHtml()}`;
+    if(view === 'templates') return preventiveTemplatesHtml();
+    if(view === 'completed') return completedServicesHtml();
+    return dueNowPreventiveHtml();
+  }
+  function dueNowPreventiveHtml(){
+    const due = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
+    return `<div class="ops-grid four" style="margin:.8rem 0"><div class="ops-card"><span class="ops-subtle">Due / overdue</span><div class="ops-stat">${due.length}</div></div><div class="ops-card"><span class="ops-subtle">Due soon</span><div class="ops-stat">${state.schedules.filter(s=>s.next_due_at && daysUntil(s.next_due_at)>0 && daysUntil(s.next_due_at)<=14).length}</div></div><div class="ops-card"><span class="ops-subtle">Active schedules</span><div class="ops-stat">${state.schedules.filter(s=>s.is_active!==false).length}</div></div><div class="ops-card"><span class="ops-subtle">Completed this month</span><div class="ops-stat">${completedServiceRows().length}</div></div></div>${due.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Service</th><th>Due</th><th>Guide</th><th>Action</th></tr>${due.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name || 'Unknown')}</td><td><strong>${esc(p?.name || 'Unknown')}</strong><br><span class="ops-subtle">${esc(p?.category || '')}</span></td><td>${nzDate(s.next_due_at)} ${targetDueStatus(daysUntil(s.next_due_at))}</td><td>${p ? 'Guide available' : '—'}</td><td>${canMaintain()?`<button class="ops-btn primary" data-ops-create-schedule-task="${esc(s.id)}">Create task</button>`:''}</td></tr>`; }).join('')}</table></div>` : '<p class="ops-subtle">No preventive services are due right now.</p>'}<div class="ops-actions"><button class="ops-btn ghost" data-ops-action="pmSchedules">Manage schedules</button><button class="ops-btn ghost" data-ops-action="pmTemplates">Manage templates</button><button class="ops-btn ghost" data-ops-action="pmCompleted">Completed services</button></div>`;
+  }
+  function preventiveTemplatesHtml(){
+    const rows = state.procedures.filter(p=>p.is_active!==false).sort((a,b)=>String(a.category||'').localeCompare(String(b.category||'')) || String(a.name||'').localeCompare(String(b.name||'')));
+    return `<h3>Task templates</h3><p class="ops-subtle">Templates define repeatable preventive maintenance jobs. Apply selected templates from the Schedules tab.</p>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Template</th><th>Category</th><th>Default frequency</th><th>Skill</th><th>Guide</th></tr>${rows.map(p=>`<tr><td><strong>${esc(p.name)}</strong><br><span class="ops-subtle">${esc(p.description || '')}</span></td><td>${esc(p.category || '—')}</td><td>${esc(p.frequency_days || '—')} days</td><td>${esc(p.skill_level || '—')}</td><td>${state.procedureSteps.some(s=>s.procedure_id===p.id) ? 'Steps saved' : 'No steps yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No task templates found.</p>'}`;
+  }
+  function completedServiceRows(){
+    const firstDay = new Date(); firstDay.setDate(1); const start = firstDay.toISOString().slice(0,10);
+    return state.tasks.filter(t => t.status === 'Completed' && (t.procedure_id || t.schedule_id) && String(t.completed_at || t.updated_at || t.created_at || '').slice(0,10) >= start);
+  }
+  function completedServicesHtml(){
+    const rows = state.tasks.filter(t => t.status === 'Completed' && (t.procedure_id || t.schedule_id)).sort((a,b)=>String(b.completed_at||b.updated_at||b.created_at||'').localeCompare(String(a.completed_at||a.updated_at||a.created_at||'')));
+    return `<h3>Completed services</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Asset</th><th>Service</th><th>Notes</th></tr>${rows.map(t=>`<tr><td>${nzDate(t.completed_at || t.updated_at || t.created_at)}</td><td>${esc(targetName(t))}</td><td>${esc(t.title)}</td><td>${esc(t.completion_notes || t.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No completed preventive services yet.</p>'}`;
+  }
+  async function createTaskFromSchedule(scheduleId){
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can create preventive maintenance tasks.');
+    const s = state.schedules.find(x=>String(x.id)===String(scheduleId));
+    if(!s) return alert('Schedule not found.');
+    const p = state.procedures.find(x=>x.id===s.procedure_id) || {};
+    const w = state.washEquipment.find(x=>x.id===s.washing_equipment_id) || {};
+    const row = { source_type:'Scheduled', procedure_id:s.procedure_id, schedule_id:s.id, target_type:'washing_equipment', washing_equipment_id:s.washing_equipment_id, title:p.name || 'Preventive maintenance', description:p.description || 'Scheduled preventive maintenance.', status:'Open', priority:p.default_priority || 'Medium', due_date:s.next_due_at || today(), created_by:state.user.id };
+    const r = await state.sb.from('operations_maintenance_tasks').insert(row);
+    if(r.error) return alert(r.error.message);
+    alert(`Task created for ${w.name || 'equipment'}.`);
+    state.currentView = 'tasks'; state.taskQuickFilter = 'open'; await loadAll();
+  }
+  function bindRenderedEvents(){
+    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
+    document.querySelectorAll('[data-ops-pm-view]').forEach(btn => btn.addEventListener('click', () => { state.pmView = btn.dataset.opsPmView; state.scheduleQuickFilter=''; render(); }));
+    document.querySelectorAll('[data-ops-shortcut]').forEach(card => { const go = () => handleDashboardShortcut(card.dataset.opsShortcut); card.addEventListener('click', go); card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
+    byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
+    byId('opsWashingForm')?.addEventListener('submit', saveWashing);
+    byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
+    byId('opsManualTaskForm')?.addEventListener('submit', createManualTask);
+    byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
+    byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
+    byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
+    byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
+    document.querySelectorAll('[data-ops-save-user-roles]').forEach(b => b.addEventListener('click', () => saveActualUserRoles(b.dataset.opsSaveUserRoles)));
+    document.querySelectorAll('[data-ops-open-inspection]').forEach(r => { const go = () => { state.openInspectionId = r.dataset.opsOpenInspection; render(); }; r.addEventListener('click', go); r.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
+    document.querySelectorAll('[data-ops-create-schedule-task]').forEach(b => b.addEventListener('click', () => createTaskFromSchedule(b.dataset.opsCreateScheduleTask)));
+    ['certFilterType','certFilterStatus','certFilterResult','certFilterDue','certFilterSearch'].forEach(id => byId(id)?.addEventListener(id==='certFilterSearch'?'input':'change', renderCertificateFilterSelector));
+    byId('certFilterClear')?.addEventListener('click', () => { ['certFilterType','certFilterStatus','certFilterResult','certFilterDue','certFilterSearch'].forEach(id=>{ if(byId(id)) byId(id).value=''; }); renderCertificateFilterSelector(); });
+    byId('certSelectVisible')?.addEventListener('click', () => document.querySelectorAll('#certItemList .certItemCheck:not(:disabled)').forEach(i=>i.checked=true));
+    byId('certClearSelected')?.addEventListener('click', () => document.querySelectorAll('#certItemList .certItemCheck').forEach(i=>i.checked=false));
+    byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
+    byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
+    byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
+    byId('opsAssetFilterDue')?.addEventListener('change', e => { state.assetFilterDue = e.target.value; render(); });
+    byId('opsAssetFilterTasks')?.addEventListener('change', e => { state.assetFilterTasks = e.target.value; render(); });
+    document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
+    document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
+    document.querySelectorAll('[data-ops-open-task]').forEach(b => b.addEventListener('click', () => { state.openTaskId = b.dataset.opsOpenTask; render(); }));
+    document.querySelectorAll('[data-ops-action]').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.opsAction)));
+  }
+  async function handleAction(action){
+    if(action === 'clearVehicle'){ state.editingVehicleId=''; render(); }
+    if(action === 'clearWash'){ state.editingWashId=''; render(); }
+    if(action === 'closeTask'){ state.openTaskId=''; render(); }
+    if(action === 'closeInspectionRecord'){ state.openInspectionId=''; render(); }
+    if(action === 'generateDueTasks'){ await generateDueTasks(); }
+    if(action === 'applyStdSelected'){ await applyStandardSchedules('selected'); }
+    if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
+    if(action === 'legacyAdminTools'){ openLegacyAdminTools(); }
+    if(action === 'legacyUserTools'){ openLegacyUserTools(); }
+    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
+    if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
+    if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; state.pmView='due'; render(); }
+    if(action === 'pmSchedules'){ state.pmView='schedules'; render(); }
+    if(action === 'pmTemplates'){ state.pmView='templates'; render(); }
+    if(action === 'pmCompleted'){ state.pmView='completed'; render(); }
+  }
+
+
+  function adminDashboardHtml(){
+    return `<div class="ops-card"><h3>Admin</h3><p class="ops-subtle">Use the sections below to manage users, permissions, settings, audit logs and backups. Admin tools open full width rather than in narrow columns.</p></div>${usersHtml()}${adminSettingsHtml()}`;
   }
 
   function boot(){
