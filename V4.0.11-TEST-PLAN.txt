@@ -1,0 +1,33 @@
+V4.0.11 Test Plan
+
+1. Install files
+- Replace index.html, operations-v4.js and service-worker.js.
+- Do not replace config.js.
+- Open ?v=4.0.11 and hard refresh.
+
+2. Height Equipment
+- Open Height Equipment.
+- Confirm tabs do NOT include Users or Admin.
+- Confirm Dashboard, Equipment, New Inspection, Due / Failed, Reports, Certificates and Qualifications remain accessible.
+
+3. Admin module
+- Return Home.
+- Open Admin.
+- Confirm Admin is visible only to Admin users.
+- Open Users & Permissions.
+- Confirm pre-load form appears.
+- Confirm signed-in users appear.
+- Confirm roles shown are only:
+  Admin, Inspector, Equipment Manager, Certificate Approver, Office / Reports, Viewer.
+- Apply a preset to a test user if safe to do so.
+- Save advanced role checkboxes if safe to do so.
+
+4. Non-admin behaviour
+- With a non-admin account, confirm Admin module is not available.
+- Confirm non-admin users cannot access user/role controls.
+
+5. Existing functions
+- Confirm Height Equipment dashboard loads.
+- Confirm Certificates still load.
+- Confirm Vehicle Checks still loads.
+- Confirm Ops Management still loads.

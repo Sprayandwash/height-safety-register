@@ -1,0 +1,17 @@
+V4.0.11 - Admin / Permissions Cleanup
+
+Fixed
+- Removed duplicate user/permission access from the Height Equipment module.
+- Fixed inconsistent permission lists by making Admin -> Users & Permissions the single visible permission UI.
+- Removed user/admin navigation from the Height Equipment tab set.
+- Redirects old Users/Admin routes into the Admin module when appropriate.
+
+Improved
+- Admin Users & Permissions now contains:
+  - User pre-load form
+  - Role preset guide
+  - Signed-in users role manager
+  - Pre-loaded users list
+- Standard role list is used consistently.
+
+No SQL migration required.
