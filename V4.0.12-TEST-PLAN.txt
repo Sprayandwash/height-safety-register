@@ -1,0 +1,27 @@
+V4.0.12 Test Plan
+
+1. App load
+- Open https://sprayandwash.github.io/height-safety-register/?v=4.0.12
+- Hard refresh with Ctrl + F5.
+- Confirm the header shows Version 4.0.12.
+
+2. Height Equipment layout
+- Open Height Equipment from Home.
+- Confirm Home button appears above the Height Equipment title.
+- Confirm the tab row contains Dashboard, Equipment, New Inspection, Due / Failed, Reports, Certificates and Qualifications only.
+- Confirm Home is not mixed into the Height tab row.
+- Confirm Users and Admin tabs are not visible.
+
+3. Admin permissions
+- Open Admin.
+- Confirm there is no permission preset dropdown.
+- Confirm there is no role preset guide.
+- Confirm pre-loaded user form uses role checkboxes.
+- Confirm signed-in users use role checkboxes.
+- Change a test user's roles, save, refresh and confirm roles persist.
+
+4. Regression checks
+- Open Vehicle Checks and confirm the vehicle checklist still loads.
+- Open Ops Management and confirm Dashboard, Assets, Inspection History, Tasks, Preventive Maintenance and Guides still load.
+- Open Height Certificates and confirm selected item certificate generation still works.
+- Confirm the app logo still returns to Home.

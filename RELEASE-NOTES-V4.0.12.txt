@@ -1,0 +1,11 @@
+V4.0.12 - Height Tabs and Admin Permissions Cleanup
+
+Changes:
+- Standardised Height Equipment tab layout by moving Home into a separate module header.
+- Height Equipment now better matches the module layout used by Vehicle Checks, Ops Management and Admin.
+- Removed confusing two-tier permission preset UI from Admin.
+- Admin now uses one canonical role checkbox set for each user.
+- Pre-loaded users are assigned permissions by checkboxes, not presets.
+- Signed-in users are assigned permissions by checkboxes, not presets.
+- Kept Admin as the only visible place for user and permission management.
+- No Supabase migration required.

@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.11
+/* Spray & Wash Operations App V4.0.12
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.11';
+  const VERSION = '4.0.12';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -134,6 +134,11 @@
       .ops-header h2 { margin:.1rem 0; }
       .ops-subtle { color:#65758b; font-size:.92rem; }
       .ops-nav { display:flex; flex-wrap:wrap; gap:.5rem; margin:1rem 0; align-items:center; }
+      .height-module-heading{margin:0 0 .8rem 0;}
+      .height-module-heading .ops-home-row{margin:0 0 .65rem 0;}
+      .height-module-heading h2{margin:.1rem 0 .1rem 0;font-size:20px;}
+      .height-module-heading .ops-subtle{font-size:.92rem;}
+      .tabs{position:static!important;top:auto!important;background:transparent!important;margin:.75rem 0 1rem 0!important;display:flex;flex-wrap:wrap;gap:.5rem!important;padding:0 0 .5rem 0!important;}
       .ops-nav button, .ops-btn { border:0; border-radius:12px; padding:11px 14px; background:#e2e8f0; color:#0f172a; font-weight:800; cursor:pointer; min-height:42px; }
       .ops-nav button.active, .ops-btn.primary { background:#0f766e; color:white; }
       .tabs { align-items:center; gap:.5rem !important; padding:6px 0 12px !important; }
@@ -187,6 +192,7 @@
       .ops-permission-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.5rem;margin-top:.5rem}
       .ops-permission-check{display:flex;gap:.45rem;align-items:center;border:1px solid #dbe3ec;border-radius:.75rem;background:#f8fafc;padding:.55rem .65rem;font-weight:800}
       .ops-permission-check input{width:auto}
+      .ops-permission-check small{display:block;color:#64748b;font-size:.76rem;font-weight:600;margin-top:.12rem}
       .ops-user-row{border:1px solid #dbe3ec;border-radius:1rem;background:#fff;padding:.9rem;margin:.75rem 0}
       .ops-user-row-head{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;align-items:flex-start}
       .ops-home-row { display:flex; justify-content:flex-start; margin-bottom:.45rem; }
@@ -282,17 +288,17 @@
   function ensureHeightHomeButton(){
     const tabs = document.querySelector('.tabs');
     if(!tabs) return;
-    let btn = byId('moduleHomeTabButton');
-    if(!btn){
-      btn = document.createElement('button');
-      btn.id = 'moduleHomeTabButton';
-      btn.type = 'button';
-      btn.className = 'tab ops-home-tab';
-      btn.textContent = '← Home';
-      btn.addEventListener('click', showModuleHome);
-      tabs.insertBefore(btn, tabs.firstChild);
+    let header = byId('heightModuleHeader');
+    if(!header){
+      header = document.createElement('div');
+      header.id = 'heightModuleHeader';
+      header.className = 'height-module-heading';
+      header.innerHTML = `<div class="ops-home-row"><button type="button" class="ops-btn ops-home-btn" id="heightHomeButton">← Home</button></div>
+        <div class="ops-module-title"><h2>Height Equipment</h2><div class="ops-subtle">Height safety register, equipment, inspections, certificates and reports</div></div>`;
+      tabs.parentNode.insertBefore(header, tabs);
+      byId('heightHomeButton')?.addEventListener('click', showModuleHome);
     }
-    btn.style.display = '';
+    header.style.display = '';
   }
 
 
@@ -480,49 +486,22 @@
     </div><div class="footer">Generated ${esc(generated)} from Spray &amp; Wash Operations. Verify against the live app before relying on a downloaded copy.</div></div></body></html>`;
   }
 
-  function enhanceLegacyUserUI(){
-    const users = byId('users');
-    if(!users) return;
-    if(!byId('opsLegacyUserNote')){
-      const firstCard = users.querySelector('.card');
-      const note = document.createElement('div');
-      note.id = 'opsLegacyUserNote';
-      note.className = 'permissionNote';
-      note.innerHTML = `<b>Tip:</b> Users and permissions now sit in the <b>Admin</b> module. The role checkbox grid below remains available for advanced/manual changes.`;
-      if(firstCard) firstCard.insertBefore(note, firstCard.children[1] || null);
-    }
-    users.querySelectorAll('.userCard .roleGrid').forEach((grid, idx) => {
-      if(grid.closest('details.ops-legacy-roles')) return;
-      const details = document.createElement('details');
-      details.className = 'ops-legacy-roles';
-      const summary = document.createElement('summary');
-      summary.innerHTML = '<strong>Advanced role checkboxes</strong>';
-      grid.parentNode.insertBefore(details, grid);
-      details.appendChild(summary);
-      details.appendChild(grid);
-    });
-  }
+  function enhanceLegacyUserUI(){ hideLegacyUserAdminControls(); }
 
   function setTopTabsMode(mode){
     const tabs = document.querySelector('.tabs');
-    if(!tabs) return;
-    tabs.style.display = (mode === 'height' || mode === 'legacy-admin') ? 'flex' : 'none';
+    const heightHeader = byId('heightModuleHeader');
+    if(!tabs){ if(heightHeader) heightHeader.style.display = 'none'; return; }
+    tabs.style.display = (mode === 'height') ? 'flex' : 'none';
     if(mode === 'height'){
       ensureHeightHomeButton();
       ensureHeightQualificationTab();
-      const homeBtn = byId('moduleHomeTabButton');
-      if(homeBtn) homeBtn.style.display = '';
       tabs.querySelectorAll('.tab').forEach(btn => {
-        if(btn.id === 'moduleHomeTabButton'){ btn.style.display = ''; return; }
         const tab = btn.dataset.tab || '';
         btn.style.display = ['dashboard','equipment','inspect','due','export','certificates','heightQualifications'].includes(tab) ? '' : 'none';
       });
-    } else if(mode === 'legacy-admin'){
-      ensureHeightHomeButton();
-      tabs.querySelectorAll('.tab').forEach(btn => { btn.style.display = btn.id === 'moduleHomeTabButton' ? '' : 'none'; });
     } else {
-      const homeBtn = byId('moduleHomeTabButton');
-      if(homeBtn) homeBtn.style.display = 'none';
+      if(heightHeader) heightHeader.style.display = 'none';
     }
   }
 
@@ -1157,8 +1136,6 @@
 
 
 
-  function rolesForPreset(preset){ return ROLE_PRESETS[preset] || []; }
-  function presetOptions(selected){ return Object.keys(ROLE_PRESETS).map(p=>`<option value="${esc(p)}" ${p===selected?'selected':''}>${esc(p)}</option>`).join(''); }
   function adminDashboardHtml(){
     return `<div class="ops-grid two">
       ${usersHtml()}
@@ -1174,6 +1151,25 @@
     return (roles || []).map(r=>`<span class="ops-role-chip">${esc(r)}</span>`).join('') || '<span class="ops-subtle">No roles</span>';
   }
 
+  function roleHelpText(role){
+    return {
+      'Admin':'Full app administration and user management.',
+      'Inspector':'Run inspections and complete vehicle checks.',
+      'Equipment Manager':'Manage equipment, assets, tasks and schedules.',
+      'Certificate Approver':'Generate and manage certificates.',
+      'Office / Reports':'View and export reports.',
+      'Viewer':'Read-only access.'
+    }[role] || '';
+  }
+
+  function roleCheckboxGridForUser(userId, roles){
+    return ROLE_DEFS.map(role => `<label class="ops-permission-check"><input type="checkbox" data-ops-role-user="${esc(userId)}" value="${esc(role)}" ${roles.includes(role) ? 'checked' : ''}> <span><strong>${esc(role)}</strong><small>${esc(roleHelpText(role))}</small></span></label>`).join('');
+  }
+
+  function roleCheckboxGridForPreload(roles){
+    return ROLE_DEFS.map(role => `<label class="ops-permission-check"><input type="checkbox" data-ops-preload-role value="${esc(role)}" ${roles.includes(role) ? 'checked' : ''}> <span><strong>${esc(role)}</strong><small>${esc(roleHelpText(role))}</small></span></label>`).join('');
+  }
+
   function userIdOfProfile(u){ return u.user_id || u.id || ''; }
   function emailOfProfile(u){ return u.email || u.user_email || ''; }
   function displayNameOfProfile(u){
@@ -1181,9 +1177,6 @@
   }
   function rolesForActualUser(userId){
     return (state.actualUserRoles || []).filter(r => String(r.user_id) === String(userId)).map(r => r.role).filter(Boolean);
-  }
-  function roleCheckboxGridForUser(userId, roles){
-    return ROLE_DEFS.map(role => `<label class="ops-permission-check"><input type="checkbox" data-ops-role-user="${esc(userId)}" value="${esc(role)}" ${roles.includes(role) ? 'checked' : ''}> ${esc(role)}</label>`).join('');
   }
   function actualUsersHtml(){
     const users = (state.actualUsers || []).slice().sort((a,b) => displayNameOfProfile(a).localeCompare(displayNameOfProfile(b)) || emailOfProfile(a).localeCompare(emailOfProfile(b)));
@@ -1197,14 +1190,8 @@
           <div><strong>${esc(displayNameOfProfile(u))}</strong><div class="ops-subtle">${esc(email || id)}${u.last_seen ? ' · Last seen: ' + esc(nzDate(u.last_seen)) : ''}</div></div>
           <div>${roleChips(roles)}</div>
         </div>
-        <div class="ops-form" style="margin-top:.75rem">
-          <label>Apply permission preset<select data-ops-preset-for="${esc(id)}">${presetOptions('Field Staff')}</select></label>
-          <div class="ops-actions" style="align-items:end"><button class="ops-btn" type="button" data-ops-apply-preset="${esc(id)}">Apply preset</button></div>
-        </div>
-        <details style="margin-top:.75rem"><summary><strong>Advanced role checkboxes</strong></summary>
-          <div class="ops-permission-grid">${roleCheckboxGridForUser(id, roles)}</div>
-          <div class="ops-actions"><button class="ops-btn primary" type="button" data-ops-save-user-roles="${esc(id)}">Save roles</button></div>
-        </details>
+        <div class="ops-permission-grid" style="margin-top:.75rem">${roleCheckboxGridForUser(id, roles)}</div>
+        <div class="ops-actions"><button class="ops-btn primary" type="button" data-ops-save-user-roles="${esc(id)}">Save permissions</button></div>
       </div>`;
     }).join('');
   }
@@ -1212,48 +1199,32 @@
   function usersHtml(){
     if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
-    const rolePresetGuide = Object.entries(ROLE_PRESETS).map(([preset, roles]) => `<tr><td><strong>${esc(preset)}</strong></td><td>${roleChips(roles)}</td></tr>`).join('');
+    const defaultRoles = ['Inspector'];
     return `<div class="ops-card">
       <h3>Users & permissions</h3>
-      <p class="ops-subtle">This is the only user and permission management area. Pre-load staff before first sign-in, then manage signed-in users using the same standard roles.</p>
+      <p class="ops-subtle">One clean permissions list is used across the app. Tick the roles each user needs, then save.</p>
       <form id="opsPreloadUserForm" class="ops-form">
         <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
         <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
         <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
-        <label>Permission preset<select id="opsPreloadPreset">${presetOptions('Field Staff')}</select></label>
         <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
+        <div class="ops-span-2"><strong>Permissions for pre-loaded user</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(defaultRoles)}</div></div>
         <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
-        <div class="ops-span-2"><strong>Roles applied by preset:</strong> <span id="opsPreloadRolePreview">${roleChips(rolesForPreset('Field Staff'))}</span></div>
-        <details class="ops-span-2"><summary><strong>Role preset guide</strong></summary><div class="ops-table-wrap" style="margin-top:.75rem"><table class="ops-table"><tr><th>Preset</th><th>Standard roles applied</th></tr>${rolePresetGuide}</table></div></details>
         <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Pre-load user</button></div>
       </form>
     </div>
     <div class="ops-card">
       <h3>Signed-in users</h3>
-      <p class="ops-subtle">Assign roles here. Role presets are shortcuts only; they apply the same standard roles shown in the advanced checkboxes.</p>
+      <p class="ops-subtle">Manage the same standard role checkboxes for each signed-in user.</p>
       ${actualUsersHtml()}
     </div>
     <div class="ops-card">
       <h3>Pre-loaded users</h3>
-      ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Preset</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${esc(u.role_preset||'')}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
+      ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
     </div>`;
   }
 
-  function updatePreloadRolePreview(){
-    const el = byId('opsPreloadRolePreview');
-    const preset = byId('opsPreloadPreset')?.value || 'Field Staff';
-    if(el) el.innerHTML = roleChips(rolesForPreset(preset));
-  }
-
-  async function applyActualUserPreset(userId){
-    if(!isAdmin()) return alert('Only Admin users can manage permissions.');
-    const select = document.querySelector(`select[data-ops-preset-for="${CSS.escape(String(userId))}"]`);
-    const preset = select?.value || 'Field Staff';
-    const roles = rolesForPreset(preset);
-    await writeActualUserRoles(userId, roles);
-    alert(`Applied ${preset} permissions.`);
-    await loadAll();
-  }
+  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.12. */ }
 
   async function saveActualUserRoles(userId){
     if(!isAdmin()) return alert('Only Admin users can manage permissions.');
@@ -1261,7 +1232,7 @@
       .filter(i => String(i.dataset.opsRoleUser) === String(userId) && i.checked)
       .map(i => i.value);
     await writeActualUserRoles(userId, roles);
-    alert('User roles saved.');
+    alert('User permissions saved.');
     await loadAll();
   }
 
@@ -1283,10 +1254,10 @@
     const first = titleCaseName(byId('opsPreloadFirst')?.value || '');
     const last = titleCaseName(byId('opsPreloadLast')?.value || '');
     const email = String(byId('opsPreloadEmail')?.value || '').trim().toLowerCase();
-    const preset = byId('opsPreloadPreset')?.value || 'Field Staff';
-    const roles = rolesForPreset(preset);
+    const roles = Array.from(document.querySelectorAll('input[data-ops-preload-role]:checked')).map(i => i.value);
     if(!first || !last || !email) return alert('First name, last name and email are required.');
-    const row = { first_name:first, last_name:last, display_name:`${first} ${last}`, email, role_preset:preset, roles, active: byId('opsPreloadActive')?.value !== 'false', notes: byId('opsPreloadNotes')?.value || null, created_by: state.user.id };
+    if(!roles.length) return alert('Select at least one permission for this user.');
+    const row = { first_name:first, last_name:last, display_name:`${first} ${last}`, email, role_preset:null, roles, active: byId('opsPreloadActive')?.value !== 'false', notes: byId('opsPreloadNotes')?.value || null, created_by: state.user.id };
     const r = await state.sb.from('operations_preloaded_users').upsert(row, { onConflict:'email' }).select().single();
     if(r.error) return alert(r.error.message);
     alert('User pre-loaded. When they sign in with this email, their profile and roles will be applied.');
@@ -1394,9 +1365,7 @@
     byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
     byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
-    byId('opsPreloadPreset')?.addEventListener('change', updatePreloadRolePreview);
     document.querySelectorAll('[data-ops-save-user-roles]').forEach(b => b.addEventListener('click', () => saveActualUserRoles(b.dataset.opsSaveUserRoles)));
-    document.querySelectorAll('[data-ops-apply-preset]').forEach(b => b.addEventListener('click', () => applyActualUserPreset(b.dataset.opsApplyPreset))); 
     byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
     byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
     byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
