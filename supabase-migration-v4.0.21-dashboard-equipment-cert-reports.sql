@@ -1,0 +1,3 @@
+-- V4.0.21 Dashboard, Equipment, Certificate and Reports cleanup
+-- No Supabase database migration is required for this release.
+-- Install by replacing index.html, operations-v4.js and service-worker.js in the GitHub repo root.

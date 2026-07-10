@@ -1,0 +1,32 @@
+V4.0.21 Test Plan
+
+1. Confirm header shows Version 4.0.21.
+2. Height dashboard:
+   - Only one Start Inspection panel appears.
+   - Text reads: Start Inspection / Quick action for recording a new inspection / Start Inspection.
+   - Button opens New Inspection.
+3. Equipment Register:
+   - Change Equipment Type filter several times and confirm the list does not flicker to a different view.
+   - Click a filtered item and confirm the item record opens without jumping the page to the top unexpectedly.
+   - Confirm item detail contains Print Certificate.
+4. Photos:
+   - Add Equipment and New Inspection show one Add Photo button.
+   - Clicking Add Photo offers Camera and Upload from device.
+5. Archive/Dispose:
+   - Attempt to archive/dispose an item.
+   - Confirm a two-step modal appears and requires explanation, confirmation and photo.
+6. Certificates:
+   - Filter and select items.
+   - Confirm listed items are left-aligned.
+   - Confirm Generate separate certificates works.
+   - Confirm generated certificate shows latest inspection photos on the first page and equipment photos on the evidence page when selected.
+7. Qualifications:
+   - Saved inspector entries show Print Qualification Details.
+   - Open File works where the saved storage object exists.
+   - Qualification details output shows embedded image or PDF where possible.
+8. Reports:
+   - Quick report buttons highlight when selected.
+   - Clear filters resets report filters.
+   - Backup buttons are no longer shown in Reports.
+9. Admin:
+   - Home button appears and returns to the module dashboard.

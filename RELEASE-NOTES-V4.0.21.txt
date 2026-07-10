@@ -1,0 +1,15 @@
+V4.0.21 - Dashboard, Equipment, Certificate and Reports cleanup
+
+Changes included:
+- Removed duplicate Start Inspection panel and standardised the remaining dashboard action text.
+- Stabilised Equipment Register filtering when changing type/status/filter values.
+- Added Print Certificate button to individual equipment detail records.
+- Replaced separate photo source buttons with a single Add Photo button that then offers Camera or Upload from device.
+- Added two-step Archive/Dispose confirmation requiring explanation and a fault/disposal photo.
+- Left-aligned certificate item rows and removed extra certificate title/copy clutter.
+- Re-applied certificate output so latest inspection photos sit on the first page and equipment photos are kept on an evidence page.
+- Improved Inspector Qualification file handling and Print Qualification Details output.
+- Added Reports Clear Filters button.
+- Quick Reports buttons now highlight the selected report.
+- Removed backup download buttons from the Reports screen; these remain an Admin function.
+- Added a Home button to the Admin area matching the rest of the app.

@@ -3843,3 +3843,409 @@
   }, true);
   document.addEventListener('change', e => { if(e.target?.closest?.('#certItemList')) setTimeout(bindStableHandlers, 50); }, true);
 })();
+
+/* V4.0.21 - dashboard, equipment, certificate, qualification and reports cleanup */
+(function(){
+  const VERSION = '4.0.21';
+  const PHOTO_BUCKET = 'inspection-photos';
+  const EQUIP_BUCKET = 'equipment-photos';
+  const $ = id => document.getElementById(id);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm = v => String(v || '').trim().toLowerCase();
+  const titleCase = v => String(v || '').trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const todayIso = () => new Date().toISOString().slice(0,10);
+  const nzDate = v => { if(!v) return '—'; const d = new Date(v); return isNaN(d) ? String(v).slice(0,10) : d.toLocaleDateString('en-NZ'); };
+  const api = () => window.SWOperationsV4 || {};
+  const state = () => api().state || {};
+  const sb = () => state().sb || (window.supabaseClient || window.sbClient || null);
+  const statusLabel = r => {
+    const raw = String(r || '—');
+    if(raw === 'Pass') return 'Completed OK';
+    if(raw === 'Fail - Repair Required') return 'Issue - repair required';
+    if(raw === 'Fail - Remove From Service / Disposal') return 'Remove from service';
+    return raw || '—';
+  };
+  const statusClass = r => /pass|completed ok|in service/i.test(String(r||'')) ? 'ok' : /fail|issue|quarantine|remove|dispose/i.test(String(r||'')) ? 'bad' : 'warn';
+  let eqRenderToken = 0;
+  let eqOpenScrollY = null;
+
+  function injectCss(){
+    if($('sw421Styles')) return;
+    const st = document.createElement('style'); st.id = 'sw421Styles';
+    st.textContent = `
+      .sw421-hidden{display:none!important}.sw421-left{text-align:left!important}.sw421-panel-flat{border:0!important;box-shadow:none!important;background:transparent!important;padding:0!important;margin:0!important}
+      #certItemList,#certItemList *{text-align:left!important}.certItemCheckRow,.sw417-check-row{justify-content:flex-start!important;text-align:left!important}.sw421-cert-card h2:first-child{display:none!important}
+      #certItemsPanel>h3,#certItemsPanel>p,.certSelectionTools{display:none!important}.certificateControls>h3:first-child{display:none!important}
+      #certFilterPanel{margin-top:0!important}.sw421-action-panel{display:flex;justify-content:space-between;gap:.8rem;align-items:center;flex-wrap:wrap;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:12px;margin:12px 0}.sw421-action-panel strong{font-size:1rem}.sw421-action-panel .muted{font-size:.9rem}
+      .sw421-row-list{border:1px solid #dbe7ee;border-radius:14px;background:white;max-height:460px;overflow:auto;margin-top:10px}.sw421-table{width:100%;border-collapse:collapse}.sw421-table th,.sw421-table td{padding:9px 10px;border-bottom:1px solid #e5edf3;text-align:left;vertical-align:top}.sw421-table th{background:#f8fafc;font-weight:900}.sw421-click-row{cursor:pointer}.sw421-click-row:hover{background:#f8fafc}.sw421-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;font-weight:800;font-size:.78rem}.sw421-pill.ok{background:#dcfce7;color:#047857}.sw421-pill.bad{background:#fee2e2;color:#b91c1c}.sw421-pill.warn{background:#fef3c7;color:#b45309}
+      .sw421-history-scroll{max-height:420px;overflow:auto;border:1px solid #e5edf3;border-radius:12px;background:white}.sw421-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.sw421-add-photo-menu{display:flex;gap:8px;flex-wrap:wrap}.sw421-qual-actions{display:flex;gap:8px;flex-wrap:wrap}.sw421-archive-modal{position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px}.sw421-archive-box{background:white;border-radius:18px;max-width:560px;width:100%;padding:16px;box-shadow:0 20px 80px #0008}.sw421-archive-box textarea{width:100%;min-height:110px}.sw421-report-active{background:#0f766e!important;color:white!important}
+    `;
+    document.head.appendChild(st);
+  }
+
+  async function loadHeightData(extraPhotos=false){
+    const client = sb(); if(!client) throw new Error('Supabase is not ready.');
+    const calls = [
+      client.from('equipment').select('*').order('type', {ascending:true}).order('serial', {ascending:true}),
+      client.from('inspections').select('*').order('inspection_date', {ascending:false})
+    ];
+    if(extraPhotos){
+      calls.push(client.from('equipment_photos').select('*').order('created_at', {ascending:false}));
+      calls.push(client.from('inspection_photos').select('*').order('created_at', {ascending:false}));
+    }
+    const res = await Promise.all(calls);
+    res.forEach(r => { if(r.error) throw r.error; });
+    return { equipment: res[0].data || [], inspections: res[1].data || [], equipmentPhotos: res[2]?.data || [], inspectionPhotos: res[3]?.data || [] };
+  }
+  function latestInspectionFor(e, inspections){
+    const id = String(e?.id || ''); const serial = norm(e?.serial);
+    return (inspections || []).filter(i => String(i.equipment_id || '') === id || norm(i.serial) === serial)
+      .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))[0] || null;
+  }
+  function isArchived(e){ return /archived|disposed|retired/i.test(String(e?.status||'')) || e?.archived === true || !!e?.disposed_at; }
+  function isDue(pair){
+    const i = pair.inspection; if(!i) return true;
+    const due = String(i.next_due || i.next_inspection_due || i.due_date || '').slice(0,10);
+    return !due || due <= todayIso();
+  }
+  function hay(pair){ const e=pair.equipment||{}, i=pair.inspection||{}; return [e.serial,e.type,e.manufacturer,e.model,e.status,i.result,i.inspector].map(norm).join(' '); }
+  function matches(pair, filters){
+    const e = pair.equipment || {}, i = pair.inspection || null;
+    if(filters.type && norm(e.type) !== norm(filters.type)) return false;
+    if(filters.status && norm(e.status) !== norm(filters.status)) return false;
+    if(filters.result && (!i || norm(i.result) !== norm(filters.result))) return false;
+    if(filters.due === 'due' && !isDue(pair)) return false;
+    if(filters.due === 'ok' && isDue(pair)) return false;
+    if(filters.due === 'no_inspection' && i) return false;
+    if(filters.q && !hay(pair).includes(norm(filters.q))) return false;
+    return true;
+  }
+  async function signedUrl(bucket, path){
+    if(!path) return '';
+    const client = sb(); if(!client) return '';
+    let p = String(path || '').trim().replace(/^\/+/, '');
+    p = p.replace(/^inspection-photos\//,'').replace(/^equipment-photos\//,'');
+    try{ const r = await client.storage.from(bucket).createSignedUrl(p, 3600); if(!r.error) return r.data.signedUrl; }catch(e){}
+    return '';
+  }
+  async function dataUrl(bucket, path){
+    if(!path) return '';
+    const client = sb(); if(!client) return '';
+    let p = String(path || '').trim().replace(/^\/+/, '');
+    p = p.replace(/^inspection-photos\//,'').replace(/^equipment-photos\//,'');
+    const r = await client.storage.from(bucket).download(p);
+    if(r.error) throw r.error;
+    return await new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>resolve({url:fr.result,type:r.data.type||'',name:p.split('/').pop()}); fr.onerror=reject; fr.readAsDataURL(r.data); });
+  }
+
+  function fixDashboardAction(){
+    const dash = $('dashboard'); if(!dash) return;
+    const panels = Array.from(dash.querySelectorAll('.v415-action-panel,#heightNewInspectionAction,.sw421-action-panel'));
+    let keep = panels[0];
+    if(!keep){
+      keep = document.createElement('div');
+      const stats = dash.querySelector('.grid.five') || dash.firstElementChild;
+      if(stats && stats.parentNode) stats.parentNode.insertBefore(keep, stats.nextSibling);
+      else dash.prepend(keep);
+    }
+    panels.slice(1).forEach(p=>p.remove());
+    keep.id = 'heightNewInspectionAction';
+    keep.className = 'sw421-action-panel';
+    keep.innerHTML = `<div><strong>Start Inspection</strong><div class="muted">Quick action for recording a new inspection</div></div><button type="button" class="primary" id="heightNewInspectionActionBtn">Start Inspection</button>`;
+    $('heightNewInspectionActionBtn')?.addEventListener('click', () => (api().openNewHeightInspectionV415 ? api().openNewHeightInspectionV415() : window.showTab?.('inspect')));
+  }
+
+  function installPhotoButtons(){
+    const bind = (btnId, menuId, camBtnId, uploadBtnId, camInputId, uploadInputId) => {
+      const btn=$(btnId), menu=$(menuId); if(btn && menu && !btn.dataset.sw421){ btn.dataset.sw421='1'; btn.addEventListener('click',()=>menu.classList.toggle('hidden')); }
+      $(camBtnId)?.addEventListener('click',()=>$(camInputId)?.click());
+      $(uploadBtnId)?.addEventListener('click',()=>$(uploadInputId)?.click());
+    };
+    bind('sw421EqAddPhotoBtn','sw421EqPhotoOptions','sw421EqCameraBtn','sw421EqUploadBtn','sw421EqCameraInput','sw421EqUploadInput');
+    bind('sw421InspAddPhotoBtn','sw421InspPhotoOptions','sw421InspCameraBtn','sw421InspUploadBtn','sw421InspCameraInput','sw421InspUploadInput');
+    // Detail pages may still have legacy photo source buttons; collapse them visually into one menu.
+    document.querySelectorAll('#detailContent .photoPanel .row, #detailContent .row').forEach(row=>{
+      const labels = Array.from(row.querySelectorAll('label.uploadBtn'));
+      if(labels.length >= 2 && !row.dataset.sw421Photo){
+        row.dataset.sw421Photo='1';
+        const wrap=document.createElement('span'); wrap.className='sw421-add-photo-menu hidden';
+        labels.forEach(l=>wrap.appendChild(l));
+        const b=document.createElement('button'); b.type='button'; b.className='primary'; b.textContent='Add Photo';
+        b.addEventListener('click',()=>wrap.classList.toggle('hidden'));
+        row.prepend(wrap); row.prepend(b);
+      }
+    });
+  }
+
+  async function populateEquipmentOptions421(){
+    const typeSel=$('eqFilterType'), statusSel=$('eqFilterStatus'); if(!typeSel || !statusSel) return;
+    const {equipment}=await loadHeightData();
+    const currentType=typeSel.value, currentStatus=statusSel.value;
+    typeSel.innerHTML='<option value="">All types</option>'+[...new Set(equipment.map(e=>e.type).filter(Boolean))].sort().map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    statusSel.innerHTML='<option value="">All statuses</option>'+[...new Set(equipment.map(e=>e.status).filter(Boolean))].sort().map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    typeSel.value=currentType; statusSel.value=currentStatus;
+  }
+  function eqFilters(){ return { type:$('eqFilterType')?.value||'', status:$('eqFilterStatus')?.value||'', due:$('eqFilterDue')?.value||'', q:norm($('eqFilterSearch')?.value||'') }; }
+  async function renderEquipmentFilteredList421(){
+    const token=++eqRenderToken;
+    const list=$('equipmentList'); if(!list) return;
+    const scrollY = window.scrollY;
+    list.innerHTML = '<div class="sw421-row-list"><p class="muted" style="padding:10px">Filtering equipment...</p></div>';
+    try{
+      await populateEquipmentOptions421();
+      const {equipment, inspections}=await loadHeightData();
+      if(token!==eqRenderToken) return;
+      const pairs=equipment.map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>matches(p, eqFilters()));
+      const rows = pairs.map(p=>{ const e=p.equipment, i=p.inspection; return `<tr class="sw421-click-row" data-eq-id="${esc(e.id)}"><td><strong>${esc(e.serial||'')}</strong></td><td>${esc(e.type||'')}</td><td>${esc(e.manufacturer||'')} ${esc(e.model||'')}</td><td>${esc(e.status||'')}</td><td>${i?`${nzDate(i.inspection_date)} <span class="sw421-pill ${statusClass(i.result)}">${esc(statusLabel(i.result))}</span>`:'No inspection history'}</td></tr>`; }).join('');
+      list.innerHTML = `<div class="sw421-row-list"><table class="sw421-table"><thead><tr><th>Serial</th><th>Type</th><th>Manufacturer / model</th><th>Status</th><th>Latest inspection</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No items match the current filters.</td></tr>'}</tbody></table></div>`;
+      const c=$('eqFilterCount'); if(c) c.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown.`;
+      list.querySelectorAll('[data-eq-id]').forEach(row=>row.addEventListener('click',()=>openEquipmentRecord(row.dataset.eqId)));
+      requestAnimationFrame(()=>window.scrollTo({top:scrollY,left:0,behavior:'auto'}));
+    }catch(err){ list.innerHTML = `<div class="ops-error">Could not load equipment list: ${esc(err.message || err)}</div>`; }
+  }
+  function installEquipmentFilterStabiliser(){
+    const panel=$('heightEquipmentFilterPanel'); if(!panel) return;
+    // Remove old filter listeners by replacing controls with clones, then attach stable handlers.
+    ['eqFilterType','eqFilterStatus','eqFilterDue','eqFilterSearch','eqFilterClear'].forEach(id=>{
+      const el=$(id); if(el && !el.dataset.sw421Cloned){ const clone=el.cloneNode(true); clone.dataset.sw421Cloned='1'; el.parentNode.replaceChild(clone, el); }
+    });
+    ['eqFilterType','eqFilterStatus','eqFilterDue'].forEach(id=>$(id)?.addEventListener('change', renderEquipmentFilteredList421));
+    $('eqFilterSearch')?.addEventListener('input', renderEquipmentFilteredList421);
+    $('eqFilterClear')?.addEventListener('click',()=>{ ['eqFilterType','eqFilterStatus','eqFilterDue','eqFilterSearch'].forEach(id=>{ const el=$(id); if(el) el.value=''; }); renderEquipmentFilteredList421(); });
+    renderEquipmentFilteredList421();
+  }
+  function openEquipmentRecord(id){
+    eqOpenScrollY = window.scrollY;
+    window.__sw421CurrentEquipmentId = id;
+    if(typeof window.openDetail === 'function') window.openDetail(id);
+    else if(typeof window.openItem === 'function') window.openItem(id);
+    else if(typeof window.showDetail === 'function') window.showDetail(id);
+    else window.showTab?.('detail');
+    setTimeout(()=>{ addDetailCertificateButton(); installPhotoButtons(); if(eqOpenScrollY != null) window.scrollTo({top:eqOpenScrollY,left:0,behavior:'auto'}); }, 250);
+  }
+
+  function addDetailCertificateButton(){
+    const box=$('detailContent'); if(!box || box.querySelector('#sw421PrintItemCertificate')) return;
+    const actions = document.createElement('div'); actions.className='sw421-detail-actions';
+    actions.innerHTML = `<button type="button" class="primary" id="sw421PrintItemCertificate">Print Certificate</button>`;
+    const firstCard = box.querySelector('.card,.detailHero') || box.firstElementChild;
+    if(firstCard && firstCard.parentNode) firstCard.parentNode.insertBefore(actions, firstCard.nextSibling); else box.prepend(actions);
+    $('sw421PrintItemCertificate')?.addEventListener('click', printCurrentItemCertificate);
+  }
+  async function currentEquipmentRecord(){
+    const {equipment, inspections}=await loadHeightData();
+    let id = window.__sw421CurrentEquipmentId || '';
+    let e = equipment.find(x=>String(x.id)===String(id));
+    if(!e){
+      const text = $('detailContent')?.innerText || '';
+      e = equipment.find(x => x.serial && text.includes(x.serial));
+    }
+    if(!e) throw new Error('Could not identify this equipment item. Open the item from the Equipment Register and try again.');
+    return {equipment:e, inspection:latestInspectionFor(e, inspections)};
+  }
+  async function printCurrentItemCertificate(){
+    try{
+      const pair = await currentEquipmentRecord();
+      if(!pair.inspection) return alert('This item does not have inspection history to certify.');
+      if(window.buildCertificatePacket) return window.buildCertificatePacket([pair], 'Item certificate');
+      await buildSeparateCertificates421([pair], 'Item certificate');
+    }catch(err){ alert('Could not print certificate: ' + (err.message||err)); }
+  }
+
+  async function renderRecentHistory421(){
+    const box=$('dashRecent'); if(!box) return;
+    try{
+      const limit = Number($('heightRecentLimit')?.value || 10);
+      const {equipment, inspections}=await loadHeightData();
+      const byId=new Map(equipment.map(e=>[String(e.id),e])); const bySerial=new Map(equipment.map(e=>[norm(e.serial),e]));
+      const rows=inspections.slice(0,limit).map(i=>{ const e=byId.get(String(i.equipment_id||'')) || bySerial.get(norm(i.serial)) || {}; return `<tr><td>${nzDate(i.inspection_date||i.created_at)}</td><td><strong>${esc(e.serial||i.serial||'')}</strong></td><td>${esc(e.type||i.type||'')}</td><td><span class="sw421-pill ${statusClass(i.result)}">${esc(statusLabel(i.result))}</span></td><td>${esc(i.inspector||'')}</td></tr>`; }).join('');
+      box.innerHTML = `<div class="sw421-history-scroll"><table class="sw421-table"><thead><tr><th>Date</th><th>Serial</th><th>Type</th><th>Result</th><th>Inspector</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      const details=box.closest('details'); if(details) details.open = true;
+    }catch(e){ console.warn('Recent inspection history v421 failed', e); }
+  }
+  function installRecentHistory421(){
+    const sel=$('heightRecentLimit'); if(sel && !sel.dataset.sw421){ sel.dataset.sw421='1'; if(!sel.value) sel.value='10'; sel.addEventListener('change', renderRecentHistory421); }
+    renderRecentHistory421();
+  }
+
+  function selectedCertificateIds(){
+    const st=state(); if(!st.certSelectedIds) st.certSelectedIds = new Set();
+    const ids=new Set(Array.from(st.certSelectedIds).map(String));
+    document.querySelectorAll('#certItemList input[type="checkbox"]:checked').forEach(ch=>ids.add(String(ch.value)));
+    st.certSelectedIds=ids; window.__sw417CertSelected=ids; return Array.from(ids);
+  }
+  async function selectedPairs(){
+    const ids=new Set(selectedCertificateIds());
+    const {equipment, inspections}=await loadHeightData();
+    return equipment.filter(e=>ids.has(String(e.id))).map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>p.inspection);
+  }
+  function certCss(){ return `body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.page{background:white;max-width:920px;min-height:1180px;margin:22px auto;padding:34px;box-shadow:0 10px 35px #0f172a22;page-break-after:always}.head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:4px solid #0f766e;padding-bottom:14px;margin-bottom:16px}.brand{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:#0f766e;font-weight:900}.title{font-size:26px;font-weight:900;margin:4px 0}.muted{color:#64748b}.grid{display:grid;grid-template-columns:165px 1fr;gap:0;margin:14px 0}.label,.value{border-bottom:1px solid #e2e8f0;padding:7px 8px}.label{font-weight:900;background:#f8fafc;color:#334155}.pill{border-radius:999px;padding:5px 10px;font-weight:900;display:inline-block}.ok{background:#dcfce7;color:#047857}.bad{background:#fee2e2;color:#b91c1c}.warn{background:#fef3c7;color:#b45309}.checklist{columns:2;column-gap:28px;font-size:12px}.photoStrip{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:12px}.photoStrip h3{margin:0 0 8px;font-size:15px}.photoGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.photoGrid img{width:100%;height:210px;object-fit:contain;border:1px solid #dbe7ee;border-radius:12px;background:#f8fafc}.evidencePage .photoGrid img{height:360px}.qualEvidence img{display:block;max-width:100%;max-height:780px;margin:auto;border:1px solid #dbe7ee;border-radius:12px;background:#f8fafc}.qualEvidence iframe{width:100%;height:780px;border:1px solid #dbe7ee;border-radius:12px}.footer{margin-top:16px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border-bottom:1px solid #dbe7ee;padding:9px;text-align:left;vertical-align:top}th{background:#f1f5f9;color:#334155;font-weight:900}.noPrint{position:sticky;top:0;background:#0f766e;color:white;padding:10px;text-align:center}.noPrint button{background:white;color:#0f766e;border:0;border-radius:10px;padding:9px 14px;font-weight:900}@media print{body{background:white}.noPrint{display:none}.page{box-shadow:none;margin:0;max-width:none;min-height:auto;page-break-after:always}.photoGrid img{max-height:250px}}`; }
+  async function imagesFor(e,i,eqPhotos,insPhotos){
+    const eqId=String(e.id||''), serial=norm(e.serial), insId=String(i?.id||'');
+    const eqRows=(eqPhotos||[]).filter(p=>String(p.equipment_id||'')===eqId || norm(p.serial)===serial).slice(0,4);
+    const insRows=(insPhotos||[]).filter(p=>String(p.inspection_id||'')===insId).slice(0,4);
+    const equipment=[]; for(const p of eqRows){ const u=await signedUrl(EQUIP_BUCKET,p.storage_path); if(u) equipment.push(u); }
+    const inspection=[]; for(const p of insRows){ const u=await signedUrl(PHOTO_BUCKET,p.storage_path); if(u) inspection.push(u); }
+    return {equipment, inspection};
+  }
+  function checklistHtml(i){
+    const notes = String(i?.notes || '').trim();
+    return notes ? `<div class="photoStrip"><h3>Inspection comments</h3><p>${esc(notes)}</p></div>` : '';
+  }
+  function inspectionPhotoBlock(record){
+    const urls=record.images?.inspection || [];
+    if(!urls.length) return '';
+    return `<div class="photoStrip"><h3>Latest inspection photos</h3><div class="photoGrid">${urls.map(u=>`<img src="${esc(u)}" alt="Latest inspection photo">`).join('')}</div></div>`;
+  }
+  function equipmentPhotoPage(record){
+    const urls=record.images?.equipment || [];
+    if(!urls.length) return '';
+    return `<section class="page evidencePage"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Equipment Photo Evidence</div><div class="muted">${esc(record.equipment?.serial||'')} ${esc(record.equipment?.type||'')}</div></div></div><div class="photoGrid">${urls.map(u=>`<img src="${esc(u)}" alt="Equipment photo">`).join('')}</div><div class="footer">Equipment photos are separated from latest inspection photos.</div></section>`;
+  }
+  function certificatePage(record){
+    const e=record.equipment||{}, i=record.inspection||{}, result=statusLabel(i.result), cls=statusClass(i.result);
+    return `<section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Height Equipment Inspection Certificate</div><div class="muted">Generated ${new Date().toLocaleDateString('en-NZ')}</div></div><div><span class="pill ${cls}">${esc(result)}</span></div></div><div class="grid"><div class="label">Serial</div><div class="value"><strong>${esc(e.serial||'')}</strong></div><div class="label">Equipment type</div><div class="value">${esc(e.type||'')}</div><div class="label">Manufacturer</div><div class="value">${esc(e.manufacturer||'—')}</div><div class="label">Model</div><div class="value">${esc(e.model||'—')}</div><div class="label">Status</div><div class="value">${esc(e.status||'—')}</div><div class="label">Inspection date</div><div class="value">${nzDate(i.inspection_date)}</div><div class="label">Inspector</div><div class="value">${esc(i.inspector||'—')}</div><div class="label">Next due</div><div class="value">${nzDate(i.next_due)}</div><div class="label">Inspection result</div><div class="value"><span class="pill ${cls}">${esc(result)}</span></div><div class="label">Notes</div><div class="value">${esc(i.notes||'—')}</div></div>${checklistHtml(i)}${inspectionPhotoBlock(record)}<div class="footer">Latest inspection photos are shown on this first page when included.</div></section>`;
+  }
+  async function buildSeparateCertificates421(pairs, title){
+    const {equipmentPhotos, inspectionPhotos}=await loadHeightData(true);
+    const records=[]; for(const p of pairs) records.push({...p, images: await imagesFor(p.equipment,p.inspection,equipmentPhotos,inspectionPhotos)});
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title||'Height Equipment Certificates')}</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div>${records.map(r=>certificatePage(r)+equipmentPhotoPage(r)).join('')}</body></html>`;
+    const w=window.open('', '_blank'); if(w){w.document.open();w.document.write(html);w.document.close();} else {const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='spray-wash-height-certificates.html'; a.click(); URL.revokeObjectURL(a.href);}
+  }
+  function combinedHtml(pairs){
+    const rows=pairs.map(p=>{ const e=p.equipment||{}, i=p.inspection||{}, result=statusLabel(i.result), cls=statusClass(i.result); return `<tr><td><strong>${esc(e.serial||'')}</strong></td><td>${esc(e.type||'')}</td><td>${esc(e.manufacturer||'')}</td><td>${esc(e.model||'')}</td><td>${nzDate(i.inspection_date)}</td><td><span class="pill ${cls}">${esc(result)}</span></td><td>${esc(i.inspector||'')}</td><td>${nzDate(i.next_due)}</td></tr>`; }).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Selected Height Equipment Inspection Summary</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Selected Height Equipment Inspection Summary</div><div class="muted">Combined report for ${pairs.length} selected item${pairs.length===1?'':'s'} · Generated ${new Date().toLocaleString('en-NZ')}</div></div></div><table><thead><tr><th>Serial</th><th>Type</th><th>Manufacturer</th><th>Model</th><th>Inspection date</th><th>Result</th><th>Inspector</th><th>Next due</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">This combined document summarises the latest inspection record for each selected item.</div></section></body></html>`;
+  }
+  async function generateSeparate421(){ const pairs=await selectedPairs(); if(!pairs.length) return alert('Tick at least one item with inspection history.'); await buildSeparateCertificates421(pairs,'Selected item certificates'); }
+  async function generateCombined421(){ const pairs=await selectedPairs(); if(!pairs.length) return alert('Tick at least one item with inspection history.'); const html=combinedHtml(pairs); const w=window.open('', '_blank'); if(w){w.document.open();w.document.write(html);w.document.close();} else {const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='spray-wash-selected-equipment-summary.html'; a.click(); URL.revokeObjectURL(a.href);} }
+  function installCertificateCleanup(){
+    const cert=$('certificates'); if(!cert) return;
+    cert.querySelector('h2')?.remove();
+    cert.querySelectorAll('h3').forEach(h=>{ h.textContent = h.textContent.replace(/^\s*\d+\.\s*/, ''); if(/choose certificate batch type/i.test(h.textContent)) h.remove(); });
+    cert.querySelectorAll('p.muted').forEach(p=>{ if(/tick one or more items|choose certificate options|certificate history/i.test(p.textContent||'')) p.remove(); });
+    cert.querySelectorAll('.certSelectionTools, #certSelectedCount').forEach(e=>e.remove());
+    const card=cert.querySelector('.card'); if(card) card.classList.add('sw421-cert-card');
+    ['certGenerateBtn','certGenerateCombinedBtn'].forEach(id=>{ const b=$(id); if(b) b.disabled=false; });
+    const b1=$('certGenerateBtn'); if(b1){ b1.textContent='Generate separate certificates'; b1.onclick=generateSeparate421; b1.disabled=false; }
+    const b2=$('certGenerateCombinedBtn'); if(b2){ b2.textContent='Generate one combined certificate'; b2.onclick=generateCombined421; b2.disabled=false; }
+    document.querySelectorAll('#certItemList input[type="checkbox"]').forEach(ch=>{ if(!ch.dataset.sw421){ ch.dataset.sw421='1'; ch.addEventListener('change',()=>{ const st=state(); if(!st.certSelectedIds) st.certSelectedIds=new Set(); if(ch.checked) st.certSelectedIds.add(String(ch.value)); else st.certSelectedIds.delete(String(ch.value)); ['certGenerateBtn','certGenerateCombinedBtn'].forEach(id=>{ const b=$(id); if(b) b.disabled=false; }); }); }});
+  }
+
+  function installArchiveDisposeGuard(){
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('button'); if(!btn) return;
+      const text = norm(btn.textContent);
+      if(!(text.includes('archive') || text.includes('dispose') || text.includes('retire'))) return;
+      if(btn.dataset.sw421Confirmed === '1'){ delete btn.dataset.sw421Confirmed; return; }
+      e.preventDefault(); e.stopImmediatePropagation();
+      showArchiveModal(btn);
+    }, true);
+  }
+  function showArchiveModal(originalBtn){
+    if($('sw421ArchiveModal')) $('sw421ArchiveModal').remove();
+    const m=document.createElement('div'); m.id='sw421ArchiveModal'; m.className='sw421-archive-modal';
+    m.innerHTML=`<div class="sw421-archive-box"><h2>Confirm Archive / Dispose</h2><p class="muted">This is a two-step confirmation. Add the reason and a photo of the fault or disposal reason before continuing.</p><label>Explanation / reason<textarea id="sw421ArchiveReason" placeholder="Describe the fault or reason for archiving/disposal"></textarea></label><label>Fault / disposal photo<input id="sw421ArchivePhoto" type="file" accept="image/*" capture="environment"></label><label style="display:flex;gap:8px;align-items:flex-start"><input id="sw421ArchiveConfirm" type="checkbox" style="width:auto;margin-top:4px"> I confirm this item should be archived/disposed and the reason has been recorded.</label><div class="row"><button type="button" class="danger" id="sw421ArchiveProceed">Confirm and continue</button><button type="button" id="sw421ArchiveCancel">Cancel</button></div></div>`;
+    document.body.appendChild(m);
+    $('sw421ArchiveCancel').onclick=()=>m.remove();
+    $('sw421ArchiveProceed').onclick=async()=>{
+      const reason=String($('sw421ArchiveReason')?.value||'').trim(), file=$('sw421ArchivePhoto')?.files?.[0], ok=$('sw421ArchiveConfirm')?.checked;
+      if(!reason) return alert('Enter an explanation before continuing.');
+      if(!file) return alert('Add a photo of the fault or disposal reason before continuing.');
+      if(!ok) return alert('Tick the confirmation box before continuing.');
+      try{ await uploadArchiveEvidence(file, reason); }catch(err){ if(!confirm('The confirmation details were entered, but the photo could not be uploaded: '+(err.message||err)+'\n\nContinue anyway?')) return; }
+      m.remove(); originalBtn.dataset.sw421Confirmed='1'; originalBtn.click();
+    };
+  }
+  async function uploadArchiveEvidence(file, reason){
+    const client=sb(); if(!client) throw new Error('Supabase not ready');
+    const id=window.__sw421CurrentEquipmentId || '';
+    if(!id) throw new Error('Equipment item not identified');
+    const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_'); const path=`archive-disposal-evidence/${id}/${Date.now()}-${safe}`;
+    const up=await client.storage.from(EQUIP_BUCKET).upload(path,file,{upsert:false,contentType:file.type||undefined});
+    if(up.error) throw up.error;
+    const ins=await client.from('equipment_photos').insert({equipment_id:id, storage_path:path, file_name:file.name, caption:`Archive/disposal evidence: ${reason}`, uploaded_at:new Date().toISOString()});
+    if(ins.error) console.warn('Archive evidence upload saved to storage, but photo row was not inserted:', ins.error.message);
+  }
+
+  async function qualificationEvidence(q){
+    const raw = q?.storage_path || q?.file_path || q?.path || '';
+    if(!raw) return {note:'No file attached', html:'<p class="muted">No qualification file is attached.</p>'};
+    let path = String(raw).trim().replace(/^\/+/, '').replace(/^inspection-photos\//,'');
+    let signed = await signedUrl(PHOTO_BUCKET, path);
+    try{
+      const data = await dataUrl(PHOTO_BUCKET, path);
+      const name = q.file_name || data.name || path.split('/').pop();
+      const isPdf = /pdf/i.test(data.type) || /\.pdf$/i.test(name);
+      if(isPdf) return {note:name, html:`<iframe src="${esc(data.url || signed)}"></iframe><p><a href="${esc(signed || data.url)}" target="_blank" download="${esc(name)}">Open/download qualification PDF</a></p>`};
+      return {note:name, html:`<img src="${esc(data.url || signed)}" alt="Uploaded qualification image"><p><a href="${esc(signed || data.url)}" target="_blank" download="${esc(name)}">Open/download qualification file</a></p>`};
+    }catch(e){
+      return {note:'File attached, preview unavailable', html: signed ? `<p>The saved file could not be embedded. <a href="${esc(signed)}" target="_blank">Open qualification file</a></p>` : `<p class="muted">The saved file could not be loaded. It may need to be re-uploaded.</p>`};
+    }
+  }
+  async function printQualDetails(id){
+    const rows=state().qualifications || [];
+    const q=rows.find(x=>String(x.id)===String(id)) || rows.find(x=>norm(x.inspector_name)===norm(id));
+    if(!q) return alert('Qualification record not found.');
+    const ev=await qualificationEvidence(q);
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Inspector Qualification Details</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Inspector Qualification Details</div><div class="muted">Height equipment inspector qualification record</div></div></div><div class="grid"><div class="label">Inspector</div><div class="value">${esc(titleCase(q.inspector_name)||'—')}</div><div class="label">Email</div><div class="value">${esc(q.email||'—')}</div><div class="label">Qualification</div><div class="value">${esc(q.qualification_type||'—')}</div><div class="label">Provider</div><div class="value">${esc(q.provider||'—')}</div><div class="label">Reference</div><div class="value">${esc(q.reference_number||'—')}</div><div class="label">Issue date</div><div class="value">${nzDate(q.issue_date)}</div><div class="label">Expiry date</div><div class="value">${nzDate(q.expiry_date)}</div><div class="label">Saved file</div><div class="value">${esc(ev.note)}</div><div class="label">Notes</div><div class="value">${esc(q.notes||'—')}</div></div><div class="footer">Generated ${new Date().toLocaleString('en-NZ')} from Spray &amp; Wash Operations.</div></section><section class="page evidencePage"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Uploaded Qualification Evidence</div></div></div><div class="qualEvidence">${ev.html}</div></section></body></html>`;
+    const w=window.open('', '_blank'); if(w){w.document.open();w.document.write(html);w.document.close();} else {const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='inspector-qualification-details.html'; a.click(); URL.revokeObjectURL(a.href);}
+  }
+  async function openQualFile(idOrPath){
+    const q=(state().qualifications||[]).find(x=>String(x.id)===String(idOrPath));
+    let path = q ? (q.storage_path || q.file_path || q.path || '') : idOrPath;
+    path = String(path||'').replace(/^\/+/, '').replace(/^inspection-photos\//,'');
+    if(!path) return alert('No saved file is attached.');
+    const url=await signedUrl(PHOTO_BUCKET,path); if(url) return window.open(url,'_blank');
+    try{ const d=await dataUrl(PHOTO_BUCKET,path); window.open(d.url,'_blank'); }catch(e){ alert('Could not open file. This record may point to a missing/corrupted upload. Re-upload the qualification file.'); }
+  }
+  function patchQualificationsUi(){
+    // Rename and order cards once they appear in the Qualifications tab.
+    const qualHead=Array.from(document.querySelectorAll('h2')).find(h=>/inspector qualifications/i.test(h.textContent||''));
+    if(qualHead){ qualHead.textContent='Add Inspector'; const p=qualHead.parentElement?.querySelector('p.muted'); if(p) p.remove(); }
+    const saved=Array.from(document.querySelectorAll('h2')).find(h=>/saved inspector qualifications/i.test(h.textContent||''));
+    if(saved){ saved.textContent='Saved Inspectors'; const savedCard=saved.closest('.card,.ops-card'); const addCard=qualHead?.closest('.card,.ops-card'); if(savedCard && addCard && addCard.previousElementSibling !== savedCard){ addCard.parentElement.insertBefore(savedCard, addCard); } }
+    document.querySelectorAll('[data-sw419-print-qual]').forEach(b=>{ b.textContent='Print Qualification Details'; if(!b.dataset.sw421){ b.dataset.sw421='1'; b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();printQualDetails(b.dataset.sw419PrintQual);},true); }});
+    document.querySelectorAll('[data-sw419-open-qual]').forEach(b=>{ if(!b.dataset.sw421){ b.dataset.sw421='1'; b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();openQualFile(b.dataset.sw419OpenQual);},true); }});
+  }
+
+  function installReportsPatch(){
+    const btn=$('sw421ReportClearFilters'); if(btn && !btn.dataset.sw421){ btn.dataset.sw421='1'; btn.addEventListener('click',()=>{ ['reportTypeFilter','reportManufacturer','reportModel','reportStartDate','reportEndDate','reportResult','reportInspectionType','reportDueDays'].forEach(id=>{ const el=$(id); if(el) el.selectedIndex ? el.selectedIndex=0 : el.value=''; }); }); }
+    const oldRun=window.runReport;
+    if(typeof oldRun === 'function' && !oldRun.sw421){
+      const wrapped=function(name){
+        document.querySelectorAll('.reportPanel button').forEach(b=>b.classList.remove('primary','sw421-report-active'));
+        const clicked = Array.from(document.querySelectorAll('.reportPanel button')).find(b => (b.getAttribute('onclick')||'').includes(`'${name}'`) || (b.getAttribute('onclick')||'').includes(`\"${name}\"`));
+        if(clicked){ clicked.classList.add('primary','sw421-report-active'); }
+        return oldRun.apply(this, arguments);
+      };
+      wrapped.sw421=true; window.runReport=wrapped;
+    }
+  }
+
+  function installAdminHome(){
+    const adminRoot=document.querySelector('[data-ops-view="admin-dashboard"]')?.closest('.ops-module') || document.querySelector('#opsRoot');
+    const adminVisible = document.body.innerText.includes('Admin') && document.body.innerText.includes('Users & Permissions');
+    if(adminVisible && !$('sw421AdminHome')){
+      const target=document.querySelector('#operationsRoot, #opsRoot, main') || document.body;
+      const b=document.createElement('button'); b.id='sw421AdminHome'; b.className='ops-btn ghost'; b.textContent='← Home'; b.addEventListener('click',()=>api().show ? api().show('home') : window.location.hash='');
+      const heading=Array.from(document.querySelectorAll('h2,h1')).find(h=>/^admin$/i.test(h.textContent.trim()));
+      if(heading && heading.parentElement) heading.parentElement.insertBefore(b, heading); else target.prepend(b);
+    }
+  }
+
+  function refreshAll(){
+    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); installEquipmentFilterStabiliser(); addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch(); installAdminHome();
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.21 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const apiObj=api();
+    window.SWOperationsV4 = Object.assign(apiObj, { printQualificationDetailsV420:printQualDetails, printQualificationDetailsV419:printQualDetails, openQualificationFile:openQualFile, openQualificationFileV419:openQualFile, generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
+    window.buildCertificatePacket=buildSeparateCertificates421; window.generateCertificates=generateSeparate421;
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
+  document.addEventListener('click', e=>{ setTimeout(refreshAll,250); const pq=e.target.closest('[data-sw419-print-qual]'); if(pq){e.preventDefault();e.stopImmediatePropagation();printQualDetails(pq.dataset.sw419PrintQual);} const oq=e.target.closest('[data-sw419-open-qual]'); if(oq){e.preventDefault();e.stopImmediatePropagation();openQualFile(oq.dataset.sw419OpenQual);} }, true);
+  document.addEventListener('change', e=>{ if(e.target?.id==='heightRecentLimit') setTimeout(renderRecentHistory421,30); if(e.target?.closest?.('#certItemList')) setTimeout(installCertificateCleanup,40); }, true);
+  ['dashboard','equipment','detail','certificates','export'].forEach(id => {
+    const btn = document.querySelector(`[data-tab="${id}"]`);
+    if(btn) btn.addEventListener('click', () => setTimeout(refreshAll, 350));
+  });
+  installArchiveDisposeGuard();
+})();
