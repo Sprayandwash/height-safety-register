@@ -1,0 +1,24 @@
+V4.0.17 test plan
+
+1. Confirm top banner shows Version 4.0.17.
+2. Height dashboard:
+   - Confirm there is only one Start inspection action.
+   - Confirm the action opens New Inspection.
+3. Recent Inspection History:
+   - Open the collapsible panel.
+   - Confirm it starts at 10 records.
+   - Select 20/30/50 and confirm the list grows and scrolls.
+4. Certificates:
+   - Use filters and keyword search.
+   - Tick individual items.
+   - Confirm selected count updates.
+   - Confirm Generate separate certificates works.
+   - Confirm Generate one combined certificate/report works and shows selected items in a table.
+5. Equipment Register:
+   - Confirm the new filter/search panel appears.
+   - Filter by type/status/due state/keyword.
+   - Clear filters and confirm all matching items return.
+6. Inspector Details:
+   - Select an inspector.
+   - Generate Inspector Details.
+   - Confirm the qualification file/image is embedded or available in the report.

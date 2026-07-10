@@ -1,0 +1,13 @@
+V4.0.17 - Height, Certificate and Equipment Register Fixes
+
+- Renamed height dashboard action to Start inspection.
+- Removed duplicate height inspection action panels if present.
+- Fixed Recent Inspection History display to use the selected 10/20/30/50 limit and scroll.
+- Fixed certificate selected-item count and generate button enablement.
+- Removed confusing certificate bulk-selection behaviour.
+- Added Generate separate certificates and Generate one combined certificate/report actions.
+- Added combined certificate table with coloured pass/fail style result labels.
+- Replaced Equipment Register search experience with a filter/search panel matching the Certificates section.
+- Fixed Inspector Details report file handling by embedding/downloading the qualification file from storage where possible.
+
+No Supabase migration required.
