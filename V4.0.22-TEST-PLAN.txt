@@ -1,0 +1,12 @@
+V4.0.22 Test Plan
+
+1. Confirm top banner shows Version 4.0.22.
+2. Dashboard: confirm only one Start Inspection action appears.
+3. Recent Inspection History: select 10/20/30/50 and confirm list fills and scrolls.
+4. Equipment Register: filter by type/status/search and confirm results remain stable without flicker.
+5. Click an equipment result and confirm the page does not jump to the top unexpectedly.
+6. Open an equipment item and confirm Print Certificate appears.
+7. Certificates: filter, tick items, confirm rows are left-aligned and selected count updates.
+8. Generate separate certificates and confirm latest inspection photos appear on the first/details page.
+9. Generate one combined certificate and confirm all selected rows appear in the table.
+10. Account: open menu then click outside and confirm it closes.

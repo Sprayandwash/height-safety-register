@@ -1,0 +1,2 @@
+-- V4.0.22: No Supabase database migration required.
+-- Front-end stabilisation only.

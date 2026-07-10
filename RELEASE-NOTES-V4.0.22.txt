@@ -1,0 +1,13 @@
+V4.0.22 - Stabilisation Completion
+
+- Completes the dashboard Start Inspection cleanup.
+- Re-renders Recent Inspection History with selected 10/20/30/50 limits and an internal scroll window.
+- Replaces the Equipment Register list rendering with the same style filter/list pattern as Certificates.
+- Prevents Equipment Register item clicks from jumping the page to the top.
+- Adds a Print Certificate button to item detail records.
+- Rebuilds the Certificate screen as a clean filter/select/generate flow.
+- Left-aligns certificate item rows.
+- Generates separate and combined certificates from selected rows.
+- Places latest inspection photos on the certificate details page; equipment photos remain on a separate evidence page.
+- Keeps Account menu closing when clicking outside.
+- Keeps notification bell hidden.
