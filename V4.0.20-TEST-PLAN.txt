@@ -1,0 +1,15 @@
+V4.0.20 Test Plan
+
+1. Confirm app header shows Version 4.0.20.
+2. Confirm the Height module no longer flickers between old and new layouts after waiting 10 seconds.
+3. Open Certificates.
+4. Filter equipment and tick selected items.
+5. Confirm Generate buttons remain enabled after selection.
+6. Generate separate certificates.
+7. Confirm latest inspection photos appear on the first certificate/details page.
+8. Confirm equipment photos, if selected, appear separately as evidence.
+9. Open Height > Qualifications.
+10. Click Print Qualification Details on a saved inspector qualification.
+11. Confirm uploaded qualification image/PDF appears in the generated document or provides a working open/download link.
+12. Click Open File on a qualification record and confirm the file opens/downloads.
+13. Confirm service worker refresh by opening with ?v=4.0.20&fresh=1.

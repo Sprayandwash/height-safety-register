@@ -1,0 +1,3 @@
+-- Spray & Wash Operations V4.0.20
+-- No Supabase database migration is required for this release.
+-- This package only replaces index.html, operations-v4.js and service-worker.js.

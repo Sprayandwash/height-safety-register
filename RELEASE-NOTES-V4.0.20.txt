@@ -1,0 +1,13 @@
+V4.0.20 - Stabilisation, Certificate Photos & Qualification Evidence
+
+Fixed / changed:
+- Removed repeated background DOM patch timers that caused flickering between older and newer UI states.
+- Kept V4.0.19 changes but made the page stabilisation one-shot/event-driven instead of timer-driven.
+- Certificate generation now places latest inspection photos on the first certificate page with the item details.
+- Equipment photos are kept separate on an evidence page when included.
+- Inspector Details / Qualification Details output now uses more robust file preview handling.
+- Qualification image/PDF evidence is loaded via Supabase Storage download/data URL where possible, with signed URL fallback.
+- Open File for inspector qualification records is hardened with signed URL and download fallback.
+- Version references updated to V4.0.20.
+
+No database changes.
