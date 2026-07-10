@@ -1,0 +1,3 @@
+-- V4.0.19 Height / Certificate / Qualification Fixes
+-- No Supabase database changes are required for this release.
+-- Replace index.html, operations-v4.js and service-worker.js only.

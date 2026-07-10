@@ -1,0 +1,18 @@
+V4.0.19 - Height / Certificate / Qualification Fixes
+
+Fixes included:
+- Recent Inspection History now loads the selected number of records: 10, 20, 30 or 50.
+- Recent Inspection History visible window shows a limited list and scrolls to the remaining selected records.
+- Equipment Register filtered item clicks preserve page scroll position.
+- Certificate box title clutter removed.
+- Certificate filter title numbering removed.
+- Certificate item list aligned left.
+- Separate certificates now show equipment photos on page 1 and latest inspection photos on page 2.
+- Inspection photo option only pulls photos from the latest inspection used for the certificate.
+- Inspector Details Verification is generated from each saved qualification entry using Print Qualification Details.
+- Separate Inspector Details Verification panel removed from Certificates.
+- Inspector Qualifications is no longer collapsed and is renamed Add Inspector.
+- Saved Inspector Qualifications title capitalised.
+- Open File for inspector qualifications now opens/downloads the stored file using a blob URL.
+- Account panel closes when clicking outside it.
+- Notifications bell icon removed.

@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.16
+/* Spray & Wash Operations App V4.0.19
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.16';
+  const VERSION = '4.0.19';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -2358,7 +2358,7 @@
 
 
 
-  // V4.0.16 - Height dashboard cleanup and certificate flow simplification.
+  // V4.0.19 - Height dashboard cleanup and certificate flow simplification.
   function postHeightEnhancementsV415(activeId){
     try{
       hideHeightActionTabsV415();
@@ -2367,7 +2367,7 @@
       if(id === 'dashboard') enhanceHeightDashboardV415();
       if(id === 'equipment') enhanceHeightEquipmentTabV415();
       if(id === 'certificates') enhanceCertificatesV415();
-    }catch(err){ console.warn('V4.0.16 UI enhancement skipped:', err); }
+    }catch(err){ console.warn('V4.0.19 UI enhancement skipped:', err); }
   }
 
   function hideHeightActionTabsV415(){
@@ -2465,7 +2465,7 @@
   function enhanceCertificatesV415(){
     const certs = byId('certificates');
     if(!certs) return;
-    // Hide old batch controls; V4.0.16 certificate generation is filter/search/list based.
+    // Hide old batch controls; V4.0.19 certificate generation is filter/search/list based.
     const mode = byId('certMode');
     if(mode){ mode.value = 'selected_items'; const modeLabel = mode.closest('label') || mode.previousElementSibling; if(modeLabel) modeLabel.style.display = 'none'; mode.style.display='none'; }
     ['certTypePanel','certDatePanel','certResultPanel'].forEach(id => { const el = byId(id); if(el) el.style.display = 'none'; });
@@ -2679,9 +2679,9 @@
   else boot();
 })();
 
-/* V4.0.18 corrective UI and certificate patch */
+/* V4.0.19 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.18';
+  const VERSION = '4.0.19';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2978,7 +2978,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.18 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.19 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
@@ -2999,9 +2999,9 @@
   setInterval(() => { if($('certificates') && !$('certGenerateCombinedBtn')) installCertificateUi(); removeDuplicateStartInspection(); }, 2500);
 })();
 
-/* V4.0.18 corrective UI/certificate/equipment/inspection patch */
+/* V4.0.19 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.18';
+  const VERSION = '4.0.19';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3252,7 +3252,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.18 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.19 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3270,4 +3270,411 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
   document.addEventListener('click', e=>{ if(e.target?.closest?.('[data-tab="equipment"]')) setTimeout(installEquipmentRegister,500); if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
   setInterval(()=>{ cleanStaticUi(); cleanQualificationsTab(); if($('certificates') && !$('certGenerateCombinedBtn')) installCertificates(); },3000);
+})();
+
+/* V4.0.19 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
+(function(){
+  'use strict';
+  const VERSION = '4.0.19';
+  const PHOTO_BUCKET = 'inspection-photos';
+  const EQUIP_BUCKET = 'equipment-photos';
+  const $ = id => document.getElementById(id);
+  const api = () => window.SWOperationsV4 || {};
+  const appState = () => api().state || {};
+  const sb = () => appState().sb;
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const norm = v => String(v || '').trim().toLowerCase().replace(/\s+/g,' ');
+  const titleCase = v => String(v||'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  function nzDate(value){ if(!value) return '—'; const d = new Date(String(value).includes('T') ? value : value + 'T00:00:00'); return Number.isNaN(d.getTime()) ? esc(value) : d.toLocaleDateString('en-NZ'); }
+  function statusLabel(value){ const v=String(value||'—'); if(v==='Pass') return 'Completed OK'; if(v==='Fail'||v==='Problem') return 'Issue to report'; return v; }
+  function statusClass(value){ const v=norm(value); if(v.includes('pass') || v.includes('completed ok')) return 'ok'; if(v.includes('remove') || v.includes('fail') || v.includes('issue')) return 'bad'; return 'warn'; }
+  function isArchived(e){ return /archived|disposed|retired/i.test(String(e?.status||'')); }
+  function pathFromPhoto(row){ return row?.file_path || row?.storage_path || row?.path || row?.object_path || ''; }
+  function dueState(inspection){
+    if(!inspection || !inspection.next_due) return 'no_inspection';
+    const d = new Date(String(inspection.next_due).includes('T') ? inspection.next_due : inspection.next_due + 'T00:00:00');
+    const today = new Date(new Date().toISOString().slice(0,10) + 'T00:00:00');
+    return d < today ? 'due' : 'ok';
+  }
+  async function loadHeightData(){
+    const client = sb();
+    if(!client) throw new Error('Supabase is not ready.');
+    const [eq, ins, eph, iph] = await Promise.all([
+      client.from('equipment').select('*').order('type', {ascending:true}).order('serial', {ascending:true}),
+      client.from('inspections').select('*').order('inspection_date', {ascending:false}).order('created_at', {ascending:false}),
+      client.from('equipment_photos').select('*').order('created_at', {ascending:false}),
+      client.from('inspection_photos').select('*').order('created_at', {ascending:false})
+    ]);
+    if(eq.error) throw eq.error;
+    if(ins.error) throw ins.error;
+    return { equipment:eq.data||[], inspections:ins.data||[], equipmentPhotos:eph.error?[]:(eph.data||[]), inspectionPhotos:iph.error?[]:(iph.data||[]) };
+  }
+  function latestInspectionFor(e, inspections){
+    const id = String(e?.id || ''); const serial = norm(e?.serial);
+    return (inspections||[]).filter(i => String(i.equipment_id||'') === id || norm(i.serial) === serial)
+      .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))[0] || null;
+  }
+  function pairHaystack(pair){ const e=pair.equipment||{}, i=pair.inspection||{}; return [e.serial,e.type,e.manufacturer,e.model,e.status,e.location,e.notes,i.result,i.inspector,i.inspection_date].map(norm).join(' '); }
+  function typeNorm(v){ return norm(v).replace(/s$/,''); }
+  function pairMatches(pair, filters){
+    const e = pair.equipment || {}, i = pair.inspection || null;
+    if(filters.type && typeNorm(e.type) !== typeNorm(filters.type)) return false;
+    if(filters.status && norm(e.status) !== norm(filters.status)) return false;
+    if(filters.result && (!i || norm(i.result) !== norm(filters.result))) return false;
+    if(filters.due && dueState(i) !== filters.due) return false;
+    if(filters.q && !pairHaystack(pair).includes(norm(filters.q))) return false;
+    return true;
+  }
+  async function storageUrl(bucket, path){
+    if(!path || !sb()) return '';
+    try{ const r = await sb().storage.from(bucket).createSignedUrl(path, 3600); return r.error ? '' : r.data.signedUrl; }catch(e){ return ''; }
+  }
+  async function storageDataUrl(bucket, path){
+    if(!path || !sb()) return {url:'', type:'', name:''};
+    const dl = await sb().storage.from(bucket).download(path);
+    if(dl.error) throw dl.error;
+    const blob = dl.data;
+    const url = await new Promise((resolve,reject)=>{ const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(blob); });
+    return {url, type:String(blob.type||'').toLowerCase(), name:String(path).split('/').pop()};
+  }
+
+  function injectV419Css(){
+    if($('sw419Styles')) return;
+    const style = document.createElement('style');
+    style.id = 'sw419Styles';
+    style.textContent = `
+      .notifyBtn,#notifyBadge,#notificationPanel{display:none!important;}
+      #accountPanel.hidden{display:none!important;}
+      .sw419-history-scroll{max-height:365px;overflow-y:auto;overflow-x:auto;border:1px solid #e2e8f0;border-radius:14px;background:#fff;}
+      .sw419-table{width:100%;border-collapse:collapse;font-size:14px;}
+      .sw419-table th,.sw419-table td{padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top;}
+      .sw419-table th{position:sticky;top:0;background:#f8fafc;z-index:1;font-weight:900;color:#334155;}
+      .sw419-filter-panel{background:#ecfdf5;border:1px solid #14b8a6;border-radius:14px;padding:14px;margin:12px 0;}
+      .sw419-filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;}
+      .sw419-filter-grid label{display:flex;flex-direction:column;font-weight:800;font-size:.88rem;gap:5px;}
+      .sw419-row-list{border:1px solid #dbe7ee;border-radius:14px;background:white;max-height:480px;overflow:auto;padding:8px;margin:10px 0;}
+      .sw419-list-item{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;text-align:left;padding:12px;border-bottom:1px solid #e5edf3;cursor:pointer;}
+      .sw419-list-item:last-child{border-bottom:0;}
+      .sw419-list-item:hover{background:#f8fafc;}
+      .sw419-list-title{font-weight:900;color:#0f172a;}
+      .sw419-meta{font-size:.88rem;color:#475569;margin-top:2px;}
+      .sw419-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;font-weight:800;font-size:.78rem;white-space:nowrap;}
+      .sw419-pill.ok{background:#dcfce7;color:#047857;}.sw419-pill.bad{background:#fee2e2;color:#b91c1c;}.sw419-pill.warn{background:#fef3c7;color:#b45309;}.sw419-pill.neutral{background:#e2e8f0;color:#334155;}
+      .sw419-cert-row{grid-template-columns:auto 1fr!important;justify-items:start;text-align:left;}
+      .sw419-cert-row input{width:auto;margin-top:3px;}
+      #certItemList,.certSelectList,.sw418-row-list{text-align:left!important;}
+      #certificates .certPanel h3,#certificates .certificateControls>h2,#certificates #certModeHelp,#certificates #certItemsPanel>p.muted{display:none!important;}
+      #certificates .certActionBox{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-start;}
+      .sw419-qual-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+      @media print{.noPrint{display:none!important}.page{box-shadow:none!important;margin:0!important;max-width:none!important;}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  async function renderRecentHistoryV419(){
+    const box = $('dashRecent');
+    if(!box) return;
+    try{
+      const limit = Number($('heightRecentLimit')?.value || 10);
+      const { equipment, inspections } = await loadHeightData();
+      const eqById = new Map(equipment.map(e => [String(e.id), e]));
+      const eqBySerial = new Map(equipment.map(e => [norm(e.serial), e]));
+      const rows = inspections
+        .slice()
+        .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))
+        .slice(0, limit);
+      box.innerHTML = `<div class="sw419-history-scroll"><table class="sw419-table"><thead><tr><th>Date</th><th>Serial</th><th>Type</th><th>Result</th><th>Inspector</th></tr></thead><tbody>${rows.map(i=>{
+        const e = eqById.get(String(i.equipment_id||'')) || eqBySerial.get(norm(i.serial)) || {};
+        const cls = statusClass(i.result);
+        return `<tr><td>${nzDate(i.inspection_date||i.created_at)}</td><td><strong>${esc(e.serial||i.serial||'')}</strong></td><td>${esc(e.type||i.type||'')}</td><td><span class="sw419-pill ${cls}">${esc(statusLabel(i.result))}</span></td><td>${esc(i.inspector||'')}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+      const details = box.closest('details'); if(details) details.open = true;
+    }catch(err){ box.innerHTML = `<p class="muted">Could not load recent inspection history: ${esc(err.message||err)}</p>`; }
+  }
+  function installRecentHistoryV419(){
+    const sel = $('heightRecentLimit');
+    if(sel){
+      if(!sel.value) sel.value = '10';
+      if(!sel.dataset.sw419){ sel.dataset.sw419 = '1'; sel.addEventListener('change', renderRecentHistoryV419); }
+    }
+    renderRecentHistoryV419();
+  }
+
+  function openEquipmentPreserveScroll(id){
+    if(!id) return;
+    const y = window.scrollY;
+    const x = window.scrollX;
+    const fn = window.openItem || window.openDetail || window.showDetail;
+    if(typeof fn === 'function') fn(id);
+    else if(typeof window.showTab === 'function') window.showTab('detail');
+    [0,50,150,350,700].forEach(ms => setTimeout(()=>window.scrollTo(x,y), ms));
+  }
+  async function populateEquipmentFilterOptions(){
+    const { equipment } = await loadHeightData();
+    const types = [...new Set(equipment.map(e=>e.type).filter(Boolean))].sort();
+    const statuses = [...new Set(equipment.map(e=>e.status).filter(Boolean))].sort();
+    const typeSel = $('eqFilterType'), statusSel = $('eqFilterStatus');
+    const oldType = typeSel?.value || '', oldStatus = statusSel?.value || '';
+    if(typeSel) typeSel.innerHTML = '<option value="">All types</option>' + types.map(t=>`<option value="${esc(t)}" ${oldType===t?'selected':''}>${esc(t)}</option>`).join('');
+    if(statusSel) statusSel.innerHTML = '<option value="">All statuses</option>' + statuses.map(t=>`<option value="${esc(t)}" ${oldStatus===t?'selected':''}>${esc(t)}</option>`).join('');
+  }
+  function equipmentRow(pair){
+    const e = pair.equipment || {}, i = pair.inspection || null;
+    const latest = i ? `${nzDate(i.inspection_date)} · ${statusLabel(i.result)}` : 'No inspection history';
+    const cls = i ? statusClass(i.result) : 'neutral';
+    return `<div class="sw419-list-item" data-sw419-equipment-id="${esc(e.id)}" tabindex="0" role="button"><div><div class="sw419-list-title">${esc(e.serial||'No serial')} ${esc(e.type||'')}</div><div class="sw419-meta">${esc(e.manufacturer||'')} ${esc(e.model||'')} · ${esc(e.status||'')} · Latest: ${esc(latest)}</div></div><span class="sw419-pill ${cls}">${esc(i ? statusLabel(i.result) : 'No inspection')}</span></div>`;
+  }
+  async function renderEquipmentFilterV419(){
+    const list = $('equipmentList'); if(!list) return;
+    try{
+      const { equipment, inspections } = await loadHeightData();
+      const filters = { type:$('eqFilterType')?.value||'', status:$('eqFilterStatus')?.value||'', due:$('eqFilterDue')?.value||'', q:$('eqFilterSearch')?.value||'' };
+      const pairs = equipment.map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>pairMatches(p, filters));
+      const count = $('eqFilterCount'); if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown.`;
+      list.innerHTML = `<div class="sw419-row-list">${pairs.map(equipmentRow).join('') || '<p class="muted">No equipment matches the current filters.</p>'}</div>`;
+      list.querySelectorAll('[data-sw419-equipment-id]').forEach(row=>{
+        const open = () => openEquipmentPreserveScroll(row.dataset.sw419EquipmentId);
+        row.addEventListener('click', open);
+        row.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); }});
+      });
+    }catch(err){ list.innerHTML = `<div class="ops-error">Could not load equipment list: ${esc(err.message||err)}</div>`; }
+  }
+  async function installEquipmentV419(){
+    const list = $('equipmentList'); if(!list) return;
+    $('dashTypes')?.closest('.card')?.remove();
+    $('filterLabel')?.remove();
+    const oldSearch = $('search')?.closest('.row'); if(oldSearch) oldSearch.remove();
+    let panel = $('heightEquipmentFilterPanel');
+    if(!panel){
+      panel = document.createElement('div');
+      panel.id = 'heightEquipmentFilterPanel';
+      panel.className = 'sw419-filter-panel';
+      panel.innerHTML = `<h3 style="margin-top:0">Filter equipment</h3><div class="sw419-filter-grid"><label>Equipment type<select id="eqFilterType"><option value="">All types</option></select></label><label>Status<select id="eqFilterStatus"><option value="">All statuses</option></select></label><label>Due status<select id="eqFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="eqFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="row"><button type="button" id="eqFilterClear">Clear filters</button></div><div id="eqFilterCount" class="muted" style="margin-top:6px"></div>`;
+      list.parentElement.insertBefore(panel, list);
+    } else {
+      panel.className = 'sw419-filter-panel';
+    }
+    await populateEquipmentFilterOptions();
+    ['eqFilterType','eqFilterStatus','eqFilterDue','eqFilterSearch'].forEach(id=>{
+      const el=$(id); if(el && !el.dataset.sw419){ el.dataset.sw419='1'; el.addEventListener(id==='eqFilterSearch'?'input':'change', renderEquipmentFilterV419); }
+    });
+    if($('eqFilterClear') && !$('eqFilterClear').dataset.sw419){ $('eqFilterClear').dataset.sw419='1'; $('eqFilterClear').addEventListener('click',()=>{ ['eqFilterType','eqFilterStatus','eqFilterDue','eqFilterSearch'].forEach(id=>{const el=$(id); if(el) el.value='';}); renderEquipmentFilterV419(); }); }
+    renderEquipmentFilterV419();
+  }
+
+  function selectedCertificateIds(){
+    const set = new Set();
+    document.querySelectorAll('#certItemList input[type="checkbox"]:checked').forEach(ch => set.add(String(ch.value)));
+    if(api().state?.certSelectedIds instanceof Set) api().state.certSelectedIds.forEach(id => set.add(String(id)));
+    return [...set];
+  }
+  function certificateFilterValues(){ return { type:$('certFilterType')?.value||'', status:$('certFilterStatus')?.value||'', result:$('certFilterResult')?.value||'', due:$('certFilterDue')?.value||'', q:$('certFilterSearch')?.value||'' }; }
+  function certRow(pair){
+    const e=pair.equipment||{}, i=pair.inspection||null;
+    const checked = selectedCertificateIds().includes(String(e.id)) ? 'checked' : '';
+    const disabled = i ? '' : 'disabled';
+    const latest = i ? `${nzDate(i.inspection_date)} · ${statusLabel(i.result)}` : 'No inspection history';
+    return `<label class="sw419-list-item sw419-cert-row"><input type="checkbox" class="sw419-cert-check" value="${esc(e.id)}" ${checked} ${disabled}><span><span class="sw419-list-title">${esc(e.serial||'No serial')} ${esc(e.type||'')}</span><br><span class="sw419-meta">${esc(e.manufacturer||'')} ${esc(e.model||'')} · ${esc(e.status||'')} · Latest: ${esc(latest)}</span></span></label>`;
+  }
+  function setSelectedIds(ids){
+    const st = api().state;
+    if(st?.certSelectedIds instanceof Set){ st.certSelectedIds.clear(); ids.forEach(id=>st.certSelectedIds.add(String(id))); }
+  }
+  function updateCertificateActionState(){
+    const count = selectedCertificateIds().length;
+    const val = $('certValidation');
+    if(val){ val.textContent = count ? `${count} selected. Ready to generate.` : 'Tick at least one item with inspection history.'; val.className = 'certValidation ' + (count ? 'ready' : 'warn'); }
+    ['certGenerateBtn','certGenerateCombinedBtn'].forEach(id=>{ const b=$(id); if(b) b.disabled = count === 0; });
+    const countEl = $('certFilterCount');
+    if(countEl && !/selected\.$/.test(countEl.textContent||'')) countEl.textContent = (countEl.textContent||'').replace(/; \d+ selected\.?$/, '') + `; ${count} selected.`;
+  }
+  async function renderCertificateFilterV419(){
+    const list = $('certItemList'); if(!list) return;
+    try{
+      const { equipment, inspections } = await loadHeightData();
+      const pairs = equipment.filter(e=>!isArchived(e)).map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>pairMatches(p, certificateFilterValues()));
+      list.innerHTML = `<div class="sw419-row-list">${pairs.map(certRow).join('') || '<p class="muted">No items match the current filters.</p>'}</div>`;
+      const count = $('certFilterCount'); if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown; ${pairs.filter(p=>p.inspection).length} with inspection history; ${selectedCertificateIds().length} selected.`;
+      list.querySelectorAll('.sw419-cert-check').forEach(ch => ch.addEventListener('change',()=>{
+        const ids = new Set(selectedCertificateIds());
+        if(ch.checked) ids.add(String(ch.value)); else ids.delete(String(ch.value));
+        setSelectedIds([...ids]);
+        updateCertificateActionState();
+        renderCertificateFilterV419();
+      }));
+      updateCertificateActionState();
+    }catch(err){ list.innerHTML = `<div class="ops-error">Could not load certificate items: ${esc(err.message||err)}</div>`; }
+  }
+  async function selectedCertificatePairs(){
+    const ids = new Set(selectedCertificateIds());
+    const { equipment, inspections } = await loadHeightData();
+    return equipment.filter(e=>ids.has(String(e.id))).map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>p.inspection);
+  }
+  async function certImages(e,i,equipmentPhotos,inspectionPhotos){
+    const includeEq = $('certIncludeEquipmentPhotosCheck') ? $('certIncludeEquipmentPhotosCheck').checked : (($('certIncludeEquipmentPhotos')?.value||'yes')==='yes');
+    const includeIns = $('certIncludeInspectionPhotosCheck') ? $('certIncludeInspectionPhotosCheck').checked : (($('certIncludeInspectionPhotos')?.value||'yes')==='yes');
+    const equipmentUrls = [];
+    const inspectionUrls = [];
+    if(includeEq){
+      const eqRows = (equipmentPhotos||[]).filter(p => String(p.equipment_id) === String(e.id));
+      for(const p of eqRows.slice(0,2)){ const u = await storageUrl(EQUIP_BUCKET, pathFromPhoto(p)); if(u) equipmentUrls.push(u); }
+    }
+    if(includeIns && i){
+      const insRows = (inspectionPhotos||[]).filter(p => String(p.inspection_id) === String(i.id));
+      for(const p of insRows.slice(0,6)){ const u = await storageUrl(PHOTO_BUCKET, pathFromPhoto(p)); if(u) inspectionUrls.push(u); }
+    }
+    return {equipmentUrls, inspectionUrls};
+  }
+  function certCss(){ return `body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.page{background:white;max-width:920px;min-height:1180px;margin:22px auto;padding:36px;box-shadow:0 10px 35px #0f172a22;page-break-after:always}.head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:4px solid #0f766e;padding-bottom:14px;margin-bottom:18px}.brand{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:#0f766e;font-weight:900}.title{font-size:26px;font-weight:900;margin:4px 0}.muted{color:#64748b}.grid{display:grid;grid-template-columns:170px 1fr;gap:0;margin:16px 0}.label,.value{border-bottom:1px solid #e2e8f0;padding:7px 8px}.label{font-weight:900;background:#f8fafc;color:#334155}.pill{border-radius:999px;padding:5px 10px;font-weight:900;display:inline-block}.ok{background:#dcfce7;color:#047857}.bad{background:#fee2e2;color:#b91c1c}.warn{background:#fef3c7;color:#b45309}.photoGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:14px}.photoGrid img{width:100%;height:310px;object-fit:contain;border:1px solid #dbe7ee;border-radius:14px;background:#f8fafc}.equipmentPhotoStrip{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px}.equipmentPhotoStrip img{width:48%;max-height:230px;object-fit:contain;border:1px solid #dbe7ee;border-radius:14px;background:#f8fafc;margin-right:10px}.checklist{columns:2;column-gap:32px;font-size:12px}.footer{margin-top:18px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border-bottom:1px solid #dbe7ee;padding:9px;text-align:left;vertical-align:top}th{background:#f1f5f9;color:#334155;font-weight:900}.noPrint{position:sticky;top:0;background:#0f766e;color:white;padding:10px;text-align:center}.noPrint button{background:white;color:#0f766e;border:0;border-radius:10px;padding:9px 14px;font-weight:900}@media print{body{background:white}.noPrint{display:none}.page{box-shadow:none;margin:0;max-width:none;min-height:auto;page-break-after:always}.photoGrid img{height:310px}}`; }
+  function checklistHtml(i){ const checks = Array.isArray(i?.checklist) ? i.checklist : []; return checks.length ? `<h3>Checklist completed</h3><div class="checklist">${checks.map(c=>`<div>✓ ${esc(c)}</div>`).join('')}</div>` : ''; }
+  function equipmentPhotoBlock(record){
+    const urls = record.images?.equipmentUrls || [];
+    if(!urls.length) return '';
+    return `<div class="equipmentPhotoStrip"><h3>Equipment photo</h3>${urls.slice(0,2).map(u=>`<img src="${esc(u)}" alt="Equipment photo">`).join('')}</div>`;
+  }
+  function certificatePage(record){
+    const e=record.equipment||{}, i=record.inspection||{}; const result=statusLabel(i.result); const cls=statusClass(i.result);
+    return `<section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Height Equipment Inspection Certificate</div><div class="muted">Generated ${new Date().toLocaleDateString('en-NZ')}</div></div><div><span class="pill ${cls}">${esc(result)}</span></div></div><div class="grid"><div class="label">Serial</div><div class="value"><strong>${esc(e.serial||'')}</strong></div><div class="label">Equipment type</div><div class="value">${esc(e.type||'')}</div><div class="label">Manufacturer</div><div class="value">${esc(e.manufacturer||'—')}</div><div class="label">Model</div><div class="value">${esc(e.model||'—')}</div><div class="label">Status</div><div class="value">${esc(e.status||'—')}</div><div class="label">Inspection date</div><div class="value">${nzDate(i.inspection_date)}</div><div class="label">Inspector</div><div class="value">${esc(i.inspector||'—')}</div><div class="label">Next due</div><div class="value">${nzDate(i.next_due)}</div><div class="label">Inspection result</div><div class="value"><span class="pill ${cls}">${esc(result)}</span></div><div class="label">Notes</div><div class="value">${esc(i.notes||'—')}</div></div>${checklistHtml(i)}${equipmentPhotoBlock(record)}<div class="footer">This certificate is generated from the latest saved inspection record for the selected item in Spray &amp; Wash Operations.</div></section>`;
+  }
+  function inspectionPhotoPage(record){
+    const urls = record.images?.inspectionUrls || [];
+    if(!urls.length) return '';
+    return `<section class="page photoPage"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Latest Inspection Photos</div><div class="muted">${esc(record.equipment?.serial||'')} ${esc(record.equipment?.type||'')}</div></div></div><div class="photoGrid">${urls.slice(0,6).map(u=>`<img src="${esc(u)}" alt="Latest inspection photo">`).join('')}</div><div class="footer">Photos shown here are attached to the latest inspection used for this certificate only.</div></section>`;
+  }
+  async function buildSeparateCertificates(pairs, title){
+    const { equipmentPhotos, inspectionPhotos } = await loadHeightData();
+    const records=[];
+    for(const p of pairs){ records.push({...p, images: await certImages(p.equipment, p.inspection, equipmentPhotos, inspectionPhotos)}); }
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title||'Height Equipment Certificates')}</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div>${records.map(r=>certificatePage(r)+inspectionPhotoPage(r)).join('')}</body></html>`;
+    const w = window.open('', '_blank');
+    if(w){ w.document.open(); w.document.write(html); w.document.close(); }
+    else { const blob = new Blob([html], {type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='spray-wash-height-certificates.html'; a.click(); URL.revokeObjectURL(a.href); }
+  }
+  function combinedCertificateHtml(pairs){
+    const rows = pairs.map(p=>{ const e=p.equipment||{}, i=p.inspection||{}, result=statusLabel(i.result), cls=statusClass(i.result); return `<tr><td><strong>${esc(e.serial||'')}</strong></td><td>${esc(e.type||'')}</td><td>${esc(e.manufacturer||'')}</td><td>${esc(e.model||'')}</td><td>${nzDate(i.inspection_date)}</td><td><span class="pill ${cls}">${esc(result)}</span></td><td>${esc(i.inspector||'')}</td><td>${nzDate(i.next_due)}</td></tr>`; }).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Selected Height Equipment Inspection Summary</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Selected Height Equipment Inspection Summary</div><div class="muted">Combined report for ${pairs.length} selected item${pairs.length===1?'':'s'} · Generated ${new Date().toLocaleString('en-NZ')}</div></div></div><table><thead><tr><th>Serial</th><th>Type</th><th>Manufacturer</th><th>Model</th><th>Inspection date</th><th>Result</th><th>Inspector</th><th>Next due</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">This combined document summarises the latest inspection record for each selected item.</div></section></body></html>`;
+  }
+  async function generateSeparateV419(){ const pairs = await selectedCertificatePairs(); if(!pairs.length) return alert('Tick at least one item with inspection history.'); await buildSeparateCertificates(pairs, 'Selected item certificates'); }
+  async function generateCombinedV419(){ const pairs = await selectedCertificatePairs(); if(!pairs.length) return alert('Tick at least one item with inspection history.'); const html = combinedCertificateHtml(pairs); const w=window.open('', '_blank'); if(w){w.document.open(); w.document.write(html); w.document.close();} else {const blob=new Blob([html], {type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='spray-wash-selected-equipment-summary.html'; a.click(); URL.revokeObjectURL(a.href);} }
+  function cleanCertificatesV419(){
+    const cert = $('certificates'); if(!cert) return;
+    cert.querySelectorAll('h2,h3').forEach(h=>{
+      const t=(h.textContent||'').trim();
+      if(/^Certificates$/i.test(t) || /Choose certificate batch type|Photo options|Generate certificates|Select individual items|Equipment type|Inspection date range|Inspection result/i.test(t)) h.remove();
+      if(/^2\.\s*Filter and select items/i.test(t)) h.textContent = 'Filter and select items';
+    });
+    const modeHelp=$('certModeHelp'); if(modeHelp) modeHelp.remove();
+    const p = $('certItemsPanel')?.querySelector('p.muted'); if(p) p.remove();
+    cert.querySelector('.certSelectionTools')?.remove();
+    $('certSelectVisible')?.remove(); $('certClearSelected')?.remove();
+    const action = $('certGenerateBtn')?.parentElement;
+    if(action){ action.classList.add('certActionBox'); const b1=$('certGenerateBtn'); if(b1){ b1.textContent='Generate separate certificates'; b1.onclick=generateSeparateV419; } let b2=$('certGenerateCombinedBtn'); if(!b2){ b2=document.createElement('button'); b2.id='certGenerateCombinedBtn'; b2.className='primary'; b2.type='button'; action.appendChild(b2); } b2.textContent='Generate one combined certificate'; b2.onclick=generateCombinedV419; }
+    ['certFilterType','certFilterStatus','certFilterResult','certFilterDue','certFilterSearch'].forEach(id=>{ const el=$(id); if(el && !el.dataset.sw419){ el.dataset.sw419='1'; el.addEventListener(id==='certFilterSearch'?'input':'change', renderCertificateFilterV419); }});
+    renderCertificateFilterV419();
+  }
+
+  async function printQualificationDetailsV419(id){
+    const q = (appState().qualifications||[]).find(x => String(x.id) === String(id)) || (appState().qualifications||[]).find(x => norm(x.inspector_name) === norm(id));
+    if(!q) return alert('Qualification record not found.');
+    let embed='', fileNote='—';
+    if(q.storage_path){
+      try{
+        const d = await storageDataUrl(PHOTO_BUCKET, q.storage_path);
+        const type = d.type || String(q.file_name||'').toLowerCase();
+        fileNote = q.file_name || d.name || 'Saved file embedded';
+        if(type.includes('pdf')) embed = `<iframe src="${esc(d.url)}" style="width:100%;height:720px;border:1px solid #dbe7ee;border-radius:12px"></iframe><p><a href="${esc(d.url)}" download="${esc(q.file_name||'qualification.pdf')}">Download qualification PDF</a></p>`;
+        else embed = `<img src="${esc(d.url)}" style="max-width:100%;max-height:720px;border:1px solid #dbe7ee;border-radius:12px" alt="Inspector qualification image">`;
+      }catch(e){ fileNote = 'Saved file could not be embedded: ' + (e.message || e); }
+    }
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Inspector Details Verification</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Inspector Details Verification</div><div class="muted">Height equipment inspector qualification record</div></div></div><div class="grid"><div class="label">Inspector</div><div class="value">${esc(q.inspector_name||'—')}</div><div class="label">Email</div><div class="value">${esc(q.email||'—')}</div><div class="label">Qualification</div><div class="value">${esc(q.qualification_type||'—')}</div><div class="label">Provider</div><div class="value">${esc(q.provider||'—')}</div><div class="label">Reference</div><div class="value">${esc(q.reference_number||'—')}</div><div class="label">Issue date</div><div class="value">${nzDate(q.issue_date)}</div><div class="label">Expiry date</div><div class="value">${nzDate(q.expiry_date)}</div><div class="label">Saved file</div><div class="value">${esc(fileNote)}</div><div class="label">Notes</div><div class="value">${esc(q.notes||'—')}</div></div><div class="footer">Generated ${new Date().toLocaleString('en-NZ')} from Spray &amp; Wash Operations.</div></section>${embed?`<section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Uploaded Qualification Evidence</div></div></div>${embed}</section>`:''}</body></html>`;
+    const w=window.open('', '_blank'); if(w){w.document.open();w.document.write(html);w.document.close();} else {const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='inspector-details-verification.html'; a.click(); URL.revokeObjectURL(a.href);}
+  }
+  async function openQualificationFileV419(idOrPath){
+    let q = (appState().qualifications||[]).find(x=>String(x.id)===String(idOrPath));
+    const path = q?.storage_path || idOrPath;
+    if(!path) return alert('No saved file is attached.');
+    try{
+      const dl = await sb().storage.from(PHOTO_BUCKET).download(path);
+      if(dl.error) throw dl.error;
+      const url = URL.createObjectURL(dl.data);
+      const w = window.open(url, '_blank');
+      if(!w){ const a=document.createElement('a'); a.href=url; a.download=(q?.file_name || String(path).split('/').pop() || 'qualification-file'); a.click(); }
+      setTimeout(()=>URL.revokeObjectURL(url), 60000);
+    }catch(e){ alert('Could not open file: ' + (e.message || e)); }
+  }
+  function renderSavedQualificationsV419(){
+    const pane = $('heightQualifications'); if(!pane) return;
+    const wrapper = $('sw418QualWrapper');
+    if(wrapper){
+      const innerCard = wrapper.querySelector('.card');
+      if(innerCard){ wrapper.parentElement.insertBefore(innerCard, wrapper); wrapper.remove(); }
+    }
+    pane.querySelectorAll('p.muted').forEach(p=>{ if((p.textContent||'').includes('Files are stored')) p.remove(); });
+    const form = $('heightQualForm');
+    if(form){ const card = form.closest('.card'); const h2=card?.querySelector('h2'); if(h2) h2.textContent='Add Inspector'; }
+    const cards = Array.from(pane.querySelectorAll('.card'));
+    let saved = cards.find(c => /Saved inspector qualifications/i.test(c.textContent||''));
+    if(!saved){ saved = document.createElement('div'); saved.className='card'; pane.appendChild(saved); }
+    const rows = (appState().qualifications||[]).filter(q=>q.active!==false).sort((a,b)=>String(a.inspector_name||'').localeCompare(String(b.inspector_name||'')));
+    saved.innerHTML = `<h2>Saved Inspector Qualifications</h2>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>Actions</th><th>Notes</th></tr>${rows.map(r=>`<tr><td>${esc(titleCase(r.inspector_name))}<br><span class="ops-subtle">${esc(r.email||'')}</span></td><td>${esc(r.qualification_type||'—')}</td><td>${esc(r.provider||'—')}</td><td>${esc(r.reference_number||'—')}</td><td>${nzDate(r.expiry_date)}</td><td><div class="sw419-qual-actions">${r.storage_path ? `<button type="button" class="ops-btn ghost" data-sw419-open-qual="${esc(r.id)}">Open File</button>` : ''}<button type="button" class="ops-btn primary" data-sw419-print-qual="${esc(r.id)}">Print Qualification Details</button></div></td><td>${esc(r.notes||'—')}</td></tr>`).join('')}</table></div>` : '<p class="muted">No inspector qualifications saved yet.</p>'}`;
+    saved.querySelectorAll('[data-sw419-open-qual]').forEach(btn=>btn.addEventListener('click',()=>openQualificationFileV419(btn.dataset.sw419OpenQual)));
+    saved.querySelectorAll('[data-sw419-print-qual]').forEach(btn=>btn.addEventListener('click',()=>printQualificationDetailsV419(btn.dataset.sw419PrintQual)));
+    $('qualificationCertPanel')?.remove();
+  }
+
+  function installAccountBehaviourV419(){
+    const signed = $('signedIn'); if(!signed) return;
+    const notify = signed.querySelector('.notifyBtn'); if(notify) notify.remove();
+    $('notificationPanel')?.remove(); $('notifyBadge')?.remove();
+    if(!document.documentElement.dataset.sw419Account){
+      document.documentElement.dataset.sw419Account = '1';
+      document.addEventListener('click', e => {
+        const panel = $('accountPanel');
+        if(!panel || panel.classList.contains('hidden')) return;
+        if(e.target.closest('#accountPanel') || e.target.closest('.accountBtn')) return;
+        panel.classList.add('hidden');
+      });
+    }
+  }
+  function cleanStaticV419(){
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.19 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    cleanCertificatesV419();
+    renderSavedQualificationsV419();
+    installAccountBehaviourV419();
+  }
+  function install(){
+    injectV419Css();
+    installAccountBehaviourV419();
+    installRecentHistoryV419();
+    if($('equipmentList')) installEquipmentV419();
+    if($('certificates')) cleanCertificatesV419();
+    if($('heightQualifications')) renderSavedQualificationsV419();
+    const old = api();
+    window.SWOperationsV4 = Object.assign(old, {
+      renderRecentHistoryV419,
+      renderEquipmentFilterV419,
+      renderCertificateFilterV419,
+      generateCombinedCertificates: generateCombinedV419,
+      generateQualificationCertificate: printQualificationDetailsV419,
+      generateInspectorDetails: printQualificationDetailsV419,
+      printQualificationDetailsV419,
+      openQualificationFile: openQualificationFileV419,
+      openQualificationFileV419
+    });
+    window.generateCertificates = generateSeparateV419;
+    window.buildCertificatePacket = buildSeparateCertificates;
+    cleanStaticV419();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,900)); else setTimeout(install,900);
+  document.addEventListener('click', e=>{
+    if(e.target.closest('[data-tab="equipment"]')) setTimeout(installEquipmentV419,500);
+    if(e.target.closest('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(cleanCertificatesV419,500);
+    if(e.target.closest('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(renderSavedQualificationsV419,500);
+  }, true);
+  document.addEventListener('change', e=>{ if(e.target?.id === 'heightRecentLimit') setTimeout(renderRecentHistoryV419,20); }, true);
+  document.addEventListener('click', e=>{
+    const row = e.target.closest('#equipmentList [data-sw418-action="open"], #equipmentList [data-sw419-equipment-id]');
+    if(row){ e.preventDefault(); e.stopImmediatePropagation(); openEquipmentPreserveScroll(row.dataset.equipmentId || row.dataset.sw419EquipmentId); }
+  }, true);
+  setInterval(()=>{ cleanStaticV419(); if($('dashRecent')) renderRecentHistoryV419(); }, 3500);
 })();

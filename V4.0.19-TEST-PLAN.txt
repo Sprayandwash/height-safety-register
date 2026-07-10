@@ -1,0 +1,15 @@
+V4.0.19 Test Plan
+
+1. Confirm top banner shows Version 4.0.19.
+2. Confirm notification bell is gone and Account remains.
+3. Open Account, click outside the panel, confirm it closes.
+4. Height > Dashboard: set Recent Inspection History to 10, 20, 30, 50 and confirm selected number loads with scroll.
+5. Height > Equipment: filter the register and click an item. Confirm the item opens and page scroll does not jump to top.
+6. Height > Certificates: confirm title clutter is gone and filter/list is left aligned.
+7. Select certificate items and generate separate certificates.
+8. Confirm separate certificates show equipment photo on first page and latest inspection photos on second page.
+9. Generate one combined certificate and confirm formatting remains professional.
+10. Height > Qualifications: confirm box is named Add Inspector and not collapsed.
+11. Confirm Saved Inspector Qualifications title is capitalised.
+12. Click Open File for a qualification and confirm it opens/downloads.
+13. Click Print Qualification Details for a saved entry and confirm the report includes the qualification file/image/PDF where possible.
