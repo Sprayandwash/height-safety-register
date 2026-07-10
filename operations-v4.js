@@ -2679,9 +2679,9 @@
   else boot();
 })();
 
-/* V4.0.17 corrective UI and certificate patch */
+/* V4.0.18 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.17';
+  const VERSION = '4.0.18';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2978,7 +2978,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.17 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.18 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
@@ -2997,4 +2997,277 @@
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 700)); else setTimeout(install, 700);
   document.addEventListener('click', e => { if(e.target && e.target.closest && e.target.closest('#certificateTabButton,#certificates,[data-tab="certificates"]')) setTimeout(installCertificateUi, 500); if(e.target && e.target.closest && e.target.closest('[data-tab="equipment"]')) setTimeout(installEquipmentFilters, 500); });
   setInterval(() => { if($('certificates') && !$('certGenerateCombinedBtn')) installCertificateUi(); removeDuplicateStartInspection(); }, 2500);
+})();
+
+/* V4.0.18 corrective UI/certificate/equipment/inspection patch */
+(function(){
+  const VERSION = '4.0.18';
+  const PHOTO_BUCKET = 'inspection-photos';
+  const EQUIP_BUCKET = 'equipment-photos';
+  const $ = id => document.getElementById(id);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm = v => String(v || '').trim().toLowerCase();
+  const nzDate = v => { if(!v) return '—'; const d = new Date(v); return isNaN(d) ? String(v).slice(0,10) : d.toLocaleDateString('en-NZ'); };
+  function api(){ return window.SWOperationsV4 || {}; }
+  function state(){ return api().state || {}; }
+  function sb(){ return state().sb || window.sb || null; }
+  function statusLabel(r){ const raw=String(r||'—'); if(raw==='Pass') return 'Completed OK'; if(raw==='Fail - Repair Required') return 'Issue - repair required'; if(raw==='Fail - Remove From Service / Disposal') return 'Remove from service'; return raw; }
+  function statusClass(r){ return /pass|completed ok|in service/i.test(String(r||'')) ? 'ok' : /fail|issue|quarantine|remove/i.test(String(r||'')) ? 'bad' : 'warn'; }
+  function isArchived(e){ return e && (e.archived === true || e.status === 'Retired' || !!e.disposed_at); }
+  function certNorm(v){ return String(v || '').trim().toLowerCase().replace(/\s+/g,' '); }
+  function certTypeNorm(v){ return certNorm(v).replace(/s$/,''); }
+  function selectedSet(){ if(!window.__sw417CertSelected) window.__sw417CertSelected = new Set(); return window.__sw417CertSelected; }
+  function selectedIds(){ return Array.from(selectedSet()).map(String); }
+  function dueFromInspection(i){ if(!i) return 'no_inspection'; const next = String(i.next_due || '').slice(0,10); if(!next) return 'ok'; return next <= new Date().toISOString().slice(0,10) ? 'due' : 'ok'; }
+
+  function injectCss(){
+    if($('sw418Styles')) return;
+    const st = document.createElement('style');
+    st.id = 'sw418Styles';
+    st.textContent = `
+      #filterLabel,#dashTypes,.v415-compact-card:has(#dashTypes){display:none!important;}
+      .sw418-clean-hidden{display:none!important;}
+      .sw418-filter-panel{background:#ecfdf5;border:1px solid #14b8a6;border-radius:14px;padding:14px;margin:12px 0;}
+      .sw418-filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;align-items:end;}
+      .sw418-filter-grid label{display:flex;flex-direction:column;font-weight:800;font-size:.88rem;gap:5px;}
+      .sw418-filter-grid input,.sw418-filter-grid select{border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:white;min-height:42px;}
+      .sw418-row-list{border:1px solid #dbe7ee;border-radius:14px;background:white;max-height:460px;overflow:auto;padding:4px;margin:10px 0;}
+      .sw418-list-item{border-bottom:1px solid #e5edf3;padding:12px 14px;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;}
+      .sw418-list-item:hover{background:#f8fafc}.sw418-list-item:last-child{border-bottom:0}
+      .sw418-item-title{font-weight:900}.sw418-meta{color:#475569;font-size:.9rem;margin-top:3px;line-height:1.35}
+      .sw418-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;font-weight:900;font-size:.78rem;white-space:nowrap;}
+      .sw418-pill.ok{background:#dcfce7;color:#047857}.sw418-pill.bad{background:#fee2e2;color:#b91c1c}.sw418-pill.warn{background:#fef3c7;color:#b45309}.sw418-pill.neutral{background:#e2e8f0;color:#334155}
+      .sw418-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}.sw418-actions button{min-width:0}
+      .sw418-cert-actions{display:flex!important;gap:12px!important;flex-wrap:wrap!important;align-items:center!important}.sw418-cert-actions button{min-width:230px!important;}
+      .sw418-cert-title-card,.sw418-old-cert-heading,.certSelectionTools{display:none!important;}
+      .sw418-history-scroll{max-height:560px;overflow:auto;border:1px solid #e5edf3;border-radius:12px;background:#fff;}
+      .sw418-table{width:100%;border-collapse:collapse}.sw418-table th,.sw418-table td{padding:9px 10px;border-bottom:1px solid #e5edf3;text-align:left;vertical-align:top}.sw418-table th{background:#f8fafc;font-weight:900;}
+      .sw418-inspection-select .sw418-list-item{grid-template-columns:1fr auto}.sw418-qual-details details{border:1px solid #dbe7ee;border-radius:14px;background:white;margin:10px 0;overflow:hidden}.sw418-qual-details summary{cursor:pointer;padding:12px 14px;font-weight:900;background:#f8fafc}.sw418-qual-details .sw418-qual-inner{padding:14px}
+      @media print{.noPrint{display:none!important}.page{page-break-after:always}.photoPage{page-break-before:always}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  async function loadHeightData(){
+    const client = sb(); if(!client) throw new Error('Supabase is not ready.');
+    const [eq, ins, eph, iph] = await Promise.all([
+      client.from('equipment').select('*').order('type', {ascending:true}).order('serial', {ascending:true}),
+      client.from('inspections').select('*').order('inspection_date', {ascending:false}),
+      client.from('equipment_photos').select('*').order('created_at',{ascending:false}),
+      client.from('inspection_photos').select('*').order('created_at',{ascending:false})
+    ]);
+    if(eq.error) throw eq.error; if(ins.error) throw ins.error;
+    return { equipment:eq.data||[], inspections:ins.data||[], equipmentPhotos:eph.error?[]:(eph.data||[]), inspectionPhotos:iph.error?[]:(iph.data||[]) };
+  }
+  function latestInspectionFor(e, inspections){
+    const id = String(e.id || ''); const serial = norm(e.serial);
+    return (inspections || []).filter(i => String(i.equipment_id || '') === id || norm(i.serial) === serial)
+      .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))[0] || null;
+  }
+  function pairHaystack(pair){ const e=pair.equipment||{}, i=pair.inspection||{}; return [e.serial,e.type,e.manufacturer,e.model,e.status,e.notes,i.result,i.inspector,i.inspection_date].map(norm).join(' '); }
+  function pairMatches(pair, filters){
+    const e=pair.equipment||{}, i=pair.inspection||null;
+    if(filters.type && certTypeNorm(e.type)!==certTypeNorm(filters.type)) return false;
+    if(filters.status && certNorm(e.status)!==certNorm(filters.status)) return false;
+    if(filters.result && (!i || certNorm(i.result)!==certNorm(filters.result))) return false;
+    if(filters.due && dueFromInspection(i)!==filters.due) return false;
+    if(filters.q && !pairHaystack(pair).includes(norm(filters.q))) return false;
+    return true;
+  }
+  async function populateSelectOptions(typeSel, statusSel){
+    const { equipment } = await loadHeightData();
+    const types = [...new Set(equipment.map(e=>e.type).filter(Boolean))].sort();
+    const statuses = [...new Set(equipment.map(e=>e.status).filter(Boolean))].sort();
+    const oldType = typeSel?.value || ''; const oldStatus = statusSel?.value || '';
+    if(typeSel) typeSel.innerHTML = '<option value="">All types</option>' + types.map(t=>`<option value="${esc(t)}" ${oldType===t?'selected':''}>${esc(t)}</option>`).join('');
+    if(statusSel) statusSel.innerHTML = '<option value="">All statuses</option>' + statuses.map(t=>`<option value="${esc(t)}" ${oldStatus===t?'selected':''}>${esc(t)}</option>`).join('');
+  }
+  function itemRow(pair, opts={}){
+    const e=pair.equipment||{}, i=pair.inspection||null;
+    const latest = i ? `${nzDate(i.inspection_date)} · ${statusLabel(i.result)}` : 'No inspection history';
+    const cls = i ? statusClass(i.result) : 'neutral';
+    const action = opts.action || 'open';
+    const extra = opts.checkbox ? `<input type="checkbox" class="sw418-cert-check" value="${esc(e.id)}" ${selectedSet().has(String(e.id))?'checked':''} ${i?'':'disabled'}>` : `<span class="sw418-pill ${cls}">${esc(i ? statusLabel(i.result) : 'No inspection')}</span>`;
+    return `<div class="sw418-list-item" tabindex="0" role="button" data-sw418-action="${esc(action)}" data-equipment-id="${esc(e.id)}">${opts.checkbox?extra:''}<div><div class="sw418-item-title">${esc(e.serial||'No serial')} ${esc(e.type||'')}</div><div class="sw418-meta">${esc(e.manufacturer||'')} ${esc(e.model||'')} · ${esc(e.status||'')} · Latest: ${esc(latest)}</div></div>${opts.checkbox?'':extra}</div>`;
+  }
+  function openEquipment(id){
+    if(!id) return;
+    if(typeof window.openItem === 'function') return window.openItem(id);
+    if(typeof window.openDetail === 'function') return window.openDetail(id);
+    if(typeof window.showDetail === 'function') return window.showDetail(id);
+    if(typeof window.showTab === 'function') window.showTab('detail');
+  }
+
+  async function renderEquipmentFilterList(){
+    const list = $('equipmentList'); if(!list) return;
+    try{
+      const { equipment, inspections } = await loadHeightData();
+      const filters = { type:$('eqFilterType')?.value||'', status:$('eqFilterStatus')?.value||'', due:$('eqFilterDue')?.value||'', q:$('eqFilterSearch')?.value||'' };
+      const pairs = equipment.map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>pairMatches(p, filters));
+      const count=$('eqFilterCount'); if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown.`;
+      list.innerHTML = `<div class="sw418-row-list">${pairs.map(p=>itemRow(p,{action:'open'})).join('') || '<p class="muted">No equipment matches the current filters.</p>'}</div>`;
+      list.querySelectorAll('[data-sw418-action="open"]').forEach(row=>{
+        row.addEventListener('click',()=>openEquipment(row.dataset.equipmentId));
+        row.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openEquipment(row.dataset.equipmentId); }});
+      });
+    }catch(err){ list.innerHTML = `<div class="ops-error">Could not load equipment list: ${esc(err.message||err)}</div>`; }
+  }
+  async function installEquipmentRegister(){
+    const list = $('equipmentList'); if(!list) return;
+    const typeCard = $('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
+    const label = $('filterLabel'); if(label) label.remove();
+    const oldSearch = $('search')?.closest('.row'); if(oldSearch) oldSearch.remove();
+    let panel = $('heightEquipmentFilterPanel');
+    if(!panel){
+      panel = document.createElement('div'); panel.id='heightEquipmentFilterPanel'; panel.className='sw418-filter-panel';
+      panel.innerHTML = `<h3 style="margin-top:0">Filter equipment</h3><div class="sw418-filter-grid"><label>Equipment type<select id="eqFilterType"><option value="">All types</option></select></label><label>Status<select id="eqFilterStatus"><option value="">All statuses</option></select></label><label>Due status<select id="eqFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="eqFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="sw418-actions"><button type="button" id="eqFilterClear">Clear filters</button></div><div id="eqFilterCount" class="muted" style="margin-top:6px"></div>`;
+      list.parentElement.insertBefore(panel, list);
+    }
+    await populateSelectOptions($('eqFilterType'), $('eqFilterStatus'));
+    ['eqFilterType','eqFilterStatus','eqFilterDue','eqFilterSearch'].forEach(id=>{ const el=$(id); if(el && !el.dataset.sw418){ el.dataset.sw418='1'; el.addEventListener(id==='eqFilterSearch'?'input':'change', renderEquipmentFilterList); }});
+    $('eqFilterClear')?.addEventListener('click',()=>{ ['eqFilterType','eqFilterStatus','eqFilterDue','eqFilterSearch'].forEach(id=>{const el=$(id); if(el) el.value='';}); renderEquipmentFilterList(); });
+    renderEquipmentFilterList();
+  }
+
+  async function renderInspectionEquipmentPicker(){
+    const box = $('heightInspectionPickerList'); if(!box) return;
+    try{
+      const { equipment, inspections } = await loadHeightData();
+      const filters = { type:$('inspectFilterType')?.value||'', status:$('inspectFilterStatus')?.value||'', due:$('inspectFilterDue')?.value||'', q:$('inspectFilterSearch')?.value||'' };
+      const pairs = equipment.filter(e=>!isArchived(e)).map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>pairMatches(p, filters));
+      $('inspectFilterCount') && ($('inspectFilterCount').textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown. Click an item to start an inspection.`);
+      box.innerHTML = `<div class="sw418-row-list sw418-inspection-select">${pairs.map(p=>itemRow(p,{action:'inspect'})).join('') || '<p class="muted">No equipment matches the current filters.</p>'}</div>`;
+      box.querySelectorAll('[data-sw418-action="inspect"]').forEach(row=>row.addEventListener('click',()=>{
+        const id=row.dataset.equipmentId;
+        if(typeof window.startInspection === 'function') return window.startInspection(id, 'New Inspection');
+        const e = pairs.find(p=>String(p.equipment.id)===String(id))?.equipment;
+        if(e){ if($('inSerial')) $('inSerial').value=e.serial||''; if($('inType')) $('inType').value=e.type||''; if(typeof window.loadEquipmentForInspection === 'function') window.loadEquipmentForInspection(); if(typeof window.renderChecklist === 'function') window.renderChecklist(); }
+      }));
+    }catch(err){ box.innerHTML = `<div class="ops-error">Could not load equipment picker: ${esc(err.message||err)}</div>`; }
+  }
+  async function installInspectionPicker(){
+    const pane = $('inspect'); if(!pane || $('heightInspectionPicker')) return;
+    const firstCard = pane.querySelector('.card'); if(!firstCard) return;
+    const oldSerialInput = $('inSerial')?.closest('div'); if(oldSerialInput) oldSerialInput.style.display='none';
+    const panel = document.createElement('div'); panel.id='heightInspectionPicker'; panel.className='sw418-filter-panel';
+    panel.innerHTML = `<h3 style="margin-top:0">Select equipment to inspect</h3><div class="sw418-filter-grid"><label>Equipment type<select id="inspectFilterType"><option value="">All types</option></select></label><label>Status<select id="inspectFilterStatus"><option value="">All statuses</option></select></label><label>Due status<select id="inspectFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="inspectFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="sw418-actions"><button type="button" id="inspectFilterClear">Clear filters</button></div><div id="inspectFilterCount" class="muted" style="margin-top:6px"></div><div id="heightInspectionPickerList"></div>`;
+    firstCard.insertBefore(panel, firstCard.querySelector('.grid.two') || firstCard.firstChild.nextSibling);
+    await populateSelectOptions($('inspectFilterType'), $('inspectFilterStatus'));
+    ['inspectFilterType','inspectFilterStatus','inspectFilterDue','inspectFilterSearch'].forEach(id=>{ const el=$(id); if(el) el.addEventListener(id==='inspectFilterSearch'?'input':'change', renderInspectionEquipmentPicker); });
+    $('inspectFilterClear')?.addEventListener('click',()=>{ ['inspectFilterType','inspectFilterStatus','inspectFilterDue','inspectFilterSearch'].forEach(id=>{const el=$(id); if(el) el.value='';}); renderInspectionEquipmentPicker(); });
+    renderInspectionEquipmentPicker();
+  }
+
+  function certFilterValues(){ return { type:$('certFilterType')?.value||'', status:$('certFilterStatus')?.value||'', result:$('certFilterResult')?.value||'', due:$('certFilterDue')?.value||'', q:$('certFilterSearch')?.value||'' }; }
+  async function renderCertificateFilterList(){
+    const list = $('certItemList'); if(!list) return;
+    try{
+      const { equipment, inspections } = await loadHeightData();
+      const pairs = equipment.filter(e=>!isArchived(e)).map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>pairMatches(p, certFilterValues()));
+      list.innerHTML = `<div class="sw418-row-list">${pairs.map(p=>itemRow(p,{checkbox:true, action:'cert'})).join('') || '<p class="muted">No items match the current filters.</p>'}</div>`;
+      const count=$('certFilterCount'); if(count) count.textContent = `${pairs.length} item${pairs.length===1?'':'s'} shown; ${pairs.filter(p=>p.inspection).length} with inspection history; ${selectedIds().length} selected.`;
+      list.querySelectorAll('.sw418-cert-check').forEach(ch=>ch.addEventListener('change',()=>{ if(ch.checked) selectedSet().add(String(ch.value)); else selectedSet().delete(String(ch.value)); updateCertificateButtons(); renderCertificateFilterList(); }));
+      updateCertificateButtons();
+    }catch(err){ list.innerHTML = `<div class="ops-error">Could not load certificate items: ${esc(err.message||err)}</div>`; }
+  }
+  function updateCertificateButtons(){
+    const count=selectedIds().length;
+    const validation=$('certValidation'); if(validation){ validation.textContent = count ? `${count} selected. Ready to generate.` : 'Tick at least one item with inspection history.'; validation.className = 'certValidation ' + (count?'ready':'warn'); }
+    const b1=$('certGenerateBtn'), b2=$('certGenerateCombinedBtn'); if(b1) b1.disabled = count===0; if(b2) b2.disabled = count===0;
+  }
+  async function selectedCertificatePairs(){
+    const ids = new Set(selectedIds());
+    const { equipment, inspections } = await loadHeightData();
+    return equipment.filter(e=>ids.has(String(e.id))).map(e=>({equipment:e, inspection:latestInspectionFor(e, inspections)})).filter(p=>p.inspection);
+  }
+  async function signedUrl(bucket,path){ if(!path) return ''; const client=sb(); if(!client) return ''; try{ const r=await client.storage.from(bucket).createSignedUrl(path,3600); return r.error ? '' : r.data.signedUrl; }catch(e){ return ''; } }
+  async function certImages(e,i,equipmentPhotos,inspectionPhotos){
+    const includeEq = $('certIncludeEquipmentPhotosCheck') ? $('certIncludeEquipmentPhotosCheck').checked : (($('certIncludeEquipmentPhotos')?.value||'yes')==='yes');
+    const includeIns = $('certIncludeInspectionPhotosCheck') ? $('certIncludeInspectionPhotosCheck').checked : (($('certIncludeInspectionPhotos')?.value||'yes')==='yes');
+    const eq=[]; const ip=[];
+    if(includeEq){ for(const p of (equipmentPhotos||[]).filter(p=>String(p.equipment_id)===String(e.id)).slice(0,3)){ const u=await signedUrl(EQUIP_BUCKET,p.file_path); if(u) eq.push(u); } }
+    if(includeIns){ for(const p of (inspectionPhotos||[]).filter(p=>String(p.inspection_id)===String(i.id)).slice(0,6)){ const u=await signedUrl(PHOTO_BUCKET,p.file_path); if(u) ip.push(u); } }
+    return {equipmentUrls:eq, inspectionUrls:ip};
+  }
+  function certificateDocumentCss(){ return `body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.page{background:white;max-width:920px;min-height:1180px;margin:22px auto;padding:36px;box-shadow:0 10px 35px #0f172a22;page-break-after:always}.head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:4px solid #0f766e;padding-bottom:14px;margin-bottom:18px}.brand{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:#0f766e;font-weight:900}.title{font-size:28px;font-weight:900;margin:4px 0}.muted{color:#64748b}.grid{display:grid;grid-template-columns:170px 1fr;gap:0;margin:16px 0}.label,.value{border-bottom:1px solid #e2e8f0;padding:8px}.label{font-weight:900;background:#f8fafc;color:#334155}.pill{border-radius:999px;padding:5px 10px;font-weight:900;display:inline-block}.ok{background:#dcfce7;color:#047857}.bad{background:#fee2e2;color:#b91c1c}.warn{background:#fef3c7;color:#b45309}.photoGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:14px}.photoGrid img{width:100%;height:320px;object-fit:contain;border:1px solid #dbe7ee;border-radius:14px;background:#f8fafc}.checklist{columns:2;column-gap:32px;font-size:13px}.footer{margin-top:20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:12px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border-bottom:1px solid #dbe7ee;padding:9px;text-align:left;vertical-align:top}th{background:#f1f5f9;color:#334155;font-weight:900}.noPrint{position:sticky;top:0;background:#0f766e;color:white;padding:10px;text-align:center}.noPrint button{background:white;color:#0f766e;border:0;border-radius:10px;padding:9px 14px;font-weight:900}@media print{body{background:white}.noPrint{display:none}.page{box-shadow:none;margin:0;max-width:none;min-height:auto;page-break-after:always}.photoGrid img{height:310px}}`; }
+  function checklistHtml(i){ const checks=Array.isArray(i.checklist)?i.checklist:[]; return checks.length ? `<h3>Checklist completed</h3><div class="checklist">${checks.map(c=>`<div>✓ ${esc(c)}</div>`).join('')}</div>` : ''; }
+  function certificatePage(record){ const e=record.equipment||{}, i=record.inspection||{}, result=statusLabel(i.result); const cls=statusClass(i.result); return `<section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Height Equipment Inspection Certificate</div><div class="muted">Generated ${new Date().toLocaleDateString('en-NZ')}</div></div><div><span class="pill ${cls}">${esc(result)}</span></div></div><div class="grid"><div class="label">Serial</div><div class="value"><strong>${esc(e.serial||'')}</strong></div><div class="label">Equipment type</div><div class="value">${esc(e.type||'')}</div><div class="label">Manufacturer</div><div class="value">${esc(e.manufacturer||'—')}</div><div class="label">Model</div><div class="value">${esc(e.model||'—')}</div><div class="label">Status</div><div class="value">${esc(e.status||'—')}</div><div class="label">Inspection date</div><div class="value">${nzDate(i.inspection_date)}</div><div class="label">Inspector</div><div class="value">${esc(i.inspector||'—')}</div><div class="label">Next due</div><div class="value">${nzDate(i.next_due)}</div><div class="label">Inspection result</div><div class="value"><span class="pill ${cls}">${esc(result)}</span></div><div class="label">Notes</div><div class="value">${esc(i.notes||'—')}</div></div>${checklistHtml(i)}<div class="footer">This certificate is generated from the latest saved inspection record for the selected item in Spray &amp; Wash Operations.</div></section>`; }
+  function photoPage(record){ const urls=[...(record.images?.equipmentUrls||[]),...(record.images?.inspectionUrls||[])]; if(!urls.length) return ''; return `<section class="page photoPage"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Inspection Photo Evidence</div><div class="muted">${esc(record.equipment.serial||'')} ${esc(record.equipment.type||'')}</div></div></div><div class="photoGrid">${urls.slice(0,6).map(u=>`<img src="${esc(u)}" alt="Certificate evidence photo">`).join('')}</div><div class="footer">Photos shown are selected equipment photos and photos attached to the latest inspection used for this certificate.</div></section>`; }
+  async function buildCertificatePacketV418(pairs,title){
+    const { equipmentPhotos, inspectionPhotos } = await loadHeightData();
+    const records=[];
+    for(const p of pairs){ records.push({...p, images: await certImages(p.equipment,p.inspection,equipmentPhotos,inspectionPhotos)}); }
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title||'Height Equipment Certificates')}</title><style>${certificateDocumentCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div>${records.map(r=>certificatePage(r)+photoPage(r)).join('')}</body></html>`;
+    const w=window.open('', '_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); }
+    else { const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='spray-wash-height-certificates.html'; a.click(); URL.revokeObjectURL(a.href); }
+  }
+  function combinedCertificateHtml(pairs){ const rows=pairs.map(p=>{ const e=p.equipment||{}, i=p.inspection||{}, result=statusLabel(i.result), cls=statusClass(i.result); return `<tr><td><strong>${esc(e.serial||'')}</strong></td><td>${esc(e.type||'')}</td><td>${esc(e.manufacturer||'')}</td><td>${esc(e.model||'')}</td><td>${nzDate(i.inspection_date)}</td><td><span class="pill ${cls}">${esc(result)}</span></td><td>${esc(i.inspector||'')}</td><td>${nzDate(i.next_due)}</td></tr>`; }).join(''); return `<!doctype html><html><head><meta charset="utf-8"><title>Selected Height Equipment Inspection Summary</title><style>${certificateDocumentCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Selected Height Equipment Inspection Summary</div><div class="muted">Combined report for ${pairs.length} selected item${pairs.length===1?'':'s'} · Generated ${new Date().toLocaleString('en-NZ')}</div></div></div><table><thead><tr><th>Serial</th><th>Type</th><th>Manufacturer</th><th>Model</th><th>Inspection date</th><th>Result</th><th>Inspector</th><th>Next due</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">This combined document summarises the latest inspection record for each selected item.</div></section></body></html>`; }
+  async function generateSeparate(){ const pairs=await selectedCertificatePairs(); if(!pairs.length) return alert('Tick at least one item with inspection history.'); await buildCertificatePacketV418(pairs,'Selected item certificates'); }
+  async function generateCombined(){ const pairs=await selectedCertificatePairs(); if(!pairs.length) return alert('Tick at least one item with inspection history.'); const html=combinedCertificateHtml(pairs); const w=window.open('', '_blank'); if(w){w.document.open(); w.document.write(html); w.document.close();} else { const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='spray-wash-selected-equipment-summary.html'; a.click(); URL.revokeObjectURL(a.href);} }
+
+  async function installCertificates(){
+    const cert=$('certificates'); if(!cert) return;
+    Array.from(cert.querySelectorAll('.card')).forEach(card=>{ const text=(card.textContent||'').trim(); if(/^Inspection Certificates/.test(text)) card.remove(); });
+    cert.querySelectorAll('h3').forEach(h=>{ const t=(h.textContent||'').trim(); if(/Choose certificate batch type|Inspection date range|Inspection result|Select individual items|Photo options|Equipment type|Generate certificates/i.test(t)) h.remove(); });
+    const panel=$('certItemsPanel'); if(panel){ const p=panel.querySelector('p.muted'); if(p) p.textContent='Use the filters below, then tick the individual items to include.'; }
+    const tools=cert.querySelector('.certSelectionTools'); if(tools) tools.remove();
+    const action=$('certGenerateBtn')?.parentElement; if(action){ action.classList.add('sw418-cert-actions'); action.querySelector('h3')?.remove(); const b1=$('certGenerateBtn'); if(b1){b1.textContent='Generate separate certificates'; b1.onclick=generateSeparate;} let b2=$('certGenerateCombinedBtn'); if(!b2){b2=document.createElement('button'); b2.id='certGenerateCombinedBtn'; b2.className='primary'; b2.type='button'; action.appendChild(b2);} b2.textContent='Generate one combined certificate'; b2.onclick=generateCombined; }
+    ['certFilterType','certFilterStatus','certFilterResult','certFilterDue','certFilterSearch'].forEach(id=>{ const el=$(id); if(el && !el.dataset.sw418){ el.dataset.sw418='1'; el.addEventListener(id==='certFilterSearch'?'input':'change', renderCertificateFilterList); }});
+    $('certFilterClear')?.addEventListener('click',()=>setTimeout(renderCertificateFilterList,30));
+    $('certClearSelected')?.remove(); $('certSelectVisible')?.remove();
+    await renderCertificateFilterList();
+    installInspectorDetailsPanel();
+    window.buildCertificatePacket = buildCertificatePacketV418;
+    window.generateCertificates = generateSeparate;
+  }
+
+  function qualificationNames(){ const seen=new Set(); return (state().qualifications||[]).filter(q=>q.active!==false && q.inspector_name).map(q=>q.inspector_name).filter(n=>{ const k=norm(n); if(seen.has(k)) return false; seen.add(k); return true; }).sort((a,b)=>a.localeCompare(b)); }
+  function latestQual(name){ const k=norm(name); return (state().qualifications||[]).filter(q=>q.active!==false && norm(q.inspector_name)===k).sort((a,b)=>String(b.expiry_date||'9999').localeCompare(String(a.expiry_date||'9999')) || String(b.issue_date||'').localeCompare(String(a.issue_date||'')))[0] || null; }
+  function installInspectorDetailsPanel(){
+    const panel=$('qualificationCertPanel'); if(!panel) return;
+    const names=qualificationNames();
+    panel.innerHTML = `<h2>Inspector Details Verification</h2><div class="grid two"><div><label>Inspector</label><select id="qualCertSelect"><option value="">Select inspector</option>${names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div></div><div class="row"><button type="button" class="primary" onclick="SWOperationsV4.generateQualificationCertificate()">Generate inspector details</button></div>${names.length?'':'<p class="muted">No qualifications saved yet. Add qualifications under Height Equipment - Qualifications first.</p>'}`;
+  }
+  async function generateInspectorDetails(){
+    const name=$('qualCertSelect')?.value||''; if(!name) return alert('Select an inspector first.');
+    const q=latestQual(name); if(!q) return alert('Qualification record not found for this inspector.');
+    let embed='', fileNote='—';
+    if(q.storage_path && sb()){
+      try{ const dl=await sb().storage.from(PHOTO_BUCKET).download(q.storage_path); if(dl.error) throw dl.error; const blob=dl.data; const dataUrl=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(blob); }); const type=String(blob.type||q.file_name||'').toLowerCase(); if(type.includes('pdf')) embed=`<iframe src="${esc(dataUrl)}" style="width:100%;height:720px;border:1px solid #dbe7ee;border-radius:12px"></iframe><p><a href="${esc(dataUrl)}" download="${esc(q.file_name||'qualification.pdf')}">Download qualification PDF</a></p>`; else embed=`<img src="${esc(dataUrl)}" style="max-width:100%;max-height:720px;border:1px solid #dbe7ee;border-radius:12px" alt="Inspector qualification image">`; fileNote=q.file_name||'Saved file embedded'; }catch(e){ fileNote='Saved file could not be embedded: '+(e.message||e); }
+    }
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Inspector Details Verification</title><style>${certificateDocumentCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Inspector Details Verification</div><div class="muted">Height equipment inspector qualification record</div></div></div><div class="grid"><div class="label">Inspector</div><div class="value">${esc(q.inspector_name||'—')}</div><div class="label">Email</div><div class="value">${esc(q.email||'—')}</div><div class="label">Qualification</div><div class="value">${esc(q.qualification_type||'—')}</div><div class="label">Provider</div><div class="value">${esc(q.provider||'—')}</div><div class="label">Reference</div><div class="value">${esc(q.reference_number||'—')}</div><div class="label">Issue date</div><div class="value">${nzDate(q.issue_date)}</div><div class="label">Expiry date</div><div class="value">${nzDate(q.expiry_date)}</div><div class="label">Saved file</div><div class="value">${esc(fileNote)}</div><div class="label">Notes</div><div class="value">${esc(q.notes||'—')}</div></div><div class="footer">Generated ${new Date().toLocaleString('en-NZ')} from Spray &amp; Wash Operations.</div></section>${embed?`<section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Uploaded Qualification Evidence</div></div></div>${embed}</section>`:''}</body></html>`;
+    const w=window.open('', '_blank'); if(w){w.document.open();w.document.write(html);w.document.close();} else {const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='inspector-details-verification.html'; a.click(); URL.revokeObjectURL(a.href);}
+  }
+  function cleanQualificationsTab(){
+    const pane=$('heightQualifications'); if(!pane) return;
+    pane.querySelectorAll('p.muted').forEach(p=>{ if((p.textContent||'').includes('Files are stored')) p.remove(); });
+    if(!$('sw418QualWrapper')){
+      const form=$('heightQualForm'); const card=form?.closest('.card');
+      if(card){ const details=document.createElement('details'); details.id='sw418QualWrapper'; details.className='sw418-qual-details'; details.open=false; details.innerHTML='<summary>Inspector Qualifications</summary><div class="sw418-qual-inner"></div>'; card.parentElement.insertBefore(details, card); details.querySelector('.sw418-qual-inner').appendChild(card); }
+    }
+  }
+
+  function installRecentHistoryFix(){
+    const sel=$('heightRecentLimit'); if(sel){ if(!sel.value) sel.value='10'; sel.querySelector('option[value="10"]')?.setAttribute('selected','selected'); }
+    if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
+  }
+  function cleanStaticUi(){
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.18 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
+    const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
+    const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
+    Array.from(document.querySelectorAll('.card')).forEach(card=>{ const t=(card.textContent||'').trim(); if(/^Inspection Certificates/.test(t)) card.remove(); });
+  }
+
+  function install(){
+    injectCss(); cleanStaticUi(); installRecentHistoryFix();
+    if($('equipmentList')) installEquipmentRegister();
+    if($('inspect')) installInspectionPicker();
+    if($('certificates')) installCertificates();
+    cleanQualificationsTab();
+    const old=api(); window.SWOperationsV4=Object.assign(old,{generateQualificationCertificate:generateInspectorDetails,generateInspectorDetails,renderEquipmentFilteredListV418:renderEquipmentFilterList,renderCertificateFilterListV418:renderCertificateFilterList,generateCombinedCertificates:generateCombined});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
+  document.addEventListener('click', e=>{ if(e.target?.closest?.('[data-tab="equipment"]')) setTimeout(installEquipmentRegister,500); if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
+  setInterval(()=>{ cleanStaticUi(); cleanQualificationsTab(); if($('certificates') && !$('certGenerateCombinedBtn')) installCertificates(); },3000);
 })();

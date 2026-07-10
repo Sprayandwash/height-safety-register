@@ -1,0 +1,3 @@
+-- V4.0.18 SQL note
+-- No Supabase database migration is required for this release.
+-- This release only updates index.html, operations-v4.js and service-worker.js.

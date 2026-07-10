@@ -1,0 +1,28 @@
+V4.0.18 Test Plan
+
+1. Confirm the header shows Version 4.0.18.
+2. Height Equipment > Equipment:
+   - Confirm Equipment by Type is removed.
+   - Confirm filter panel appears.
+   - Filter by equipment type and keyword.
+   - Click a filtered line item and confirm it opens the equipment entry.
+3. Height Equipment > New Inspection:
+   - Confirm the filter/search picker appears.
+   - Select equipment from the filtered list.
+   - Confirm the inspection form is populated for that item.
+4. Height Equipment > Certificates:
+   - Confirm title clutter and numbering are removed.
+   - Use filters and tick individual items.
+   - Confirm selected count updates.
+   - Generate separate certificates and verify formatting.
+   - Generate one combined certificate and verify the table and coloured result indicators.
+   - Confirm inspection photos are only from the inspection used for each item.
+5. Inspector Details Verification:
+   - Select an inspector.
+   - Generate inspector details.
+   - Confirm the qualification image/PDF appears or is embedded/downloadable.
+6. Qualifications tab:
+   - Confirm storage bucket wording is gone.
+   - Confirm the Inspector Qualifications box is collapsible.
+7. Confirm Reports tab sits at the far right of the Height Equipment tabs.
+8. Confirm Vehicle Checks, Ops Management and Admin still open.

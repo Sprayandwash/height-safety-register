@@ -1,0 +1,18 @@
+V4.0.18 - Height, Certificate & Equipment Register Polish
+
+Changes:
+- Equipment Register: removed Equipment by Type dashboard box from the Equipment tab.
+- Equipment Register: removed the small filter badge text above the former type box.
+- Equipment Register: filter results now use a cleaner line-item list display.
+- Equipment Register: clicking a filtered item opens the equipment entry.
+- New Inspection: added the same style filter/search picker used in Equipment and Certificates.
+- Certificates: removed unnecessary Inspection Certificates title card.
+- Certificates: removed unnecessary certificate section numbering/headings in the UI.
+- Certificates: removed redundant selected/clear buttons above the filter area.
+- Certificates: inspection photos are pulled from the inspection used for the certificate, i.e. the latest inspection for selected equipment.
+- Certificates: separate certificate output refreshed into a professional two-page maximum layout per item: details page plus photo page where photos exist.
+- Certificates: combined certificate/report formatting refreshed with a cleaner professional table and coloured result pills.
+- Inspector Details Verification: renamed and refreshed formatting.
+- Inspector Details Verification: qualification image/PDF is downloaded and embedded into the generated report where possible, rather than relying only on a signed image link.
+- Qualifications: removed storage-bucket wording and made the qualification form collapsible.
+- Reports tab moved to the right-hand end of Height tabs.
