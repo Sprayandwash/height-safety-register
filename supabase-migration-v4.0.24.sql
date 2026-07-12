@@ -1,0 +1,2 @@
+-- V4.0.24 - no Supabase database migration required.
+-- This release updates front-end UI and backup/export controls only.

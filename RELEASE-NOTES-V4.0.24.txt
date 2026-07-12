@@ -1,0 +1,16 @@
+V4.0.24 - Height UI Stabilisation, Qualifications and Admin Backup Cleanup
+
+Fixed/changed:
+- Recent Inspection History stops twitching when changing list size.
+- Recent Inspection History shows a scrollable window while loading the selected number of rows.
+- Removed duplicate Equipment Register filter boxes.
+- Equipment Register no longer briefly renders an alternate list before the active filter list.
+- Equipment Register filter changes preserve scroll position.
+- Certificates no longer use a large outer white box around the filter/list/photo option controls.
+- Qualifications layout now has collapsible Saved Inspectors above collapsible Add Inspector.
+- Removed duplicate/legacy Saved Inspector Qualifications box.
+- Print Qualification Details is available inside Saved Inspectors.
+- Qualification file links use download/object URL first with signed URL fallback.
+- Admin Backup area replaces Backup & Controls wording.
+- Added equipment and inspection register CSV backup buttons in Admin.
+- Removed Admin dashboard/cards and duplicate admin Home/back controls.

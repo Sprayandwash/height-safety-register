@@ -1,0 +1,14 @@
+V4.0.24 Test Plan
+
+1. Open app with ?v=4.0.24&fresh=1 and hard refresh.
+2. Height dashboard: change Recent Inspection History to 10, 20, 30, 50. Confirm list updates without page twitch and scrolls inside the box.
+3. Equipment tab: confirm only one Filter Equipment box appears.
+4. Equipment tab: change equipment type/status/due/keyword filters and confirm page does not jump to top.
+5. Equipment tab: click a filtered item and confirm the item record opens.
+6. Certificates tab: confirm filter/list/photo options are not inside an extra large white container.
+7. Certificates tab: confirm item rows are left aligned.
+8. Qualifications tab: confirm Saved Inspectors appears above Add Inspector and both are collapsible.
+9. Qualifications tab: test Open File and Print Qualification Details for an existing inspector.
+10. Admin module: confirm it opens as tabs only, not dashboard cards.
+11. Admin Backup: confirm equipment and inspection register CSV buttons download CSV files.
+12. Confirm config.js has not been replaced.
