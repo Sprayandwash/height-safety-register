@@ -1,0 +1,31 @@
+V4.0.23 repo cleanup checklist
+
+Before cleanup:
+[ ] Download full GitHub repo ZIP backup.
+[ ] Confirm Supabase app JSON backup has been exported.
+[ ] Export key CSVs: equipment, inspections, certificates, profiles/user_roles, app_settings, audit_logs.
+[ ] Confirm config.js is backed up and will not be replaced.
+
+GitHub cleanup approach:
+[ ] Create a new branch first, for example v4-0-23-stabilisation.
+[ ] Upload V4.0.23 index.html, operations-v4.js and service-worker.js to the repo root.
+[ ] Confirm index.html references ./operations-v4.js?v=4.0.23.
+[ ] Confirm service-worker.js contains spray-wash-operations-v4-0-23.
+[ ] Move old ZIPs, old sw-v4xx folders, old replacement files and old test notes out of the live root.
+[ ] Keep only the active live files and current documentation in the repo root.
+[ ] Do not delete config.js.
+[ ] Do not delete app.js.
+[ ] Do not delete manifest.webmanifest or icon files referenced by the manifest.
+
+After uploading:
+[ ] Open https://sprayandwash.github.io/height-safety-register/?v=4.0.23&fresh=1
+[ ] Press Ctrl + F5.
+[ ] If the old version persists, use DevTools > Application > Storage > Clear site data.
+[ ] Confirm the top banner shows Version 4.0.23.
+[ ] Confirm Height Equipment, Vehicle Checks, Ops Management and Admin still open.
+[ ] Confirm no flicking between old/new Height layouts during tab changes.
+
+Recommended later refactor:
+[ ] Consolidate Height module UI changes into app.js rather than patching them from operations-v4.js.
+[ ] Keep operations-v4.js focused on Operations, Vehicle Checks and Admin modules.
+[ ] Remove old runtime patch blocks once app.js has the final static Height UI.

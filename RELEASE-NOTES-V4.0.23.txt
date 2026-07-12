@@ -1,0 +1,13 @@
+V4.0.23 - App Structure Stabilisation
+
+- Rebuilt package as a stabilisation release rather than a feature release.
+- Bumped active app version to V4.0.23.
+- Updated service worker to clear previous caches and avoid stale files.
+- Added no-cache meta tags to index.html.
+- Added repo cleanup checklist.
+- Added active live-file manifest for GitHub cleanup.
+- Added final duplicate Start Inspection guard.
+- No Supabase database migration required.
+
+Known limitation:
+The Height module still has legacy UI code in app.js with later amendments in operations-v4.js. The next deeper stabilisation step should be a proper refactor that moves the final Height UI into one source file instead of relying on runtime patching.

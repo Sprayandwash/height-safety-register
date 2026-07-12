@@ -1,0 +1,35 @@
+V4.0.23 test plan
+
+Install checks:
+[ ] index.html in GitHub shows Version 4.0.23.
+[ ] index.html loads ./operations-v4.js?v=4.0.23.
+[ ] service-worker.js contains spray-wash-operations-v4-0-23.
+[ ] App opens at ?v=4.0.23&fresh=1.
+[ ] Hard refresh completed.
+
+Cache checks:
+[ ] Old V4.0.22 or earlier version does not appear after reload.
+[ ] App does not flick between old and new layouts on first load.
+[ ] App remains stable after switching between modules.
+
+Module checks:
+[ ] Home dashboard opens.
+[ ] Height Equipment opens.
+[ ] Vehicle Checks opens.
+[ ] Ops Management opens.
+[ ] Admin opens for Admin user.
+[ ] Non-admin user only sees appropriate modules.
+
+Height checks:
+[ ] Only one Start Inspection action appears.
+[ ] Equipment Register opens.
+[ ] Certificates tab opens.
+[ ] Qualifications tab opens.
+[ ] Reports tab opens.
+
+Regression checks:
+[ ] Existing equipment list loads.
+[ ] Existing inspection history loads.
+[ ] Certificate filter/search still works.
+[ ] Vehicle Inspection Checklist still opens.
+[ ] Ops Management Assets/Tasks/Preventive Maintenance still open.

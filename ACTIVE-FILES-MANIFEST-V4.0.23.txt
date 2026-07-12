@@ -1,0 +1,32 @@
+Spray & Wash Operations - V4.0.23 active root files
+
+Keep these files in the live GitHub Pages root:
+
+Required live app files:
+- index.html
+- app.js
+- operations-v4.js
+- config.js   (DO NOT REPLACE unless deliberately changing Supabase credentials)
+- service-worker.js
+- manifest.webmanifest
+
+Required icons/assets:
+- any icon files referenced by manifest.webmanifest or index.html
+- any image/logo files referenced by index.html, app.js or operations-v4.js
+
+Optional documentation in root:
+- README.md
+- current release notes
+- current SQL migration notes
+
+Move out of the live root or archive elsewhere:
+- old sw-v4xx folders
+- old zip packages
+- old one-off replacement index files
+- old release notes/test plans from previous versions
+- old SQL files not needed for the current install
+- screenshots and temporary files
+
+Important:
+- Cleaning old files is useful for human clarity, but the live app is mainly affected by files referenced by index.html, app.js, operations-v4.js, service-worker.js and manifest.webmanifest.
+- The most important stability change is preventing stale service-worker/cache behaviour and reducing conflicting UI patches.

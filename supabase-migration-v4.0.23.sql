@@ -1,0 +1,3 @@
+-- V4.0.23 App Structure Stabilisation
+-- No Supabase database migration is required for this release.
+-- This package is a front-end/service-worker/repo-cleanup stabilisation release.
