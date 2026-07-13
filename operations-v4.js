@@ -4637,3 +4637,217 @@
   }, true);
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimit'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
 })();
+
+/* --------------------------------------------------------------------------
+ * V4.0.25 targeted micro-patch: stable Recent Inspection History selector.
+ *
+ * Earlier releases accumulated several listeners for #heightRecentLimit. Those
+ * listeners each re-rendered parts of the Height dashboard, causing the whole
+ * page to twitch whenever the record-count dropdown changed. This patch uses a
+ * new selector id and updates only a fixed-height table body from the already
+ * loaded app data. No full dashboard render, tab refresh, database request or
+ * window scroll is triggered by the dropdown.
+ * -------------------------------------------------------------------------- */
+(() => {
+  'use strict';
+
+  const SELECT_ID = 'heightRecentLimitV425';
+  const LEGACY_SELECT_ID = 'heightRecentLimit';
+  const BODY_ID = 'sw425RecentInspectionBody';
+  const VIEWPORT_CLASS = 'sw425-recent-viewport';
+
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+
+  const normalise = value => String(value ?? '').trim().toLowerCase();
+
+  function appInspections() {
+    try {
+      return typeof inspections !== 'undefined' && Array.isArray(inspections)
+        ? inspections
+        : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function appEquipment() {
+    try {
+      return typeof equipment !== 'undefined' && Array.isArray(equipment)
+        ? equipment
+        : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function nzDate(value) {
+    if (!value) return '—';
+    const date = new Date(String(value).length === 10 ? `${value}T00:00:00` : value);
+    return Number.isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleDateString('en-NZ');
+  }
+
+  function resultClass(value) {
+    const text = normalise(value);
+    if (text.includes('pass') || text.includes('completed ok')) return 'sw425-result-ok';
+    if (text.includes('fail') || text.includes('remove') || text.includes('quarant')) return 'sw425-result-bad';
+    return 'sw425-result-warn';
+  }
+
+  function resultLabel(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return '—';
+    if (normalise(text) === 'pass') return 'Completed OK';
+    return text;
+  }
+
+  function latestRows(limit) {
+    const eq = appEquipment();
+    const idMap = new Map(eq.map(item => [String(item.id ?? ''), item]));
+    const serialMap = new Map(eq.map(item => [normalise(item.serial), item]));
+
+    return appInspections().slice(0, limit).map(inspection => {
+      const item = idMap.get(String(inspection.equipment_id ?? ''))
+        || serialMap.get(normalise(inspection.serial))
+        || {};
+      return { inspection, item };
+    });
+  }
+
+  function addStyles() {
+    if (document.getElementById('sw425RecentStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'sw425RecentStyles';
+    style.textContent = `
+      .${VIEWPORT_CLASS}{
+        height:370px;
+        overflow-y:auto;
+        overflow-x:auto;
+        border:1px solid #e2e8f0;
+        border-radius:14px;
+        background:#fff;
+        scrollbar-gutter:stable;
+        contain:layout paint;
+      }
+      .${VIEWPORT_CLASS} table{width:100%;border-collapse:collapse;table-layout:auto;margin:0}
+      .${VIEWPORT_CLASS} thead{position:sticky;top:0;z-index:1;background:#f8fafc}
+      .${VIEWPORT_CLASS} th,.${VIEWPORT_CLASS} td{padding:9px 10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:middle;white-space:nowrap}
+      .${VIEWPORT_CLASS} tbody tr{cursor:pointer}
+      .${VIEWPORT_CLASS} tbody tr:hover{background:#f8fafc}
+      .sw425-result{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:700;font-size:.84rem}
+      .sw425-result-ok{background:#dcfce7;color:#166534}
+      .sw425-result-bad{background:#fee2e2;color:#991b1b}
+      .sw425-result-warn{background:#fef3c7;color:#92400e}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function replaceSelector() {
+    const dashboard = document.getElementById('dashboard');
+    if (!dashboard) return null;
+
+    const legacy = dashboard.querySelector(`#${LEGACY_SELECT_ID}`);
+    const current = dashboard.querySelector(`#${SELECT_ID}`);
+    const source = current || legacy;
+    if (!source) return null;
+
+    // Clone to remove every listener accumulated by prior patch releases.
+    const replacement = document.createElement('select');
+    replacement.id = SELECT_ID;
+    replacement.setAttribute('aria-label', 'Number of recent inspections to load');
+    const selectedValue = ['10', '20', '30', '50'].includes(String(source.value))
+      ? String(source.value)
+      : '10';
+    replacement.innerHTML = ['10', '20', '30', '50']
+      .map(value => `<option value="${value}"${value === selectedValue ? ' selected' : ''}>${value}</option>`)
+      .join('');
+    source.replaceWith(replacement);
+
+    // Remove any duplicate selector left by legacy dashboard patches.
+    dashboard.querySelectorAll(`#${LEGACY_SELECT_ID}, #${SELECT_ID}`).forEach(select => {
+      if (select !== replacement) select.remove();
+    });
+
+    replacement.addEventListener('change', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      renderRecentHistory(Number(replacement.value || 10));
+    }, true);
+
+    return replacement;
+  }
+
+  function ensureStableTable() {
+    const box = document.getElementById('dashRecent');
+    if (!box) return null;
+
+    let body = document.getElementById(BODY_ID);
+    if (body && box.contains(body)) return body;
+
+    box.innerHTML = `
+      <div class="${VIEWPORT_CLASS}">
+        <table>
+          <thead><tr><th>Date</th><th>Serial</th><th>Type</th><th>Result</th><th>Inspector</th></tr></thead>
+          <tbody id="${BODY_ID}"></tbody>
+        </table>
+      </div>`;
+    return document.getElementById(BODY_ID);
+  }
+
+  function renderRecentHistory(limit) {
+    const body = ensureStableTable();
+    if (!body) return;
+
+    const viewport = body.closest(`.${VIEWPORT_CLASS}`);
+    const rows = latestRows(limit);
+    body.innerHTML = rows.length
+      ? rows.map(({ inspection, item }) => `
+          <tr data-inspection-id="${escapeHtml(inspection.id ?? '')}">
+            <td>${nzDate(inspection.inspection_date || inspection.created_at)}</td>
+            <td><strong>${escapeHtml(item.serial || inspection.serial || '—')}</strong></td>
+            <td>${escapeHtml(item.type || inspection.equipment_type || '—')}</td>
+            <td><span class="sw425-result ${resultClass(inspection.result)}">${escapeHtml(resultLabel(inspection.result))}</span></td>
+            <td>${escapeHtml(inspection.inspector || '—')}</td>
+          </tr>`).join('')
+      : '<tr><td colspan="5">No inspections found.</td></tr>';
+
+    body.querySelectorAll('tr[data-inspection-id]').forEach(row => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.inspectionId;
+        if (id && window.SWOperationsV4?.openInspectionRecord) {
+          window.SWOperationsV4.openInspectionRecord(id);
+        }
+      });
+    });
+
+    if (viewport) viewport.scrollTop = 0;
+  }
+
+  function installStableRecentHistory() {
+    addStyles();
+    const selector = replaceSelector();
+    if (!selector) return;
+    renderRecentHistory(Number(selector.value || 10));
+  }
+
+  // Run after the accumulated legacy initialisers have completed.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(installStableRecentHistory, 2300), { once: true });
+  } else {
+    setTimeout(installStableRecentHistory, 2300);
+  }
+
+  // Re-apply only after returning to the Height dashboard. This does not run on
+  // the count-selector itself and therefore cannot cause the dropdown twitch.
+  document.addEventListener('click', event => {
+    const tab = event.target?.closest?.('[data-tab="dashboard"]');
+    if (tab) setTimeout(installStableRecentHistory, 700);
+  }, true);
+
+  window.SWOperationsV4 = Object.assign(window.SWOperationsV4 || {}, {
+    renderRecentInspectionHistoryV425: renderRecentHistory,
+    installRecentInspectionHistoryV425: installStableRecentHistory
+  });
+})();
