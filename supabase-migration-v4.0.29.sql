@@ -1,0 +1,5 @@
+-- Spray & Wash Operations V4.0.29
+-- No database schema migration is required.
+-- This release validates qualification uploads, verifies stored byte size/content,
+-- and allows an existing qualification file to be replaced using the existing
+-- height_inspector_qualifications table and inspection-photos bucket.

@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.28
+/* Spray & Wash Operations App V4.0.29
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -1253,7 +1253,7 @@
     </div>`;
   }
 
-  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.28. */ }
+  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.29. */ }
 
   async function saveActualUserRoles(userId){
     if(!isAdmin()) return alert('Only Admin users can manage permissions.');
@@ -1887,7 +1887,7 @@
 
 
 
-  // V4.0.28 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+  // V4.0.29 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
 
   function certSetFilterFromDom(){
     state.certFilterType = byId('certFilterType')?.value || '';
@@ -2256,7 +2256,7 @@
   }
 
 
-  // V4.0.28 - certificate filter fix, admin tab cleanup, service-item workflow.
+  // V4.0.29 - certificate filter fix, admin tab cleanup, service-item workflow.
   function certSelectedIds(){
     return Array.from(state.certSelectedIds || []);
   }
@@ -2358,7 +2358,7 @@
 
 
 
-  // V4.0.28 - Height dashboard cleanup and certificate flow simplification.
+  // V4.0.29 - Height dashboard cleanup and certificate flow simplification.
   function postHeightEnhancementsV415(activeId){
     try{
       hideHeightActionTabsV415();
@@ -2367,7 +2367,7 @@
       if(id === 'dashboard') enhanceHeightDashboardV415();
       if(id === 'equipment') enhanceHeightEquipmentTabV415();
       if(id === 'certificates') enhanceCertificatesV415();
-    }catch(err){ console.warn('V4.0.28 UI enhancement skipped:', err); }
+    }catch(err){ console.warn('V4.0.29 UI enhancement skipped:', err); }
   }
 
   function hideHeightActionTabsV415(){
@@ -2465,7 +2465,7 @@
   function enhanceCertificatesV415(){
     const certs = byId('certificates');
     if(!certs) return;
-    // Hide old batch controls; V4.0.28 certificate generation is filter/search/list based.
+    // Hide old batch controls; V4.0.29 certificate generation is filter/search/list based.
     const mode = byId('certMode');
     if(mode){ mode.value = 'selected_items'; const modeLabel = mode.closest('label') || mode.previousElementSibling; if(modeLabel) modeLabel.style.display = 'none'; mode.style.display='none'; }
     ['certTypePanel','certDatePanel','certResultPanel'].forEach(id => { const el = byId(id); if(el) el.style.display = 'none'; });
@@ -2679,9 +2679,9 @@
   else boot();
 })();
 
-/* V4.0.28 corrective UI and certificate patch */
+/* V4.0.29 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2978,11 +2978,11 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
-    /* equipment register is owned by app.js in V4.0.28 */
+    /* equipment register is owned by app.js in V4.0.29 */
     const old = api();
     window.SWOperationsV4 = Object.assign(old, {
       generateCombinedCertificates,
@@ -2996,12 +2996,12 @@
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 700)); else setTimeout(install, 700);
   document.addEventListener('click', e => { if(e.target && e.target.closest && e.target.closest('#certificateTabButton,#certificates,[data-tab="certificates"]')) setTimeout(installCertificateUi, 500); /* equipment tab handled by app.js */ });
-  // V4.0.28: disabled V4.0.28 repeating DOM patch timer to prevent version/layout flicker.
+  // V4.0.29: disabled V4.0.29 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.28 corrective UI/certificate/equipment/inspection patch */
+/* V4.0.29 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3252,7 +3252,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3261,7 +3261,7 @@
 
   function install(){
     injectCss(); cleanStaticUi(); installRecentHistoryFix();
-    /* equipment register is owned by app.js in V4.0.28 */
+    /* equipment register is owned by app.js in V4.0.29 */
     if($('inspect')) installInspectionPicker();
     if($('certificates')) installCertificates();
     cleanQualificationsTab();
@@ -3269,13 +3269,13 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
   document.addEventListener('click', e=>{ /* equipment tab handled by app.js */ if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
-  // V4.0.28: disabled V4.0.28 repeating DOM patch timer to prevent version/layout flicker.
+  // V4.0.29: disabled V4.0.29 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.28 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
+/* V4.0.29 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3637,7 +3637,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     cleanCertificatesV419();
     renderSavedQualificationsV419();
     installAccountBehaviourV419();
@@ -3646,7 +3646,7 @@
     injectV419Css();
     installAccountBehaviourV419();
     installRecentHistoryV419();
-    /* equipment register is owned by app.js in V4.0.28 */
+    /* equipment register is owned by app.js in V4.0.29 */
     if($('certificates')) cleanCertificatesV419();
     if($('heightQualifications')) renderSavedQualificationsV419();
     const old = api();
@@ -3676,13 +3676,13 @@
     const row = e.target.closest('#equipmentList [data-sw418-action="open"], #equipmentList [data-sw419-equipment-id]');
     if(row){ e.preventDefault(); e.stopImmediatePropagation(); openEquipmentPreserveScroll(row.dataset.equipmentId || row.dataset.sw419EquipmentId); }
   }, true);
-  // V4.0.28: removed repeating cleanup timer from V4.0.28 because it could fight the main app renderer and cause flickering.
+  // V4.0.29: removed repeating cleanup timer from V4.0.29 because it could fight the main app renderer and cause flickering.
 })();
 
-/* V4.0.28 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
+/* V4.0.29 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3816,7 +3816,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -3844,9 +3844,9 @@
   document.addEventListener('change', e => { if(e.target?.closest?.('#certItemList')) setTimeout(bindStableHandlers, 50); }, true);
 })();
 
-/* V4.0.28 - dashboard, equipment, certificate, qualification and reports cleanup */
+/* V4.0.29 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4235,7 +4235,7 @@
 
   function refreshAll(){
     injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch(); installAdminHome();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
     window.SWOperationsV4 = Object.assign(apiObj, { printQualificationDetailsV420:printQualDetails, printQualificationDetailsV419:printQualDetails, openQualificationFile:openQualFile, openQualificationFileV419:openQualFile, generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
     window.buildCertificatePacket=buildSeparateCertificates421; window.generateCertificates=generateSeparate421;
@@ -4250,10 +4250,10 @@
   installArchiveDisposeGuard();
 })();
 
-/* V4.0.28 - stabilisation and completion patch */
+/* V4.0.29 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4394,19 +4394,19 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} /* equipment tab handled by app.js */ if(name==='detail') addDetailButtons(); if(name==='certificates') installCertUi(); if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
 })();
 
-/* V4.0.28 - app structure stabilisation marker and duplicate render guard */
+/* V4.0.29 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function removeDuplicateStartInspection(){
@@ -4437,9 +4437,9 @@
   }, true);
 })();
 
-/* V4.0.28 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
+/* V4.0.29 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.28';
+  const VERSION = '4.0.29';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4459,9 +4459,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.28"] .notifyBtn,
-      html[data-sw-version="4.0.28"] #notifyBadge,
-      html[data-sw-version="4.0.28"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.29"] .notifyBtn,
+      html[data-sw-version="4.0.29"] #notifyBadge,
+      html[data-sw-version="4.0.29"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4472,7 +4472,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4638,7 +4638,7 @@
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
 })();
 
-/* V4.0.28 - Recent Inspection History is owned by app.js.
+/* V4.0.29 - Recent Inspection History is owned by app.js.
  * Legacy operations patches intentionally target *Legacy element ids and do not
  * bind to #heightRecentLimit or #dashRecent.
  */
@@ -4646,14 +4646,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.28'
+    version: '4.0.29'
   });
 })();
 
 
-/* V4.0.28 - Equipment filter is owned exclusively by app.js. */
+/* V4.0.29 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.28';
+  const VERSION='4.0.29';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -4674,7 +4674,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.28 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -4683,12 +4683,12 @@
 })();
 
 
-/* V4.0.28 - Certificate outer-wrapper layout cleanup.
+/* V4.0.29 - Certificate outer-wrapper layout cleanup.
  * CSS only: retains Search Filters, item list and Photo Options, while removing
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.28';
+  const VERSION='4.0.29';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -4714,4 +4714,341 @@
   else installCertificateLayoutCss();
   const existing=window.SWOperationsV4||{};
   window.SWOperationsV4=Object.assign(existing,{version:VERSION,installCertificateLayoutCssV428:installCertificateLayoutCss});
+})();
+
+/* V4.0.29 - verified inspector qualification uploads and replacement.
+ * This is the single final owner of the Qualifications UI and file actions.
+ */
+(() => {
+  'use strict';
+  const VERSION = '4.0.29';
+  const BUCKET = 'inspection-photos';
+  const $ = id => document.getElementById(id);
+  const api = () => window.SWOperationsV4 || {};
+  const state = () => api().state || {};
+  const client = () => state().sb || window.supabaseClient || window.sbClient || null;
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const titleCase = value => String(value || '').trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+  const nzDate = value => {
+    if (!value) return '—';
+    const date = new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? esc(value) : date.toLocaleDateString('en-NZ');
+  };
+  const safeName = value => String(value || 'qualification-file').replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  function bytesMatch(bytes, pattern, offset = 0) {
+    return pattern.every((value, index) => bytes[offset + index] === value);
+  }
+
+  async function identifyAndVerifyBlob(blob, filename = '') {
+    if (!(blob instanceof Blob)) throw new Error('The selected file could not be read.');
+    if (!Number.isFinite(blob.size) || blob.size <= 0) throw new Error('The selected file is empty (0 bytes). Choose the original file again.');
+    if (blob.size > 20 * 1024 * 1024) throw new Error('The qualification file is larger than 20 MB.');
+
+    const header = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+    let mime = '';
+    if (bytesMatch(header, [0xFF, 0xD8, 0xFF])) mime = 'image/jpeg';
+    else if (bytesMatch(header, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) mime = 'image/png';
+    else if (bytesMatch(header, [0x25, 0x50, 0x44, 0x46, 0x2D])) mime = 'application/pdf';
+    else if (bytesMatch(header, [0x52, 0x49, 0x46, 0x46]) && bytesMatch(header, [0x57, 0x45, 0x42, 0x50], 8)) mime = 'image/webp';
+
+    if (!mime) {
+      const declared = String(blob.type || '').toLowerCase();
+      if (['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(declared)) mime = declared;
+    }
+    if (!mime) throw new Error('Unsupported or unreadable file. Use JPG, PNG, WEBP or PDF.');
+
+    if (mime.startsWith('image/')) {
+      try {
+        if ('createImageBitmap' in window) {
+          const bitmap = await createImageBitmap(blob);
+          if (!bitmap.width || !bitmap.height) throw new Error('Image has no dimensions.');
+          bitmap.close();
+        } else {
+          await new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(blob);
+            const image = new Image();
+            image.onload = () => { URL.revokeObjectURL(url); image.naturalWidth && image.naturalHeight ? resolve() : reject(new Error('Image has no dimensions.')); };
+            image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('The image cannot be decoded.')); };
+            image.src = url;
+          });
+        }
+      } catch (error) {
+        throw new Error(`The image cannot be decoded: ${error.message || error}`);
+      }
+    }
+    return { mime, size: blob.size, filename };
+  }
+
+  async function uploadAndVerify(file) {
+    const sb = client();
+    if (!sb) throw new Error('Supabase is not ready.');
+    const local = await identifyAndVerifyBlob(file, file.name);
+    const path = `height-inspector-qualifications/${Date.now()}-${safeName(file.name)}`;
+    const upload = await sb.storage.from(BUCKET).upload(path, file, {
+      upsert: false,
+      cacheControl: '3600',
+      contentType: local.mime
+    });
+    if (upload.error) throw upload.error;
+
+    try {
+      const downloaded = await sb.storage.from(BUCKET).download(path);
+      if (downloaded.error) throw downloaded.error;
+      const remote = await identifyAndVerifyBlob(downloaded.data, file.name);
+      if (remote.size !== local.size) throw new Error(`Uploaded size mismatch (${local.size} bytes selected, ${remote.size} bytes stored).`);
+      return { path, fileName: file.name, mime: remote.mime, size: remote.size };
+    } catch (error) {
+      await sb.storage.from(BUCKET).remove([path]);
+      throw new Error(`Upload verification failed: ${error.message || error}`);
+    }
+  }
+
+  async function refreshQualifications() {
+    const sb = client();
+    if (!sb) return [];
+    const result = await sb.from('height_inspector_qualifications').select('*').order('inspector_name', { ascending: true });
+    if (result.error) throw result.error;
+    const rows = result.data || [];
+    if (api().state) api().state.qualifications = rows;
+    return rows;
+  }
+
+  async function verifiedQualificationBlob(record) {
+    if (!record?.storage_path) throw new Error('No qualification file is attached.');
+    const sb = client();
+    if (!sb) throw new Error('Supabase is not ready.');
+    const downloaded = await sb.storage.from(BUCKET).download(record.storage_path);
+    if (downloaded.error) throw downloaded.error;
+    const verified = await identifyAndVerifyBlob(downloaded.data, record.file_name || record.storage_path);
+    return { blob: downloaded.data, ...verified };
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('Could not read the saved file.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function qualificationFormHtml() {
+    return `<form id="heightQualForm" class="ops-form">
+      <label>Inspector name *<input id="heightQualName" required placeholder="e.g. Brendan Harris"></label>
+      <label>Email<input id="heightQualEmail" type="email" placeholder="name@example.com"></label>
+      <label>Qualification type *<input id="heightQualType" required placeholder="e.g. Height Safety Inspector"></label>
+      <label>Provider<input id="heightQualProvider" placeholder="Training provider"></label>
+      <label>Reference / certificate number<input id="heightQualRef"></label>
+      <label>Issue date<input id="heightQualIssue" type="date"></label>
+      <label>Expiry date<input id="heightQualExpiry" type="date"></label>
+      <label>PDF / scan / photo<input id="heightQualFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></label>
+      <label class="ops-span-2">Notes<textarea id="heightQualNotes"></textarea></label>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save qualification</button></div>
+    </form>`;
+  }
+
+  function renderQualifications(rows = state().qualifications || []) {
+    const pane = $('heightQualifications');
+    if (!pane) return;
+    const active = rows.filter(row => row.active !== false);
+    pane.innerHTML = `<div class="sw429-qualifications">
+      <details open>
+        <summary>Saved Inspectors</summary>
+        <div class="sw429-qual-body">${active.length ? `<div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>File status</th><th>Actions</th></tr></thead><tbody>${active.map(row => `<tr>
+          <td>${esc(titleCase(row.inspector_name))}<br><span class="ops-subtle">${esc(row.email || '')}</span></td>
+          <td>${esc(row.qualification_type || '—')}</td>
+          <td>${esc(row.provider || '—')}</td>
+          <td>${esc(row.reference_number || '—')}</td>
+          <td>${nzDate(row.expiry_date)}</td>
+          <td>${row.storage_path ? esc(row.file_name || 'File attached') : 'No file attached'}</td>
+          <td><div class="sw429-actions">
+            ${row.storage_path ? `<button type="button" class="ops-btn ghost" data-sw429-open="${esc(row.id)}">Open File</button>` : ''}
+            <button type="button" class="ops-btn" data-sw429-replace="${esc(row.id)}">Replace Qualification File</button>
+            <button type="button" class="ops-btn primary" data-sw429-print="${esc(row.id)}">Print Qualification Details</button>
+          </div></td>
+        </tr>`).join('')}</tbody></table></div>` : '<p class="muted">No inspectors saved yet.</p>'}</div>
+      </details>
+      <details>
+        <summary>Add Inspector</summary>
+        <div class="sw429-qual-body">${qualificationFormHtml()}</div>
+      </details>
+    </div>`;
+    removeDuplicateInspectorPanels();
+  }
+
+  function removeDuplicateInspectorPanels() {
+    $('qualificationCertPanel')?.remove();
+    const cert = $('certificates');
+    if (cert) {
+      cert.querySelectorAll('.card,.ops-card,details,section').forEach(node => {
+        const heading = node.querySelector(':scope > h2,:scope > h3,:scope > summary');
+        if (heading && /^Add Inspector$/i.test((heading.textContent || '').trim())) node.remove();
+      });
+    }
+  }
+
+  async function saveQualification(event) {
+    event?.preventDefault?.();
+    const sb = client();
+    if (!sb) return alert('Supabase is not ready.');
+    const file = $('heightQualFile')?.files?.[0] || null;
+    let uploaded = null;
+    try {
+      if (file) uploaded = await uploadAndVerify(file);
+      const row = {
+        inspector_name: titleCase($('heightQualName')?.value),
+        email: String($('heightQualEmail')?.value || '').trim().toLowerCase() || null,
+        qualification_type: String($('heightQualType')?.value || '').trim(),
+        provider: String($('heightQualProvider')?.value || '').trim() || null,
+        reference_number: String($('heightQualRef')?.value || '').trim() || null,
+        issue_date: $('heightQualIssue')?.value || null,
+        expiry_date: $('heightQualExpiry')?.value || null,
+        storage_path: uploaded?.path || null,
+        file_name: uploaded?.fileName || null,
+        notes: String($('heightQualNotes')?.value || '').trim() || null,
+        created_by: state().user?.id || null
+      };
+      if (!row.inspector_name || !row.qualification_type) throw new Error('Inspector name and qualification type are required.');
+      const inserted = await sb.from('height_inspector_qualifications').insert(row);
+      if (inserted.error) throw inserted.error;
+      const rows = await refreshQualifications();
+      renderQualifications(rows);
+      alert(uploaded ? `Inspector qualification saved and verified (${uploaded.size.toLocaleString()} bytes).` : 'Inspector qualification saved.');
+    } catch (error) {
+      if (uploaded?.path) await sb.storage.from(BUCKET).remove([uploaded.path]);
+      alert(`Qualification was not saved: ${error.message || error}`);
+    }
+  }
+
+  async function replaceQualificationFile(id, file) {
+    const sb = client();
+    if (!sb) return alert('Supabase is not ready.');
+    const currentRows = state().qualifications || await refreshQualifications();
+    const current = currentRows.find(row => String(row.id) === String(id));
+    if (!current) return alert('Qualification record not found.');
+    let uploaded = null;
+    try {
+      uploaded = await uploadAndVerify(file);
+      const updated = await sb.from('height_inspector_qualifications').update({
+        storage_path: uploaded.path,
+        file_name: uploaded.fileName
+      }).eq('id', id);
+      if (updated.error) throw updated.error;
+      if (current.storage_path && current.storage_path !== uploaded.path) {
+        const removed = await sb.storage.from(BUCKET).remove([current.storage_path]);
+        if (removed.error) console.warn('Old qualification object could not be removed:', removed.error.message);
+      }
+      const rows = await refreshQualifications();
+      renderQualifications(rows);
+      alert(`Qualification file replaced and verified (${uploaded.size.toLocaleString()} bytes).`);
+    } catch (error) {
+      if (uploaded?.path) await sb.storage.from(BUCKET).remove([uploaded.path]);
+      alert(`Qualification file was not replaced: ${error.message || error}`);
+    }
+  }
+
+  async function openQualificationFile(id) {
+    try {
+      const rows = state().qualifications || await refreshQualifications();
+      const record = rows.find(row => String(row.id) === String(id));
+      if (!record) throw new Error('Qualification record not found.');
+      const verified = await verifiedQualificationBlob(record);
+      const url = URL.createObjectURL(verified.blob);
+      const popup = window.open(url, '_blank');
+      if (!popup) {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = record.file_name || 'qualification-file';
+        anchor.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (error) {
+      alert(`Could not open the qualification file: ${error.message || error}. Use Replace Qualification File to repair this record.`);
+    }
+  }
+
+  async function printQualificationDetails(id) {
+    try {
+      const rows = state().qualifications || await refreshQualifications();
+      const record = rows.find(row => String(row.id) === String(id));
+      if (!record) throw new Error('Qualification record not found.');
+      let evidence = '<p>No qualification file is attached.</p>';
+      if (record.storage_path) {
+        const verified = await verifiedQualificationBlob(record);
+        const dataUrl = await blobToDataUrl(verified.blob);
+        evidence = verified.mime.startsWith('image/')
+          ? `<img src="${esc(dataUrl)}" style="display:block;max-width:100%;max-height:720px;margin:0 auto;border:1px solid #dbe7ee;border-radius:12px" alt="Qualification evidence">`
+          : `<object data="${esc(dataUrl)}" type="application/pdf" style="width:100%;height:720px;border:1px solid #dbe7ee;border-radius:12px"><p>The PDF preview is unavailable. Use Open File from the saved inspector record.</p></object>`;
+      }
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Inspector Qualification Details</title><style>
+        body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;background:#fff}.noPrint{padding:12px;background:#0f766e;text-align:center}.noPrint button{background:#fff;color:#0f766e;border:0;border-radius:10px;padding:9px 14px;font-weight:800}.page{page-break-after:always;padding:22mm;box-sizing:border-box;min-height:100vh}.head{display:flex;justify-content:space-between;gap:18px;border-bottom:4px solid #0f766e;padding-bottom:12px;margin-bottom:18px}.brand{font-weight:900;color:#0f766e;font-size:18px}.title{font-size:24px;font-weight:900;margin-top:4px}.grid{display:grid;grid-template-columns:155px 1fr;border:1px solid #dbe7ee;border-bottom:0}.label,.value{padding:8px 10px;border-bottom:1px solid #dbe7ee}.label{background:#f8fafc;font-weight:800}@media print{.noPrint{display:none}.page{min-height:auto}}
+      </style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Inspector Qualification Details</div></div><div>${new Date().toLocaleDateString('en-NZ')}</div></div><div class="grid"><div class="label">Inspector</div><div class="value">${esc(titleCase(record.inspector_name))}</div><div class="label">Email</div><div class="value">${esc(record.email || '—')}</div><div class="label">Qualification</div><div class="value">${esc(record.qualification_type || '—')}</div><div class="label">Provider</div><div class="value">${esc(record.provider || '—')}</div><div class="label">Reference</div><div class="value">${esc(record.reference_number || '—')}</div><div class="label">Issue date</div><div class="value">${nzDate(record.issue_date)}</div><div class="label">Expiry date</div><div class="value">${nzDate(record.expiry_date)}</div><div class="label">File</div><div class="value">${esc(record.file_name || '—')}</div><div class="label">Notes</div><div class="value">${esc(record.notes || '—')}</div></div></section><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Uploaded Qualification Evidence</div></div></div>${evidence}</section></body></html>`;
+      const popup = window.open('', '_blank');
+      if (popup) { popup.document.open(); popup.document.write(html); popup.document.close(); }
+      else {
+        const anchor = document.createElement('a');
+        anchor.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        anchor.download = 'inspector-qualification-details.html';
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+      }
+    } catch (error) {
+      alert(`Could not generate qualification details: ${error.message || error}. Use Replace Qualification File to repair this record.`);
+    }
+  }
+
+  function chooseReplacementFile(id) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,image/jpeg,image/png,image/webp';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file) replaceQualificationFile(id, file);
+    }, { once: true });
+    input.click();
+  }
+
+  function install() {
+    const tagline = document.querySelector('.tagline');
+    if (tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    removeDuplicateInspectorPanels();
+    if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) {
+      refreshQualifications().then(renderQualifications).catch(error => console.warn('Could not refresh qualifications:', error));
+    }
+    window.SW_OPERATIONS_BUILD = VERSION;
+    window.SWOperationsV4 = Object.assign(api(), {
+      version: VERSION,
+      saveHeightQualification: saveQualification,
+      openQualificationFile,
+      replaceQualificationFile,
+      printQualificationDetailsV429: printQualificationDetails,
+      generateQualificationCertificate: printQualificationDetails
+    });
+  }
+
+  document.addEventListener('submit', event => {
+    if (event.target?.id !== 'heightQualForm') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    saveQualification(event);
+  }, true);
+
+  document.addEventListener('click', event => {
+    const open = event.target.closest('[data-sw429-open]');
+    if (open) { event.preventDefault(); event.stopImmediatePropagation(); openQualificationFile(open.dataset.sw429Open); return; }
+    const replace = event.target.closest('[data-sw429-replace]');
+    if (replace) { event.preventDefault(); event.stopImmediatePropagation(); chooseReplacementFile(replace.dataset.sw429Replace); return; }
+    const print = event.target.closest('[data-sw429-print]');
+    if (print) { event.preventDefault(); event.stopImmediatePropagation(); printQualificationDetails(print.dataset.sw429Print); return; }
+    if (event.target.closest('[data-tab="heightQualifications"],#heightQualTabButton')) {
+      setTimeout(() => refreshQualifications().then(renderQualifications).catch(console.warn), 350);
+    }
+    if (event.target.closest('[data-tab="certificates"],#certificateTabButton')) {
+      setTimeout(removeDuplicateInspectorPanels, 350);
+    }
+  }, true);
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 1600), { once: true });
+  else setTimeout(install, 1600);
 })();

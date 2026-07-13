@@ -1,0 +1,36 @@
+V4.0.29 TEST PLAN
+
+1. VERSION
+- Banner shows Version 4.0.29.
+
+2. ZERO-BYTE PROTECTION
+- Attempt to select an empty file if available.
+- Confirm the app rejects it and does not create/update the qualification record.
+
+3. REPLACE CURRENT FILE
+- Open Qualifications > Saved Inspectors.
+- Click Replace Qualification File.
+- Select the original qualification image.
+- Confirm success message includes a non-zero byte count.
+- In Supabase Storage, confirm the new object has a non-zero size.
+- Confirm the old zero-byte object has been removed after the database update.
+
+4. OPEN FILE
+- Click Open File.
+- Confirm the qualification image opens normally.
+
+5. PRINT QUALIFICATION DETAILS
+- Click Print Qualification Details.
+- Confirm inspector information appears.
+- Confirm the uploaded image is embedded on the evidence page.
+- Print/save to PDF and confirm the image remains visible.
+
+6. NEW INSPECTOR UPLOAD
+- Add a test inspector with a valid JPG/PNG/WEBP/PDF.
+- Confirm the upload is verified before the record is saved.
+
+7. CERTIFICATES
+- Confirm no duplicate Add Inspector box appears in Certificates.
+
+8. REGRESSION
+- Confirm Equipment filters and Recent Inspection History still work normally.

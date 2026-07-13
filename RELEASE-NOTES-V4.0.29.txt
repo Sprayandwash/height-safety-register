@@ -1,0 +1,13 @@
+V4.0.29 - Qualification File Validation and Replacement
+
+- Rejects zero-byte qualification files before upload.
+- Checks file signatures and supported formats.
+- Decodes image files before accepting them.
+- Downloads every new upload from Supabase and verifies its stored size/content.
+- Removes failed uploads automatically.
+- Adds Replace Qualification File to saved inspector records.
+- Updates the existing qualification record after a verified replacement.
+- Removes the old empty/corrupt object after successful replacement.
+- Open File now verifies the stored object before opening it.
+- Qualification Details embeds verified image data rather than an expiring link.
+- Removes duplicate Add Inspector content from Certificates.
