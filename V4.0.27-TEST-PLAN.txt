@@ -1,0 +1,10 @@
+V4.0.27 test plan
+
+1. Open Height Equipment > Equipment.
+2. Confirm only one Filter Equipment box is visible.
+3. Scroll part-way down the page.
+4. Change Equipment type, Status and Due status.
+5. Confirm only the item list updates and the page does not twitch or jump.
+6. Use keyword search and Clear filters.
+7. Open an item and confirm its record still loads.
+8. Confirm Recent Inspection History still behaves correctly.

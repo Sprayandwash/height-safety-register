@@ -1,0 +1,8 @@
+V4.0.27 - Equipment Filter Stability
+
+- Removed duplicate lower Filter Equipment box.
+- Retained one working filter panel.
+- Equipment filter changes update only the results list.
+- Prevented full Equipment tab/page re-renders on dropdown changes.
+- Preserved page scroll position.
+- Retired legacy operations-v4 equipment filter renderers.

@@ -1,0 +1,1 @@
+-- V4.0.27 requires no Supabase schema changes.

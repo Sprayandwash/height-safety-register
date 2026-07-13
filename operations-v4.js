@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.26
+/* Spray & Wash Operations App V4.0.27
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -1253,7 +1253,7 @@
     </div>`;
   }
 
-  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.26. */ }
+  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.27. */ }
 
   async function saveActualUserRoles(userId){
     if(!isAdmin()) return alert('Only Admin users can manage permissions.');
@@ -1887,7 +1887,7 @@
 
 
 
-  // V4.0.26 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+  // V4.0.27 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
 
   function certSetFilterFromDom(){
     state.certFilterType = byId('certFilterType')?.value || '';
@@ -2256,7 +2256,7 @@
   }
 
 
-  // V4.0.26 - certificate filter fix, admin tab cleanup, service-item workflow.
+  // V4.0.27 - certificate filter fix, admin tab cleanup, service-item workflow.
   function certSelectedIds(){
     return Array.from(state.certSelectedIds || []);
   }
@@ -2358,7 +2358,7 @@
 
 
 
-  // V4.0.26 - Height dashboard cleanup and certificate flow simplification.
+  // V4.0.27 - Height dashboard cleanup and certificate flow simplification.
   function postHeightEnhancementsV415(activeId){
     try{
       hideHeightActionTabsV415();
@@ -2367,7 +2367,7 @@
       if(id === 'dashboard') enhanceHeightDashboardV415();
       if(id === 'equipment') enhanceHeightEquipmentTabV415();
       if(id === 'certificates') enhanceCertificatesV415();
-    }catch(err){ console.warn('V4.0.26 UI enhancement skipped:', err); }
+    }catch(err){ console.warn('V4.0.27 UI enhancement skipped:', err); }
   }
 
   function hideHeightActionTabsV415(){
@@ -2465,7 +2465,7 @@
   function enhanceCertificatesV415(){
     const certs = byId('certificates');
     if(!certs) return;
-    // Hide old batch controls; V4.0.26 certificate generation is filter/search/list based.
+    // Hide old batch controls; V4.0.27 certificate generation is filter/search/list based.
     const mode = byId('certMode');
     if(mode){ mode.value = 'selected_items'; const modeLabel = mode.closest('label') || mode.previousElementSibling; if(modeLabel) modeLabel.style.display = 'none'; mode.style.display='none'; }
     ['certTypePanel','certDatePanel','certResultPanel'].forEach(id => { const el = byId(id); if(el) el.style.display = 'none'; });
@@ -2679,9 +2679,9 @@
   else boot();
 })();
 
-/* V4.0.26 corrective UI and certificate patch */
+/* V4.0.27 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2978,11 +2978,11 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
-    if($('equipmentList')) installEquipmentFilters();
+    /* equipment register is owned by app.js in V4.0.27 */
     const old = api();
     window.SWOperationsV4 = Object.assign(old, {
       generateCombinedCertificates,
@@ -2995,13 +2995,13 @@
     window.generateCertificates = generateSeparateCertificates;
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 700)); else setTimeout(install, 700);
-  document.addEventListener('click', e => { if(e.target && e.target.closest && e.target.closest('#certificateTabButton,#certificates,[data-tab="certificates"]')) setTimeout(installCertificateUi, 500); if(e.target && e.target.closest && e.target.closest('[data-tab="equipment"]')) setTimeout(installEquipmentFilters, 500); });
-  // V4.0.26: disabled V4.0.26 repeating DOM patch timer to prevent version/layout flicker.
+  document.addEventListener('click', e => { if(e.target && e.target.closest && e.target.closest('#certificateTabButton,#certificates,[data-tab="certificates"]')) setTimeout(installCertificateUi, 500); /* equipment tab handled by app.js */ });
+  // V4.0.27: disabled V4.0.27 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.26 corrective UI/certificate/equipment/inspection patch */
+/* V4.0.27 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3252,7 +3252,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3261,21 +3261,21 @@
 
   function install(){
     injectCss(); cleanStaticUi(); installRecentHistoryFix();
-    if($('equipmentList')) installEquipmentRegister();
+    /* equipment register is owned by app.js in V4.0.27 */
     if($('inspect')) installInspectionPicker();
     if($('certificates')) installCertificates();
     cleanQualificationsTab();
     const old=api(); window.SWOperationsV4=Object.assign(old,{generateQualificationCertificate:generateInspectorDetails,generateInspectorDetails,renderEquipmentFilteredListV418:renderEquipmentFilterList,renderCertificateFilterListV418:renderCertificateFilterList,generateCombinedCertificates:generateCombined});
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
-  document.addEventListener('click', e=>{ if(e.target?.closest?.('[data-tab="equipment"]')) setTimeout(installEquipmentRegister,500); if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
-  // V4.0.26: disabled V4.0.26 repeating DOM patch timer to prevent version/layout flicker.
+  document.addEventListener('click', e=>{ /* equipment tab handled by app.js */ if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
+  // V4.0.27: disabled V4.0.27 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.26 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
+/* V4.0.27 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3637,7 +3637,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     cleanCertificatesV419();
     renderSavedQualificationsV419();
     installAccountBehaviourV419();
@@ -3646,7 +3646,7 @@
     injectV419Css();
     installAccountBehaviourV419();
     installRecentHistoryV419();
-    if($('equipmentList')) installEquipmentV419();
+    /* equipment register is owned by app.js in V4.0.27 */
     if($('certificates')) cleanCertificatesV419();
     if($('heightQualifications')) renderSavedQualificationsV419();
     const old = api();
@@ -3667,7 +3667,7 @@
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,900)); else setTimeout(install,900);
   document.addEventListener('click', e=>{
-    if(e.target.closest('[data-tab="equipment"]')) setTimeout(installEquipmentV419,500);
+    /* equipment tab handled by app.js */
     if(e.target.closest('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(cleanCertificatesV419,500);
     if(e.target.closest('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(renderSavedQualificationsV419,500);
   }, true);
@@ -3676,13 +3676,13 @@
     const row = e.target.closest('#equipmentList [data-sw418-action="open"], #equipmentList [data-sw419-equipment-id]');
     if(row){ e.preventDefault(); e.stopImmediatePropagation(); openEquipmentPreserveScroll(row.dataset.equipmentId || row.dataset.sw419EquipmentId); }
   }, true);
-  // V4.0.26: removed repeating cleanup timer from V4.0.26 because it could fight the main app renderer and cause flickering.
+  // V4.0.27: removed repeating cleanup timer from V4.0.27 because it could fight the main app renderer and cause flickering.
 })();
 
-/* V4.0.26 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
+/* V4.0.27 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3816,7 +3816,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -3844,9 +3844,9 @@
   document.addEventListener('change', e => { if(e.target?.closest?.('#certItemList')) setTimeout(bindStableHandlers, 50); }, true);
 })();
 
-/* V4.0.26 - dashboard, equipment, certificate, qualification and reports cleanup */
+/* V4.0.27 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4234,8 +4234,8 @@
   }
 
   function refreshAll(){
-    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); installEquipmentFilterStabiliser(); addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch(); installAdminHome();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch(); installAdminHome();
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
     window.SWOperationsV4 = Object.assign(apiObj, { printQualificationDetailsV420:printQualDetails, printQualificationDetailsV419:printQualDetails, openQualificationFile:openQualFile, openQualificationFileV419:openQualFile, generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
     window.buildCertificatePacket=buildSeparateCertificates421; window.generateCertificates=generateSeparate421;
@@ -4250,10 +4250,10 @@
   installArchiveDisposeGuard();
 })();
 
-/* V4.0.26 - stabilisation and completion patch */
+/* V4.0.27 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4394,19 +4394,19 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); if($('equipmentList')) renderEqList(); if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; window.renderEquipment=renderEqList; }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
-  document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} if(name==='equipment') renderEqList(); if(name==='detail') addDetailButtons(); if(name==='certificates') installCertUi(); if(name==='export') installReports(); },250); } });
+  document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} /* equipment tab handled by app.js */ if(name==='detail') addDetailButtons(); if(name==='certificates') installCertUi(); if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
 })();
 
-/* V4.0.26 - app structure stabilisation marker and duplicate render guard */
+/* V4.0.27 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function removeDuplicateStartInspection(){
@@ -4437,9 +4437,9 @@
   }, true);
 })();
 
-/* V4.0.26 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
+/* V4.0.27 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.26';
+  const VERSION = '4.0.27';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4459,9 +4459,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.26"] .notifyBtn,
-      html[data-sw-version="4.0.26"] #notifyBadge,
-      html[data-sw-version="4.0.26"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.27"] .notifyBtn,
+      html[data-sw-version="4.0.27"] #notifyBadge,
+      html[data-sw-version="4.0.27"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4472,7 +4472,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4620,25 +4620,25 @@
   function install(){
     installCss(); setVersion();
     if($('dashboard')) installRecent();
-    if($('equipmentList')) renderEquipmentList();
+    /* equipment register is owned by app.js */
     if($('certificates') && !$('certificates').classList.contains('hidden')) installCertificates();
     if($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) installQualifications();
     installAdmin();
     const old=window.SWOperationsV4 || {};
     window.SWOperationsV4 = Object.assign(old,{ renderRecentHistoryV424:renderRecent, renderEquipmentRegisterV424:renderEquipmentList, installCertificatesV424:installCertificates, openQualificationFileV424:openQualFile, printQualificationDetailsV424:printQual, downloadTableCsvV424:downloadCsv, generateSeparateCertificates:generateSeparate, generateCombinedCertificates:generateCombined });
     window.generateCertificates = generateSeparate;
-    window.renderEquipment = renderEquipmentList;
+    /* app.js owns window.renderEquipment */
     window.openAdminModule = (function(orig){ return function(view){ return orig ? orig(view || 'admin-users') : null; }; })(window.openAdminModule);
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,1200)); else setTimeout(install,1200);
   document.addEventListener('click',e=>{
-    const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); if(name==='equipment') renderEquipmentList(); if(name==='certificates') installCertificates(); if(name==='heightQualifications') installQualifications(); },250); }
+    const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='certificates') installCertificates(); if(name==='heightQualifications') installQualifications(); },250); }
     if(e.target?.closest?.('[data-ops-view],.ops-branch-card')) setTimeout(installAdmin,250);
   }, true);
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
 })();
 
-/* V4.0.26 - Recent Inspection History is owned by app.js.
+/* V4.0.27 - Recent Inspection History is owned by app.js.
  * Legacy operations patches intentionally target *Legacy element ids and do not
  * bind to #heightRecentLimit or #dashRecent.
  */
@@ -4646,6 +4646,38 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.26'
+    version: '4.0.27'
   });
+})();
+
+
+/* V4.0.27 - Equipment filter is owned exclusively by app.js. */
+(() => {
+  const VERSION='4.0.27';
+  function cleanLegacyEquipmentFilters(){
+    const pane=document.getElementById('equipment');
+    if(!pane)return;
+    pane.querySelectorAll('#heightEquipmentFilterPanel,#eqFilterPanel,#sw422EqFilter,#sw424EqFilter,.sw417-filter-panel,.sw422-filter,.sw424-filter').forEach(el=>{
+      if(el.id!=='equipmentFilterCore') el.remove();
+    });
+    if(window.renderEquipmentCore) window.renderEquipment=window.renderEquipmentCore;
+  }
+  function install(){
+    const style=document.createElement('style');
+    style.id='sw427EquipmentOwnerStyle';
+    style.textContent='#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter{display:none!important}';
+    if(!document.getElementById(style.id)) document.head.appendChild(style);
+    cleanLegacyEquipmentFilters();
+    const pane=document.getElementById('equipment');
+    if(pane && !pane.__sw427Observer){
+      const observer=new MutationObserver(cleanLegacyEquipmentFilters);
+      observer.observe(pane,{childList:true,subtree:false});
+      pane.__sw427Observer=observer;
+    }
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.27 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    window.SW_OPERATIONS_BUILD=VERSION;
+    window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,1500)); else setTimeout(install,1500);
+  document.addEventListener('click',e=>{ if(e.target?.closest?.('[data-tab="equipment"]')) setTimeout(()=>{cleanLegacyEquipmentFilters();window.renderEquipmentCore?.();},50); },true);
 })();

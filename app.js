@@ -22,6 +22,8 @@ let sb,currentUser=null,equipment=[],inspections=[],photos=[],inspectionPhotos=[
 let currentRoles=[],userProfiles=[],roleAssignments=[];
 const ROLE_DEFS=["Admin","Inspector","Equipment Manager","Certificate Approver","Office / Reports","Viewer"];
 let activeFilter={mode:"active",value:"active"};
+let equipmentFilterState={type:"",status:"",due:"",q:""};
+let equipmentFiltersBound=false;
 let pendingEquipmentPhotos=[];
 let pendingInspectionPhotos=[];
 let cropState=null;
@@ -310,33 +312,133 @@ function renderDashboard(){
   if(window.dashTypes) dashTypes.innerHTML=EQUIPMENT_TYPES.map((t,i)=>`<div class="typeTile type-${i%5}" onclick="setRegisterFilter('type','${escAttr(t)}')"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
 }
 function escAttr(s){return String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");}
-function setRegisterFilter(mode,value){activeFilter={mode,value};showTab("equipment");renderEquipment();}
-function clearFilter(){activeFilter={mode:"active",value:"active"};renderEquipment();showTab("equipment");}
-function filterLabelText(){const m=activeFilter.mode,v=activeFilter.value;if(m==="active")return "Active items";if(m==="all")return "All items";if(m==="status")return `Status: ${v}`;if(m==="due")return "Due / overdue items";if(m==="dueSoon")return `Due within ${getNotificationLeadDays()} days`;if(m==="overdue")return "Overdue inspections";if(m==="noInspection")return "No inspection history";if(m==="noPhotos")return "No equipment photos";if(m==="noInspectionPhotos")return "Latest inspection has no photos";if(m==="failed")return "Failed / quarantined items";if(m==="archived")return "Archived / disposed items";if(m==="type")return `Type: ${v}`;if(m==="manufacturer")return `Manufacturer: ${v}`;if(m==="model")return `Model: ${v}`;return "Filtered";}
-function filteredEquipment(){
-  let rows=[...equipment]; const m=activeFilter.mode,v=activeFilter.value;
-  if(m==="active") rows=rows.filter(e=>!isArchived(e));
-  if(m==="status") rows=rows.filter(e=>!isArchived(e)&&e.status===v);
-  if(m==="due") rows=rows.filter(isDue);
-  if(m==="dueSoon") rows=rows.filter(isDueSoonEquipment);
-  if(m==="overdue") rows=rows.filter(isOverdueEquipment);
-  if(m==="noInspection") rows=rows.filter(e=>!isArchived(e)&&!latest(e.serial));
-  if(m==="noPhotos") rows=rows.filter(e=>!isArchived(e)&&!hasEquipmentPhoto(e));
-  if(m==="noInspectionPhotos") rows=rows.filter(e=>!isArchived(e)&&latest(e.serial)&&!latestInspectionHasPhoto(e));
-  if(m==="failed") rows=rows.filter(isFailed);
-  if(m==="archived") rows=rows.filter(isArchived);
-  if(m==="type") rows=rows.filter(e=>!isArchived(e)&&e.type===v);
-  if(m==="manufacturer") rows=rows.filter(e=>!isArchived(e)&&(e.manufacturer||"")===v);
-  if(m==="model") rows=rows.filter(e=>!isArchived(e)&&(e.model||"")===v);
-  let q=(search.value||"").toLowerCase().trim(); if(q) rows=rows.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
+function equipmentFilterEls(){
+  return {
+    type:document.getElementById("equipmentFilterType"),
+    status:document.getElementById("equipmentFilterStatus"),
+    due:document.getElementById("equipmentFilterDue"),
+    q:document.getElementById("equipmentFilterSearch"),
+    clear:document.getElementById("equipmentFilterClear"),
+    count:document.getElementById("equipmentFilterCount"),
+    list:document.getElementById("equipmentList")
+  };
+}
+function readEquipmentFilterState(){
+  const el=equipmentFilterEls();
+  equipmentFilterState={
+    type:el.type?.value||"",
+    status:el.status?.value||"",
+    due:el.due?.value||"",
+    q:(el.q?.value||"").trim().toLowerCase()
+  };
+  return equipmentFilterState;
+}
+function writeEquipmentFilterState(){
+  const el=equipmentFilterEls();
+  if(el.type) el.type.value=equipmentFilterState.type||"";
+  if(el.status) el.status.value=equipmentFilterState.status||"";
+  if(el.due) el.due.value=equipmentFilterState.due||"";
+  if(el.q) el.q.value=equipmentFilterState.q||"";
+}
+function populateEquipmentFilterOptions(){
+  const el=equipmentFilterEls();
+  if(!el.type||!el.status)return;
+  const typeValue=equipmentFilterState.type||el.type.value||"";
+  const statusValue=equipmentFilterState.status||el.status.value||"";
+  const types=[...new Set(equipment.map(e=>e.type).filter(Boolean))].sort();
+  const statuses=[...new Set(equipment.map(e=>isArchived(e)?"Archived / disposed":e.status).filter(Boolean))].sort();
+  el.type.innerHTML=`<option value="">All types</option>`+types.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  el.status.innerHTML=`<option value="">All statuses</option>`+statuses.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  el.type.value=types.includes(typeValue)?typeValue:"";
+  el.status.value=statuses.includes(statusValue)?statusValue:"";
+}
+function equipmentDueState(e){
+  const l=latest(e.serial);
+  if(!l)return "no_inspection";
+  return isDue(e)?"due":"ok";
+}
+function applyLegacyEquipmentFilter(rows){
+  const m=activeFilter.mode,v=activeFilter.value;
+  if(m==="active") return rows.filter(e=>!isArchived(e));
+  if(m==="all") return rows;
+  if(m==="status") return rows.filter(e=>!isArchived(e)&&e.status===v);
+  if(m==="due") return rows.filter(isDue);
+  if(m==="dueSoon") return rows.filter(isDueSoonEquipment);
+  if(m==="overdue") return rows.filter(isOverdueEquipment);
+  if(m==="noInspection") return rows.filter(e=>!isArchived(e)&&!latest(e.serial));
+  if(m==="noPhotos") return rows.filter(e=>!isArchived(e)&&!hasEquipmentPhoto(e));
+  if(m==="noInspectionPhotos") return rows.filter(e=>!isArchived(e)&&latest(e.serial)&&!latestInspectionHasPhoto(e));
+  if(m==="failed") return rows.filter(isFailed);
+  if(m==="archived") return rows.filter(isArchived);
+  if(m==="type") return rows.filter(e=>!isArchived(e)&&e.type===v);
+  if(m==="manufacturer") return rows.filter(e=>!isArchived(e)&&(e.manufacturer||"")===v);
+  if(m==="model") return rows.filter(e=>!isArchived(e)&&(e.model||"")===v);
   return rows;
 }
-function renderEquipment(){
-  filterLabel.textContent=filterLabelText();
-  let rows=filteredEquipment();
-  equipmentList.innerHTML=rows.map(e=>{let l=latest(e.serial), count=photos.filter(p=>p.equipment_id===e.id).length;return `<div class="listItem" onclick="openItem('${e.id}')"><div class="listItemTop"><div><b>${esc(e.serial)}</b> ${pill(isArchived(e)?"Archived":e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div></div><span class="badge">${count} photos</span></div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div></div>`;}).join("") || `<p class="muted">No equipment found.</p>`;
-  serials.innerHTML=equipment.map(e=>`<option value="${esc(e.serial)}"></option>`).join("");
+function filteredEquipment(){
+  let rows=applyLegacyEquipmentFilter([...equipment]);
+  const f=equipmentFilterState;
+  if(f.type) rows=rows.filter(e=>e.type===f.type);
+  if(f.status) rows=rows.filter(e=>(isArchived(e)?"Archived / disposed":e.status)===f.status);
+  if(f.due) rows=rows.filter(e=>equipmentDueState(e)===f.due);
+  if(f.q) rows=rows.filter(e=>JSON.stringify(e).toLowerCase().includes(f.q));
+  return rows;
 }
+function renderEquipmentResults(){
+  const el=equipmentFilterEls();
+  if(!el.list)return;
+  const rows=filteredEquipment();
+  if(el.count) el.count.textContent=`${rows.length} item${rows.length===1?"":"s"} shown.`;
+  el.list.innerHTML=rows.map(e=>{let l=latest(e.serial), count=photos.filter(p=>p.equipment_id===e.id).length;return `<div class="listItem" onclick="openItem('${e.id}')"><div class="listItemTop"><div><b>${esc(e.serial)}</b> ${pill(isArchived(e)?"Archived":e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div></div><span class="badge">${count} photos</span></div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div></div>`;}).join("") || `<p class="muted">No equipment found.</p>`;
+  if(window.serials) serials.innerHTML=equipment.map(e=>`<option value="${esc(e.serial)}"></option>`).join("");
+}
+function bindEquipmentFilters(){
+  if(equipmentFiltersBound)return;
+  const el=equipmentFilterEls();
+  if(!el.type||!el.status||!el.due||!el.q)return;
+  const update=e=>{
+    e?.stopPropagation?.();
+    activeFilter={mode:"active",value:"active"};
+    readEquipmentFilterState();
+    renderEquipmentResults();
+  };
+  el.type.addEventListener("change",update);
+  el.status.addEventListener("change",update);
+  el.due.addEventListener("change",update);
+  el.q.addEventListener("input",update);
+  el.clear?.addEventListener("click",e=>{
+    e.preventDefault();e.stopPropagation();
+    activeFilter={mode:"active",value:"active"};
+    equipmentFilterState={type:"",status:"",due:"",q:""};
+    writeEquipmentFilterState();
+    renderEquipmentResults();
+  });
+  equipmentFiltersBound=true;
+}
+function setRegisterFilter(mode,value){
+  activeFilter={mode,value};
+  equipmentFilterState={type:"",status:"",due:"",q:""};
+  if(mode==="type") equipmentFilterState.type=value;
+  if(mode==="status") equipmentFilterState.status=value;
+  if(mode==="due"||mode==="overdue"||mode==="dueSoon") equipmentFilterState.due="due";
+  if(mode==="noInspection") equipmentFilterState.due="no_inspection";
+  showTab("equipment");
+  renderEquipment();
+}
+function clearFilter(){
+  activeFilter={mode:"active",value:"active"};
+  equipmentFilterState={type:"",status:"",due:"",q:""};
+  writeEquipmentFilterState();
+  renderEquipmentResults();
+}
+function filterLabelText(){return "";}
+function renderEquipment(){
+  populateEquipmentFilterOptions();
+  writeEquipmentFilterState();
+  bindEquipmentFilters();
+  renderEquipmentResults();
+}
+window.renderEquipmentCore=renderEquipment;
 async function firstPhotoUrl(equipmentId){let p=photos.find(x=>x.equipment_id===equipmentId); if(!p)return null; let r=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); return r.error?null:r.data.signedUrl;}
 async function openItem(id){let e=equipment.find(x=>x.id===id); if(!e)return; showTab("detail"); await renderDetail(e);}
 function openItemBySerial(serial){let e=equipment.find(x=>x.serial===serial); if(e) openItem(e.id);}
