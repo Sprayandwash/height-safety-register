@@ -1,0 +1,10 @@
+V4.0.26 TEST PLAN
+
+1. Confirm the banner shows Version 4.0.26.
+2. Open Height Equipment > Dashboard.
+3. Confirm Recent Inspection History defaults to 10.
+4. Select 20, 30 and 50 in turn.
+5. Confirm only the list contents update; the page must not twitch or jump.
+6. Confirm roughly seven rows remain visible and the list scrolls internally.
+7. Confirm clicking a history row still opens the related equipment record.
+8. Confirm Height Equipment, Vehicle Checks, Ops Management and Admin still open.

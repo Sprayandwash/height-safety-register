@@ -1,0 +1,2 @@
+-- V4.0.26 recent inspection history stability fix
+-- No Supabase database migration is required.

@@ -1,0 +1,9 @@
+V4.0.26 - Recent Inspection History Integrated Fix
+
+- Moved Recent Inspection History rendering into app.js.
+- Removed operations-v4.js ownership of the recent-history selector/list.
+- Removed the appended V4.0.25 micro-patch.
+- Added one dedicated dropdown listener that updates only the history list.
+- Added a fixed-height scroll viewport to prevent dashboard resizing.
+- Updated all active version references to V4.0.26.
+- No database migration required.

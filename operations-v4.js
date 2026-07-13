@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.24
+/* Spray & Wash Operations App V4.0.26
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -1253,7 +1253,7 @@
     </div>`;
   }
 
-  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.24. */ }
+  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.26. */ }
 
   async function saveActualUserRoles(userId){
     if(!isAdmin()) return alert('Only Admin users can manage permissions.');
@@ -1887,7 +1887,7 @@
 
 
 
-  // V4.0.24 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+  // V4.0.26 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
 
   function certSetFilterFromDom(){
     state.certFilterType = byId('certFilterType')?.value || '';
@@ -2256,7 +2256,7 @@
   }
 
 
-  // V4.0.24 - certificate filter fix, admin tab cleanup, service-item workflow.
+  // V4.0.26 - certificate filter fix, admin tab cleanup, service-item workflow.
   function certSelectedIds(){
     return Array.from(state.certSelectedIds || []);
   }
@@ -2358,7 +2358,7 @@
 
 
 
-  // V4.0.24 - Height dashboard cleanup and certificate flow simplification.
+  // V4.0.26 - Height dashboard cleanup and certificate flow simplification.
   function postHeightEnhancementsV415(activeId){
     try{
       hideHeightActionTabsV415();
@@ -2367,7 +2367,7 @@
       if(id === 'dashboard') enhanceHeightDashboardV415();
       if(id === 'equipment') enhanceHeightEquipmentTabV415();
       if(id === 'certificates') enhanceCertificatesV415();
-    }catch(err){ console.warn('V4.0.24 UI enhancement skipped:', err); }
+    }catch(err){ console.warn('V4.0.26 UI enhancement skipped:', err); }
   }
 
   function hideHeightActionTabsV415(){
@@ -2431,7 +2431,7 @@
   }
 
   function enhanceRecentInspectionsV415(){
-    const recent = byId('dashRecent');
+    const recent = byId('dashRecentLegacy');
     if(!recent) return;
     const card = recent.closest('.card');
     if(!card || card.dataset.v415Recent === '1') { applyRecentLimitV415(); return; }
@@ -2444,19 +2444,19 @@
     summary.innerHTML = '<strong>Recent Inspection History</strong> <span class="muted">Click to show/hide</span>';
     const controls = document.createElement('div');
     controls.className = 'row';
-    controls.innerHTML = `<label style="max-width:220px">Show last<select id="heightRecentLimit"><option>10</option><option>20</option><option>30</option><option>50</option></select></label>`;
+    controls.innerHTML = `<label style="max-width:220px">Show last<select id="heightRecentLimitLegacy"><option>10</option><option>20</option><option>30</option><option>50</option></select></label>`;
     card.innerHTML = '';
     details.appendChild(summary);
     details.appendChild(controls);
     details.appendChild(original);
     card.appendChild(details);
-    byId('heightRecentLimit')?.addEventListener('change', applyRecentLimitV415);
+    byId('heightRecentLimitLegacy')?.addEventListener('change', applyRecentLimitV415);
     applyRecentLimitV415();
   }
 
   function applyRecentLimitV415(){
-    const recent = byId('dashRecent');
-    const limit = Number(byId('heightRecentLimit')?.value || 10);
+    const recent = byId('dashRecentLegacy');
+    const limit = Number(byId('heightRecentLimitLegacy')?.value || 10);
     if(!recent) return;
     const rows = Array.from(recent.querySelectorAll('.lineItem, tr, .listItem, .inspectionRow')).filter(el => !el.querySelector('th'));
     if(rows.length) rows.forEach((row, idx) => { row.style.display = idx < limit ? '' : 'none'; });
@@ -2465,7 +2465,7 @@
   function enhanceCertificatesV415(){
     const certs = byId('certificates');
     if(!certs) return;
-    // Hide old batch controls; V4.0.24 certificate generation is filter/search/list based.
+    // Hide old batch controls; V4.0.26 certificate generation is filter/search/list based.
     const mode = byId('certMode');
     if(mode){ mode.value = 'selected_items'; const modeLabel = mode.closest('label') || mode.previousElementSibling; if(modeLabel) modeLabel.style.display = 'none'; mode.style.display='none'; }
     ['certTypePanel','certDatePanel','certResultPanel'].forEach(id => { const el = byId(id); if(el) el.style.display = 'none'; });
@@ -2679,9 +2679,9 @@
   else boot();
 })();
 
-/* V4.0.24 corrective UI and certificate patch */
+/* V4.0.26 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2889,9 +2889,9 @@
   }
 
   async function renderRecentHistory(){
-    const box = $('dashRecent'); if(!box) return;
+    const box = $('dashRecentLegacy'); if(!box) return;
     try{
-      const limit = Number($('heightRecentLimit')?.value || 10);
+      const limit = Number($('heightRecentLimitLegacy')?.value || 10);
       const { equipment, inspections } = await loadHeightData();
       const eqById = new Map(equipment.map(e=>[String(e.id), e]));
       const eqBySerial = new Map(equipment.map(e=>[norm(e.serial), e]));
@@ -2903,7 +2903,7 @@
     }catch(e){ console.warn('Recent history patch failed', e); }
   }
   function installRecentHistory(){
-    const sel = $('heightRecentLimit');
+    const sel = $('heightRecentLimitLegacy');
     if(sel && !sel.dataset.sw417){ sel.dataset.sw417='1'; sel.value = sel.value || '10'; sel.addEventListener('change', renderRecentHistory); }
     renderRecentHistory();
   }
@@ -2978,7 +2978,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
@@ -2996,12 +2996,12 @@
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 700)); else setTimeout(install, 700);
   document.addEventListener('click', e => { if(e.target && e.target.closest && e.target.closest('#certificateTabButton,#certificates,[data-tab="certificates"]')) setTimeout(installCertificateUi, 500); if(e.target && e.target.closest && e.target.closest('[data-tab="equipment"]')) setTimeout(installEquipmentFilters, 500); });
-  // V4.0.24: disabled V4.0.24 repeating DOM patch timer to prevent version/layout flicker.
+  // V4.0.26: disabled V4.0.26 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.24 corrective UI/certificate/equipment/inspection patch */
+/* V4.0.26 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3248,11 +3248,11 @@
   }
 
   function installRecentHistoryFix(){
-    const sel=$('heightRecentLimit'); if(sel){ if(!sel.value) sel.value='10'; sel.querySelector('option[value="10"]')?.setAttribute('selected','selected'); }
+    const sel=$('heightRecentLimitLegacy'); if(sel){ if(!sel.value) sel.value='10'; sel.querySelector('option[value="10"]')?.setAttribute('selected','selected'); }
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3269,13 +3269,13 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
   document.addEventListener('click', e=>{ if(e.target?.closest?.('[data-tab="equipment"]')) setTimeout(installEquipmentRegister,500); if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
-  // V4.0.24: disabled V4.0.24 repeating DOM patch timer to prevent version/layout flicker.
+  // V4.0.26: disabled V4.0.26 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.24 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
+/* V4.0.26 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3372,10 +3372,10 @@
   }
 
   async function renderRecentHistoryV419(){
-    const box = $('dashRecent');
+    const box = $('dashRecentLegacy');
     if(!box) return;
     try{
-      const limit = Number($('heightRecentLimit')?.value || 10);
+      const limit = Number($('heightRecentLimitLegacy')?.value || 10);
       const { equipment, inspections } = await loadHeightData();
       const eqById = new Map(equipment.map(e => [String(e.id), e]));
       const eqBySerial = new Map(equipment.map(e => [norm(e.serial), e]));
@@ -3392,7 +3392,7 @@
     }catch(err){ box.innerHTML = `<p class="muted">Could not load recent inspection history: ${esc(err.message||err)}</p>`; }
   }
   function installRecentHistoryV419(){
-    const sel = $('heightRecentLimit');
+    const sel = $('heightRecentLimitLegacy');
     if(sel){
       if(!sel.value) sel.value = '10';
       if(!sel.dataset.sw419){ sel.dataset.sw419 = '1'; sel.addEventListener('change', renderRecentHistoryV419); }
@@ -3637,7 +3637,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     cleanCertificatesV419();
     renderSavedQualificationsV419();
     installAccountBehaviourV419();
@@ -3671,18 +3671,18 @@
     if(e.target.closest('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(cleanCertificatesV419,500);
     if(e.target.closest('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(renderSavedQualificationsV419,500);
   }, true);
-  document.addEventListener('change', e=>{ if(e.target?.id === 'heightRecentLimit') setTimeout(renderRecentHistoryV419,20); }, true);
+  document.addEventListener('change', e=>{ if(e.target?.id === 'heightRecentLimitLegacy') setTimeout(renderRecentHistoryV419,20); }, true);
   document.addEventListener('click', e=>{
     const row = e.target.closest('#equipmentList [data-sw418-action="open"], #equipmentList [data-sw419-equipment-id]');
     if(row){ e.preventDefault(); e.stopImmediatePropagation(); openEquipmentPreserveScroll(row.dataset.equipmentId || row.dataset.sw419EquipmentId); }
   }, true);
-  // V4.0.24: removed repeating cleanup timer from V4.0.24 because it could fight the main app renderer and cause flickering.
+  // V4.0.26: removed repeating cleanup timer from V4.0.26 because it could fight the main app renderer and cause flickering.
 })();
 
-/* V4.0.24 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
+/* V4.0.26 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3816,7 +3816,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -3844,9 +3844,9 @@
   document.addEventListener('change', e => { if(e.target?.closest?.('#certItemList')) setTimeout(bindStableHandlers, 50); }, true);
 })();
 
-/* V4.0.24 - dashboard, equipment, certificate, qualification and reports cleanup */
+/* V4.0.26 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4053,9 +4053,9 @@
   }
 
   async function renderRecentHistory421(){
-    const box=$('dashRecent'); if(!box) return;
+    const box=$('dashRecentLegacy'); if(!box) return;
     try{
-      const limit = Number($('heightRecentLimit')?.value || 10);
+      const limit = Number($('heightRecentLimitLegacy')?.value || 10);
       const {equipment, inspections}=await loadHeightData();
       const byId=new Map(equipment.map(e=>[String(e.id),e])); const bySerial=new Map(equipment.map(e=>[norm(e.serial),e]));
       const rows=inspections.slice(0,limit).map(i=>{ const e=byId.get(String(i.equipment_id||'')) || bySerial.get(norm(i.serial)) || {}; return `<tr><td>${nzDate(i.inspection_date||i.created_at)}</td><td><strong>${esc(e.serial||i.serial||'')}</strong></td><td>${esc(e.type||i.type||'')}</td><td><span class="sw421-pill ${statusClass(i.result)}">${esc(statusLabel(i.result))}</span></td><td>${esc(i.inspector||'')}</td></tr>`; }).join('');
@@ -4064,7 +4064,7 @@
     }catch(e){ console.warn('Recent inspection history v421 failed', e); }
   }
   function installRecentHistory421(){
-    const sel=$('heightRecentLimit'); if(sel && !sel.dataset.sw421){ sel.dataset.sw421='1'; if(!sel.value) sel.value='10'; sel.addEventListener('change', renderRecentHistory421); }
+    const sel=$('heightRecentLimitLegacy'); if(sel && !sel.dataset.sw421){ sel.dataset.sw421='1'; if(!sel.value) sel.value='10'; sel.addEventListener('change', renderRecentHistory421); }
     renderRecentHistory421();
   }
 
@@ -4235,14 +4235,14 @@
 
   function refreshAll(){
     injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); installEquipmentFilterStabiliser(); addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch(); installAdminHome();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
     window.SWOperationsV4 = Object.assign(apiObj, { printQualificationDetailsV420:printQualDetails, printQualificationDetailsV419:printQualDetails, openQualificationFile:openQualFile, openQualificationFileV419:openQualFile, generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
     window.buildCertificatePacket=buildSeparateCertificates421; window.generateCertificates=generateSeparate421;
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
   document.addEventListener('click', e=>{ setTimeout(refreshAll,250); const pq=e.target.closest('[data-sw419-print-qual]'); if(pq){e.preventDefault();e.stopImmediatePropagation();printQualDetails(pq.dataset.sw419PrintQual);} const oq=e.target.closest('[data-sw419-open-qual]'); if(oq){e.preventDefault();e.stopImmediatePropagation();openQualFile(oq.dataset.sw419OpenQual);} }, true);
-  document.addEventListener('change', e=>{ if(e.target?.id==='heightRecentLimit') setTimeout(renderRecentHistory421,30); if(e.target?.closest?.('#certItemList')) setTimeout(installCertificateCleanup,40); }, true);
+  document.addEventListener('change', e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecentHistory421,30); if(e.target?.closest?.('#certItemList')) setTimeout(installCertificateCleanup,40); }, true);
   ['dashboard','equipment','detail','certificates','export'].forEach(id => {
     const btn = document.querySelector(`[data-tab="${id}"]`);
     if(btn) btn.addEventListener('click', () => setTimeout(refreshAll, 350));
@@ -4250,10 +4250,10 @@
   installArchiveDisposeGuard();
 })();
 
-/* V4.0.24 - stabilisation and completion patch */
+/* V4.0.26 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4322,9 +4322,9 @@
     $('sw422StartInspectionBtn')?.addEventListener('click',()=>{ if(api().openNewHeightInspectionV415) api().openNewHeightInspectionV415(); else window.showTab?.('inspect'); });
   }
   async function renderRecent(){
-    const box=$('dashRecent'); if(!box) return;
+    const box=$('dashRecentLegacy'); if(!box) return;
     try{
-      const limit=Number($('heightRecentLimit')?.value||10);
+      const limit=Number($('heightRecentLimitLegacy')?.value||10);
       const {equipment,inspections}=await loadHeight();
       const idMap=new Map(equipment.map(e=>[String(e.id),e])); const serialMap=new Map(equipment.map(e=>[norm(e.serial),e]));
       const rows=inspections.slice(0,limit).map(i=>{ const e=idMap.get(String(i.equipment_id||''))||serialMap.get(norm(i.serial))||{}; return `<tr data-id="${esc(i.id||'')}"><td>${nzDate(i.inspection_date||i.created_at)}</td><td><strong>${esc(e.serial||i.serial||'')}</strong></td><td>${esc(e.type||i.type||'')}</td><td><span class="sw422-pill ${statusClass(i.result)}">${esc(statusLabel(i.result))}</span></td><td>${esc(i.inspector||'')}</td></tr>`; }).join('');
@@ -4332,7 +4332,7 @@
       box.querySelectorAll('tr[data-id]').forEach(r=>r.addEventListener('click',()=>{ if(api().openInspectionRecord) api().openInspectionRecord(r.dataset.id); }));
     }catch(e){ box.innerHTML='<p class="muted">Could not load recent inspections.</p>'; console.warn(e); }
   }
-  function installRecent(){ const sel=$('heightRecentLimit'); if(sel){ if(!sel.value) sel.value='10'; if(!sel.dataset.sw422){sel.dataset.sw422='1'; sel.addEventListener('change',renderRecent);} } renderRecent(); }
+  function installRecent(){ const sel=$('heightRecentLimitLegacy'); if(sel){ if(!sel.value) sel.value='10'; if(!sel.dataset.sw422){sel.dataset.sw422='1'; sel.addEventListener('change',renderRecent);} } renderRecent(); }
   let eqToken=0;
   async function ensureEqFilter(){
     const list=$('equipmentList'); if(!list) return;
@@ -4394,19 +4394,19 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); if($('equipmentList')) renderEqList(); if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; window.renderEquipment=renderEqList; }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); if($('equipmentList')) renderEqList(); if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; window.renderEquipment=renderEqList; }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} if(name==='equipment') renderEqList(); if(name==='detail') addDetailButtons(); if(name==='certificates') installCertUi(); if(name==='export') installReports(); },250); } });
-  document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimit') setTimeout(renderRecent,20); });
+  document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
 })();
 
-/* V4.0.24 - app structure stabilisation marker and duplicate render guard */
+/* V4.0.26 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function removeDuplicateStartInspection(){
@@ -4437,9 +4437,9 @@
   }, true);
 })();
 
-/* V4.0.24 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
+/* V4.0.26 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.24';
+  const VERSION = '4.0.26';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4459,9 +4459,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.24"] .notifyBtn,
-      html[data-sw-version="4.0.24"] #notifyBadge,
-      html[data-sw-version="4.0.24"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.26"] .notifyBtn,
+      html[data-sw-version="4.0.26"] #notifyBadge,
+      html[data-sw-version="4.0.26"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4472,7 +4472,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.24 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.26 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4508,12 +4508,12 @@
 
   let recentBusy=false;
   async function renderRecent(){
-    const box=$('dashRecent'); if(!box || recentBusy) return;
+    const box=$('dashRecentLegacy'); if(!box || recentBusy) return;
     recentBusy=true;
     const oldHeight=box.offsetHeight || 370;
     box.style.minHeight = oldHeight ? Math.max(oldHeight,370)+'px' : '370px';
     try{
-      const limit=Number($('heightRecentLimit')?.value||10);
+      const limit=Number($('heightRecentLimitLegacy')?.value||10);
       const data=await loadHeight();
       const idMap=new Map(data.equipment.map(e=>[String(e.id),e]));
       const serMap=new Map(data.equipment.map(e=>[norm(e.serial),e]));
@@ -4524,7 +4524,7 @@
     finally{ recentBusy=false; requestAnimationFrame(()=>{box.style.minHeight='';}); }
   }
   function installRecent(){
-    const sel=$('heightRecentLimit');
+    const sel=$('heightRecentLimitLegacy');
     if(sel){ if(!sel.value) sel.value='10'; if(!sel.dataset.sw424){ sel.dataset.sw424='1'; sel.addEventListener('change',e=>{ e.stopImmediatePropagation(); renderRecent(); }, true); } }
     renderRecent();
   }
@@ -4635,219 +4635,17 @@
     const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); if(name==='equipment') renderEquipmentList(); if(name==='certificates') installCertificates(); if(name==='heightQualifications') installQualifications(); },250); }
     if(e.target?.closest?.('[data-ops-view],.ops-branch-card')) setTimeout(installAdmin,250);
   }, true);
-  document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimit'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
+  document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
 })();
 
-/* --------------------------------------------------------------------------
- * V4.0.25 targeted micro-patch: stable Recent Inspection History selector.
- *
- * Earlier releases accumulated several listeners for #heightRecentLimit. Those
- * listeners each re-rendered parts of the Height dashboard, causing the whole
- * page to twitch whenever the record-count dropdown changed. This patch uses a
- * new selector id and updates only a fixed-height table body from the already
- * loaded app data. No full dashboard render, tab refresh, database request or
- * window scroll is triggered by the dropdown.
- * -------------------------------------------------------------------------- */
+/* V4.0.26 - Recent Inspection History is owned by app.js.
+ * Legacy operations patches intentionally target *Legacy element ids and do not
+ * bind to #heightRecentLimit or #dashRecent.
+ */
 (() => {
-  'use strict';
-
-  const SELECT_ID = 'heightRecentLimitV425';
-  const LEGACY_SELECT_ID = 'heightRecentLimit';
-  const BODY_ID = 'sw425RecentInspectionBody';
-  const VIEWPORT_CLASS = 'sw425-recent-viewport';
-
-  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[ch]));
-
-  const normalise = value => String(value ?? '').trim().toLowerCase();
-
-  function appInspections() {
-    try {
-      return typeof inspections !== 'undefined' && Array.isArray(inspections)
-        ? inspections
-        : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function appEquipment() {
-    try {
-      return typeof equipment !== 'undefined' && Array.isArray(equipment)
-        ? equipment
-        : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function nzDate(value) {
-    if (!value) return '—';
-    const date = new Date(String(value).length === 10 ? `${value}T00:00:00` : value);
-    return Number.isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleDateString('en-NZ');
-  }
-
-  function resultClass(value) {
-    const text = normalise(value);
-    if (text.includes('pass') || text.includes('completed ok')) return 'sw425-result-ok';
-    if (text.includes('fail') || text.includes('remove') || text.includes('quarant')) return 'sw425-result-bad';
-    return 'sw425-result-warn';
-  }
-
-  function resultLabel(value) {
-    const text = String(value ?? '').trim();
-    if (!text) return '—';
-    if (normalise(text) === 'pass') return 'Completed OK';
-    return text;
-  }
-
-  function latestRows(limit) {
-    const eq = appEquipment();
-    const idMap = new Map(eq.map(item => [String(item.id ?? ''), item]));
-    const serialMap = new Map(eq.map(item => [normalise(item.serial), item]));
-
-    return appInspections().slice(0, limit).map(inspection => {
-      const item = idMap.get(String(inspection.equipment_id ?? ''))
-        || serialMap.get(normalise(inspection.serial))
-        || {};
-      return { inspection, item };
-    });
-  }
-
-  function addStyles() {
-    if (document.getElementById('sw425RecentStyles')) return;
-    const style = document.createElement('style');
-    style.id = 'sw425RecentStyles';
-    style.textContent = `
-      .${VIEWPORT_CLASS}{
-        height:370px;
-        overflow-y:auto;
-        overflow-x:auto;
-        border:1px solid #e2e8f0;
-        border-radius:14px;
-        background:#fff;
-        scrollbar-gutter:stable;
-        contain:layout paint;
-      }
-      .${VIEWPORT_CLASS} table{width:100%;border-collapse:collapse;table-layout:auto;margin:0}
-      .${VIEWPORT_CLASS} thead{position:sticky;top:0;z-index:1;background:#f8fafc}
-      .${VIEWPORT_CLASS} th,.${VIEWPORT_CLASS} td{padding:9px 10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:middle;white-space:nowrap}
-      .${VIEWPORT_CLASS} tbody tr{cursor:pointer}
-      .${VIEWPORT_CLASS} tbody tr:hover{background:#f8fafc}
-      .sw425-result{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:700;font-size:.84rem}
-      .sw425-result-ok{background:#dcfce7;color:#166534}
-      .sw425-result-bad{background:#fee2e2;color:#991b1b}
-      .sw425-result-warn{background:#fef3c7;color:#92400e}
-    `;
-    document.head.appendChild(style);
-  }
-
-  function replaceSelector() {
-    const dashboard = document.getElementById('dashboard');
-    if (!dashboard) return null;
-
-    const legacy = dashboard.querySelector(`#${LEGACY_SELECT_ID}`);
-    const current = dashboard.querySelector(`#${SELECT_ID}`);
-    const source = current || legacy;
-    if (!source) return null;
-
-    // Clone to remove every listener accumulated by prior patch releases.
-    const replacement = document.createElement('select');
-    replacement.id = SELECT_ID;
-    replacement.setAttribute('aria-label', 'Number of recent inspections to load');
-    const selectedValue = ['10', '20', '30', '50'].includes(String(source.value))
-      ? String(source.value)
-      : '10';
-    replacement.innerHTML = ['10', '20', '30', '50']
-      .map(value => `<option value="${value}"${value === selectedValue ? ' selected' : ''}>${value}</option>`)
-      .join('');
-    source.replaceWith(replacement);
-
-    // Remove any duplicate selector left by legacy dashboard patches.
-    dashboard.querySelectorAll(`#${LEGACY_SELECT_ID}, #${SELECT_ID}`).forEach(select => {
-      if (select !== replacement) select.remove();
-    });
-
-    replacement.addEventListener('change', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      renderRecentHistory(Number(replacement.value || 10));
-    }, true);
-
-    return replacement;
-  }
-
-  function ensureStableTable() {
-    const box = document.getElementById('dashRecent');
-    if (!box) return null;
-
-    let body = document.getElementById(BODY_ID);
-    if (body && box.contains(body)) return body;
-
-    box.innerHTML = `
-      <div class="${VIEWPORT_CLASS}">
-        <table>
-          <thead><tr><th>Date</th><th>Serial</th><th>Type</th><th>Result</th><th>Inspector</th></tr></thead>
-          <tbody id="${BODY_ID}"></tbody>
-        </table>
-      </div>`;
-    return document.getElementById(BODY_ID);
-  }
-
-  function renderRecentHistory(limit) {
-    const body = ensureStableTable();
-    if (!body) return;
-
-    const viewport = body.closest(`.${VIEWPORT_CLASS}`);
-    const rows = latestRows(limit);
-    body.innerHTML = rows.length
-      ? rows.map(({ inspection, item }) => `
-          <tr data-inspection-id="${escapeHtml(inspection.id ?? '')}">
-            <td>${nzDate(inspection.inspection_date || inspection.created_at)}</td>
-            <td><strong>${escapeHtml(item.serial || inspection.serial || '—')}</strong></td>
-            <td>${escapeHtml(item.type || inspection.equipment_type || '—')}</td>
-            <td><span class="sw425-result ${resultClass(inspection.result)}">${escapeHtml(resultLabel(inspection.result))}</span></td>
-            <td>${escapeHtml(inspection.inspector || '—')}</td>
-          </tr>`).join('')
-      : '<tr><td colspan="5">No inspections found.</td></tr>';
-
-    body.querySelectorAll('tr[data-inspection-id]').forEach(row => {
-      row.addEventListener('click', () => {
-        const id = row.dataset.inspectionId;
-        if (id && window.SWOperationsV4?.openInspectionRecord) {
-          window.SWOperationsV4.openInspectionRecord(id);
-        }
-      });
-    });
-
-    if (viewport) viewport.scrollTop = 0;
-  }
-
-  function installStableRecentHistory() {
-    addStyles();
-    const selector = replaceSelector();
-    if (!selector) return;
-    renderRecentHistory(Number(selector.value || 10));
-  }
-
-  // Run after the accumulated legacy initialisers have completed.
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(installStableRecentHistory, 2300), { once: true });
-  } else {
-    setTimeout(installStableRecentHistory, 2300);
-  }
-
-  // Re-apply only after returning to the Height dashboard. This does not run on
-  // the count-selector itself and therefore cannot cause the dropdown twitch.
-  document.addEventListener('click', event => {
-    const tab = event.target?.closest?.('[data-tab="dashboard"]');
-    if (tab) setTimeout(installStableRecentHistory, 700);
-  }, true);
-
-  window.SWOperationsV4 = Object.assign(window.SWOperationsV4 || {}, {
-    renderRecentInspectionHistoryV425: renderRecentHistory,
-    installRecentInspectionHistoryV425: installStableRecentHistory
+  const existing = window.SWOperationsV4 || {};
+  window.SWOperationsV4 = Object.assign(existing, {
+    recentInspectionRendererOwner: 'app.js',
+    version: '4.0.26'
   });
 })();

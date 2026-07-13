@@ -199,7 +199,7 @@ async function init(){
   if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(console.warn);}
   if(!window.SUPABASE_URL || window.SUPABASE_URL.includes("PASTE_")) configWarning.classList.remove("hidden");
   sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
-  fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); initDateParts(); bindCropCanvas();
+  fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); initDateParts(); bindCropCanvas(); bindRecentInspectionLimit();
   const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser){await ensureCurrentProfile(); await loadRoles(); await loadAppSettings(); await loadData(); await refreshAuditLogs();}
 }
 function fillTypes(){let opts=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=opts; inType.innerHTML=opts;}
@@ -282,13 +282,32 @@ async function loadData(){
 }
 function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory(); if(window.certMode) updateCertificateUI(); if(window.adminNotifyLead && !document.getElementById("admin")?.classList.contains("hidden")) renderAdmin();}
 function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="certificates") renderCertificatesHome();if(id==="admin") renderAdmin();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
+function recentInspectionLimit(){
+  const value=Number(document.getElementById("heightRecentLimit")?.value||10);
+  return [10,20,30,50].includes(value)?value:10;
+}
+function renderRecentInspectionHistory(){
+  const target=document.getElementById("dashRecent");
+  if(!target)return;
+  const limit=recentInspectionLimit();
+  const rows=inspections.slice(0,limit);
+  target.innerHTML=rows.map(i=>`<div class="lineItem" onclick="openItemBySerial('${escAttr(i.serial)}')"><b>${esc(i.serial)}</b><span class="hideMobile">${esc(i.equipment_type)}</span><span>${pill(i.result)}</span></div>`).join("") || `<p class="muted">No inspections yet.</p>`;
+}
+function bindRecentInspectionLimit(){
+  const selector=document.getElementById("heightRecentLimit");
+  if(!selector||selector.dataset.appRecentBound==="1")return;
+  selector.dataset.appRecentBound="1";
+  selector.value=["10","20","30","50"].includes(selector.value)?selector.value:"10";
+  selector.addEventListener("change",renderRecentInspectionHistory);
+}
 function renderDashboard(){
   const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
   dashTotal.textContent=equipment.length; dashInService.textContent=active.filter(e=>e.status==="In Service").length; dashDue.textContent=due.length; dashFailed.textContent=failed.length; dashArchived.textContent=archived.length;
   dashNextDue.innerHTML=due.slice(0,7).map(e=>`<div class="lineItem" onclick="openItem('${e.id}')"><b>${esc(e.serial)}</b><span class="hideMobile">${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No active equipment due.</p>`;
-  dashRecent.innerHTML=inspections.slice(0,7).map(i=>`<div class="lineItem" onclick="openItemBySerial('${escAttr(i.serial)}')"><b>${esc(i.serial)}</b><span class="hideMobile">${esc(i.equipment_type)}</span><span>${pill(i.result)}</span></div>`).join("") || `<p class="muted">No inspections yet.</p>`;
+  bindRecentInspectionLimit();
+  renderRecentInspectionHistory();
   let counts={};EQUIPMENT_TYPES.forEach(t=>counts[t]=0);active.forEach(e=>counts[e.type||"Other"]=(counts[e.type||"Other"]||0)+1);
-  dashTypes.innerHTML=EQUIPMENT_TYPES.map((t,i)=>`<div class="typeTile type-${i%5}" onclick="setRegisterFilter('type','${escAttr(t)}')"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
+  if(window.dashTypes) dashTypes.innerHTML=EQUIPMENT_TYPES.map((t,i)=>`<div class="typeTile type-${i%5}" onclick="setRegisterFilter('type','${escAttr(t)}')"><span>${esc(t)}</span><b>${counts[t]||0}</b></div>`).join("");
 }
 function escAttr(s){return String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");}
 function setRegisterFilter(mode,value){activeFilter={mode,value};showTab("equipment");renderEquipment();}
