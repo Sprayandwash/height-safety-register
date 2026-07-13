@@ -1,0 +1,6 @@
+V4.0.28 - Certificate Layout Cleanup
+
+- Removed the redundant large outer white panel from the Certificates tab.
+- Kept Search Filters, equipment selection list and Photo Options as separate sections.
+- Matched the flatter visual structure used by the Equipment register.
+- No functional, database or certificate-generation changes.

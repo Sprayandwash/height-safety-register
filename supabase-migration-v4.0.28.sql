@@ -1,0 +1,1 @@
+-- V4.0.28 requires no Supabase database changes.

@@ -1,0 +1,9 @@
+V4.0.28 TEST PLAN
+
+1. Open Height Equipment > Certificates.
+2. Confirm there is no large white container surrounding all certificate controls.
+3. Confirm Search Filters remains visible and functional.
+4. Confirm the selectable equipment list remains visible and functional.
+5. Confirm Photo Options remains visible and functional.
+6. Confirm separate and combined certificate buttons still work.
+7. Confirm Equipment and Dashboard tabs are unchanged.
