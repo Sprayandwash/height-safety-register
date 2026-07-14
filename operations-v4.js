@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.30
+/* Spray & Wash Operations App V4.0.31
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -202,6 +202,11 @@
       .ops-permission-check small{display:block;color:#64748b;font-size:.76rem;font-weight:600;margin-top:.12rem}
       .ops-user-row{border:1px solid #dbe3ec;border-radius:1rem;background:#fff;padding:.9rem;margin:.75rem 0}
       .ops-user-row-head{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;align-items:flex-start}
+      .ops-admin-users>h3{margin:0 0 .8rem}
+      .ops-admin-users details{background:#fff;border:1px solid #dbe7ee;border-radius:14px;margin:0 0 14px;overflow:hidden}
+      .ops-admin-users summary{cursor:pointer;font-weight:900;padding:14px 16px;background:#f8fafc}
+      .ops-admin-users-body{padding:14px 16px}
+      .ops-admin-users-body>h3:first-child{margin-top:0}
       .ops-home-row { display:flex; justify-content:flex-start; margin-bottom:.45rem; }
       .ops-home-btn { min-width:150px; border-radius:.85rem; background:#0f766e !important; color:white !important; box-shadow:0 6px 16px rgba(15,23,42,.08); }
       .ops-dashboard-stat { color:white; min-height:118px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; border:0; box-shadow:0 14px 35px rgba(15,23,42,.14); cursor:pointer; }
@@ -2273,9 +2278,9 @@
   function usersHtml(){
     if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Users & Permissions</h3><p class="ops-subtle">Use one standard role list across the whole app. Permission presets have been removed.</p></div></div>
-      <details class="ops-card" style="box-shadow:none;margin-top:1rem"><summary class="ops-btn primary" style="display:inline-flex;align-items:center;cursor:pointer">Add / pre-load user</summary>
-        <form id="opsPreloadUserForm" class="ops-form" style="margin-top:1rem">
+    return `<div class="ops-admin-users"><h3>Users & Permissions</h3>
+      <details><summary>Add User</summary><div class="ops-admin-users-body">
+        <form id="opsPreloadUserForm" class="ops-form">
           <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
           <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
           <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
@@ -2284,9 +2289,11 @@
           <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
           <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save pre-loaded user</button></div>
         </form>
-      </details>
-      <h3>Current signed-in users</h3><p class="ops-subtle">Edit roles directly here. These are the live permissions used by the app.</p>${actualUsersHtml()}
-      <h3>Pre-loaded users</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
+      </div></details>
+      <details><summary>Current Users</summary><div class="ops-admin-users-body">
+        <h3>Current signed-in users</h3><p class="ops-subtle">Edit roles directly here. These are the live permissions used by the app.</p>${actualUsersHtml()}
+        <h3>Pre-loaded users</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
+      </div></details>
     </div>`;
   }
 
@@ -2678,7 +2685,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2975,7 +2982,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
@@ -2983,8 +2990,6 @@
     const old = api();
     window.SWOperationsV4 = Object.assign(old, {
       generateCombinedCertificates,
-      generateInspectorDetails,
-      generateQualificationCertificate: generateInspectorDetails,
       renderCertificateFilterListV417: renderCertificateFilterList,
       renderEquipmentFilteredListV417: renderEquipmentFilteredList,
       renderRecentHistoryV417: renderRecentHistory
@@ -2998,7 +3003,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3249,7 +3254,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3261,18 +3266,17 @@
     /* equipment register is owned by app.js in V4.0.30 */
     if($('inspect')) installInspectionPicker();
     if($('certificates')) installCertificates();
-    cleanQualificationsTab();
-    const old=api(); window.SWOperationsV4=Object.assign(old,{generateQualificationCertificate:generateInspectorDetails,generateInspectorDetails,renderEquipmentFilteredListV418:renderEquipmentFilterList,renderCertificateFilterListV418:renderCertificateFilterList,generateCombinedCertificates:generateCombined});
+    const old=api(); window.SWOperationsV4=Object.assign(old,{renderEquipmentFilteredListV418:renderEquipmentFilterList,renderCertificateFilterListV418:renderCertificateFilterList,generateCombinedCertificates:generateCombined});
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
-  document.addEventListener('click', e=>{ /* equipment tab handled by app.js */ if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
+  document.addEventListener('click', e=>{ /* equipment tab handled by app.js */ if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); });
   // V4.0.30: disabled V4.0.30 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3634,9 +3638,8 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     cleanCertificatesV419();
-    renderSavedQualificationsV419();
     installAccountBehaviourV419();
   }
   function install(){
@@ -3645,18 +3648,12 @@
     installRecentHistoryV419();
     /* equipment register is owned by app.js in V4.0.30 */
     if($('certificates')) cleanCertificatesV419();
-    if($('heightQualifications')) renderSavedQualificationsV419();
     const old = api();
     window.SWOperationsV4 = Object.assign(old, {
       renderRecentHistoryV419,
       renderEquipmentFilterV419,
       renderCertificateFilterV419,
-      generateCombinedCertificates: generateCombinedV419,
-      generateQualificationCertificate: printQualificationDetailsV419,
-      generateInspectorDetails: printQualificationDetailsV419,
-      printQualificationDetailsV419,
-      openQualificationFile: openQualificationFileV419,
-      openQualificationFileV419
+      generateCombinedCertificates: generateCombinedV419
     });
     window.generateCertificates = generateSeparateV419;
     window.buildCertificatePacket = buildSeparateCertificates;
@@ -3666,7 +3663,6 @@
   document.addEventListener('click', e=>{
     /* equipment tab handled by app.js */
     if(e.target.closest('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(cleanCertificatesV419,500);
-    if(e.target.closest('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(renderSavedQualificationsV419,500);
   }, true);
   document.addEventListener('change', e=>{ if(e.target?.id === 'heightRecentLimitLegacy') setTimeout(renderRecentHistoryV419,20); }, true);
   document.addEventListener('click', e=>{
@@ -3679,7 +3675,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3813,29 +3809,19 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
     window.SWOperationsV4 = Object.assign(apiObj, {
       generateSeparateCertificates: generateSeparateV420,
-      generateCombinedCertificates: generateCombinedV420,
-      printQualificationDetailsV420,
-      printQualificationDetailsV419: printQualificationDetailsV420,
-      generateQualificationCertificate: printQualificationDetailsV420,
-      generateInspectorDetails: printQualificationDetailsV420,
-      openQualificationFile: openQualificationFileV420,
-      openQualificationFileV419: openQualificationFileV420
+      generateCombinedCertificates: generateCombinedV420
     });
     window.generateCertificates = generateSeparateV420;
     window.buildCertificatePacket = buildSeparateCertificatesV420;
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindStableHandlers, 1400)); else setTimeout(bindStableHandlers, 1400);
   document.addEventListener('click', e => {
-    const printBtn = e.target.closest('[data-sw419-print-qual]');
-    if(printBtn){ e.preventDefault(); e.stopImmediatePropagation(); printQualificationDetailsV420(printBtn.dataset.sw419PrintQual); return; }
-    const openBtn = e.target.closest('[data-sw419-open-qual]');
-    if(openBtn){ e.preventDefault(); e.stopImmediatePropagation(); openQualificationFileV420(openBtn.dataset.sw419OpenQual); return; }
     if(e.target.closest('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(bindStableHandlers, 500);
   }, true);
   document.addEventListener('change', e => { if(e.target?.closest?.('#certItemList')) setTimeout(bindStableHandlers, 50); }, true);
@@ -3843,7 +3829,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4231,14 +4217,14 @@
   }
 
   function refreshAll(){
-    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ addDetailCertificateButton(); installCertificateCleanup(); installReportsPatch();
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
-    window.SWOperationsV4 = Object.assign(apiObj, { printQualificationDetailsV420:printQualDetails, printQualificationDetailsV419:printQualDetails, openQualificationFile:openQualFile, openQualificationFileV419:openQualFile, generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
+    window.SWOperationsV4 = Object.assign(apiObj, { generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
     window.buildCertificatePacket=buildSeparateCertificates421; window.generateCertificates=generateSeparate421;
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
-  document.addEventListener('click', e=>{ setTimeout(refreshAll,250); const pq=e.target.closest('[data-sw419-print-qual]'); if(pq){e.preventDefault();e.stopImmediatePropagation();printQualDetails(pq.dataset.sw419PrintQual);} const oq=e.target.closest('[data-sw419-open-qual]'); if(oq){e.preventDefault();e.stopImmediatePropagation();openQualFile(oq.dataset.sw419OpenQual);} }, true);
+  document.addEventListener('click', ()=>{ setTimeout(refreshAll,250); }, true);
   document.addEventListener('change', e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecentHistory421,30); if(e.target?.closest?.('#certItemList')) setTimeout(installCertificateCleanup,40); }, true);
   ['dashboard','equipment','detail','certificates','export'].forEach(id => {
     const btn = document.querySelector(`[data-tab="${id}"]`);
@@ -4250,7 +4236,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4391,7 +4377,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} /* equipment tab handled by app.js */ if(name==='detail') addDetailButtons(); if(name==='certificates') installCertUi(); if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4399,11 +4385,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function removeDuplicateStartInspection(){
@@ -4436,7 +4422,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4456,9 +4442,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.30"] .notifyBtn,
-      html[data-sw-version="4.0.30"] #notifyBadge,
-      html[data-sw-version="4.0.30"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.31"] .notifyBtn,
+      html[data-sw-version="4.0.31"] #notifyBadge,
+      html[data-sw-version="4.0.31"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4469,7 +4455,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4590,7 +4576,7 @@
     const rows=await loadQualifications().catch(e=>{console.warn(e); return [];});
     const oldForm=$('heightQualForm');
     const addForm = oldForm ? oldForm.outerHTML : `<form id="heightQualForm" class="ops-form"><label>Inspector name *<input id="heightQualName" required></label><label>Email<input id="heightQualEmail" type="email"></label><label>Qualification type *<input id="heightQualType" required></label><label>Provider<input id="heightQualProvider"></label><label>Reference / certificate number<input id="heightQualRef"></label><label>Issue date<input id="heightQualIssue" type="date"></label><label>Expiry date<input id="heightQualExpiry" type="date"></label><label>PDF / scan / photo<input id="heightQualFile" type="file" accept="application/pdf,image/*"></label><label class="ops-span-2">Notes<textarea id="heightQualNotes"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save qualification</button></div></form>`;
-    pane.innerHTML=`<div class="sw424-qual"><details open><summary>Saved Inspectors</summary><div class="sw424-qual-body">${rows.length?`<div class="ops-table-wrap"><table class="ops-table"><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>Actions</th><th>Notes</th></tr>${rows.map(r=>`<tr><td>${esc(r.inspector_name||'')}<br><span class="ops-subtle">${esc(r.email||'')}</span></td><td>${esc(r.qualification_type||'—')}</td><td>${esc(r.provider||'—')}</td><td>${esc(r.reference_number||'—')}</td><td>${nzDate(r.expiry_date)}</td><td><div class="row">${r.storage_path?`<button type="button" class="ops-btn ghost" data-sw424-open-qual="${esc(r.id)}">Open File</button>`:''}<button type="button" class="ops-btn primary" data-sw424-print-qual="${esc(r.id)}">Print Qualification Details</button></div></td><td>${esc(r.notes||'—')}</td></tr>`).join('')}</table></div>`:'<p class="muted">No inspectors saved yet.</p>'}</div></details><details><summary>Add Inspector</summary><div class="sw424-qual-body">${addForm}</div></details></div>`;
+    pane.innerHTML=`<div class="sw424-qual"><details><summary>Saved Inspectors</summary><div class="sw424-qual-body">${rows.length?`<div class="ops-table-wrap"><table class="ops-table"><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>Actions</th><th>Notes</th></tr>${rows.map(r=>`<tr><td>${esc(r.inspector_name||'')}<br><span class="ops-subtle">${esc(r.email||'')}</span></td><td>${esc(r.qualification_type||'—')}</td><td>${esc(r.provider||'—')}</td><td>${esc(r.reference_number||'—')}</td><td>${nzDate(r.expiry_date)}</td><td><div class="row">${r.storage_path?`<button type="button" class="ops-btn ghost" data-sw424-open-qual="${esc(r.id)}">Open File</button>`:''}<button type="button" class="ops-btn primary" data-sw424-print-qual="${esc(r.id)}">Print Qualification Details</button></div></td><td>${esc(r.notes||'—')}</td></tr>`).join('')}</table></div>`:'<p class="muted">No inspectors saved yet.</p>'}</div></details><details><summary>Add Inspector</summary><div class="sw424-qual-body">${addForm}</div></details></div>`;
     pane.querySelectorAll('[data-sw424-open-qual]').forEach(b=>b.addEventListener('click',()=>openQualFile(b.dataset.sw424OpenQual)));
     pane.querySelectorAll('[data-sw424-print-qual]').forEach(b=>b.addEventListener('click',()=>printQual(b.dataset.sw424PrintQual)));
     const form=$('heightQualForm'); if(form && !form.dataset.sw424){ form.dataset.sw424='1'; if(window.SWOperationsV4?.saveHeightQualification) form.addEventListener('submit', window.SWOperationsV4.saveHeightQualification); }
@@ -4619,7 +4605,6 @@
     if($('dashboard')) installRecent();
     /* equipment register is owned by app.js */
     if($('certificates') && !$('certificates').classList.contains('hidden')) installCertificates();
-    if($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) installQualifications();
     const old=window.SWOperationsV4 || {};
     window.SWOperationsV4 = Object.assign(old,{ renderRecentHistoryV424:renderRecent, renderEquipmentRegisterV424:renderEquipmentList, installCertificatesV424:installCertificates, openQualificationFileV424:openQualFile, printQualificationDetailsV424:printQual, downloadTableCsvV424:downloadCsv, generateSeparateCertificates:generateSeparate, generateCombinedCertificates:generateCombined });
     window.generateCertificates = generateSeparate;
@@ -4628,7 +4613,7 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,1200)); else setTimeout(install,1200);
   document.addEventListener('click',e=>{
-    const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='certificates') installCertificates(); if(name==='heightQualifications') installQualifications(); },250); }
+    const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='certificates') installCertificates(); },250); }
     // Admin renders directly in its final layout; no delayed DOM patch is required.
   }, true);
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
@@ -4642,14 +4627,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.30'
+    version: '4.0.31'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.30';
+  const VERSION='4.0.31';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -4670,7 +4655,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -4684,7 +4669,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.30';
+  const VERSION='4.0.31';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -4717,7 +4702,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.30';
+  const VERSION = '4.0.31';
   const BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const api = () => window.SWOperationsV4 || {};
@@ -4849,7 +4834,7 @@
     if (!pane) return;
     const active = rows.filter(row => row.active !== false);
     pane.innerHTML = `<div class="sw429-qualifications">
-      <details open>
+      <details>
         <summary>Saved Inspectors</summary>
         <div class="sw429-qual-body">${active.length ? `<div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>File status</th><th>Actions</th></tr></thead><tbody>${active.map(row => `<tr>
           <td>${esc(titleCase(row.inspector_name))}<br><span class="ops-subtle">${esc(row.email || '')}</span></td>
@@ -4881,6 +4866,16 @@
         const heading = node.querySelector(':scope > h2,:scope > h3,:scope > summary');
         if (heading && /^Add Inspector$/i.test((heading.textContent || '').trim())) node.remove();
       });
+    }
+  }
+
+  async function refreshAndRenderQualifications() {
+    renderQualifications(state().qualifications || []);
+    try {
+      const rows = await refreshQualifications();
+      renderQualifications(rows);
+    } catch (error) {
+      console.warn('Could not refresh qualifications:', error);
     }
   }
 
@@ -5007,11 +5002,9 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.31 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
-    if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) {
-      refreshQualifications().then(renderQualifications).catch(error => console.warn('Could not refresh qualifications:', error));
-    }
+    if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
     window.SWOperationsV4 = Object.assign(api(), {
       version: VERSION,
@@ -5019,7 +5012,8 @@
       openQualificationFile,
       replaceQualificationFile,
       printQualificationDetailsV429: printQualificationDetails,
-      generateQualificationCertificate: printQualificationDetails
+      generateQualificationCertificate: printQualificationDetails,
+      renderHeightQualificationsV431: refreshAndRenderQualifications
     });
   }
 
@@ -5038,13 +5032,13 @@
     const print = event.target.closest('[data-sw429-print]');
     if (print) { event.preventDefault(); event.stopImmediatePropagation(); printQualificationDetails(print.dataset.sw429Print); return; }
     if (event.target.closest('[data-tab="heightQualifications"],#heightQualTabButton')) {
-      setTimeout(() => refreshQualifications().then(renderQualifications).catch(console.warn), 350);
+      refreshAndRenderQualifications();
     }
     if (event.target.closest('[data-tab="certificates"],#certificateTabButton')) {
-      setTimeout(removeDuplicateInspectorPanels, 350);
+      removeDuplicateInspectorPanels();
     }
   }, true);
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 1600), { once: true });
-  else setTimeout(install, 1600);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+  else install();
 })();
