@@ -1,0 +1,8 @@
+V4.0.30 - Admin Layout Stability
+
+- Removed the duplicate Home button from Admin.
+- Admin now opens directly to Users & Permissions.
+- Reduced Admin navigation to Users & Permissions and Backup.
+- Removed delayed Admin cleanup and redirect behaviour.
+- Removed smooth scroll animation when opening modules to prevent visible repositioning.
+- No Supabase migration required.

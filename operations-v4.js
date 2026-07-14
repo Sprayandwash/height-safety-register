@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.29
+/* Spray & Wash Operations App V4.0.30
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -367,7 +367,7 @@
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     byId('heightQualTabButton')?.classList.add('active');
     byId('heightQualForm')?.addEventListener('submit', saveHeightQualification);
-    setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
+    window.scrollTo({top:0, left:0, behavior:'auto'});
   }
 
   function enhanceCertificateSelector(){
@@ -534,7 +534,7 @@
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     renderModuleHome();
     refreshTopUserSummary();
-    setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
+    window.scrollTo({top:0, left:0, behavior:'auto'});
   }
 
   function openHeightModule(){
@@ -568,7 +568,8 @@
     if(!isAdmin()) return alert('Admin access is required.');
     state.currentModule = 'admin';
     setTopTabsMode('none');
-    showOperations(view || 'admin-dashboard');
+    const target = view === 'admin-settings' ? 'admin-settings' : 'admin-users';
+    showOperations(target);
   }
 
   function openLegacyAdminTools(){
@@ -620,7 +621,7 @@
     byId('operations')?.classList.remove('hidden');
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     render();
-    setTimeout(() => window.scrollTo({top:0, behavior:'smooth'}), 10);
+    window.scrollTo({top:0, left:0, behavior:'auto'});
   }
 
   function updateExternalTabVisibility(){ /* V4.0.3 uses the module dashboard instead of top-level Operations tabs. */ }
@@ -739,10 +740,8 @@
         ${navButton('schedules','Preventive Maintenance')}
         ${navButton('guides','Guides')}` : '';
     const adminNav = isAdminModule ? `
-        ${navButton('admin-dashboard','Dashboard')}
         ${navButton('admin-users','Users & Permissions')}
-        ${navButton('admin-settings','Settings, Audit & Backups')}
-        ${navButton('admin-notifications','Notifications & Action Items')}` : '';
+        ${navButton('admin-settings','Backup')}` : '';
     const staffNav = isVehicle ? `${navButton('vehicle-checks','Vehicle Inspection Checklist')}` : (isAdminModule ? adminNav : managementNav);
     const title = isVehicle ? 'Vehicle Checks' : isAdminModule ? 'Admin' : 'Ops Management';
     const note = isVehicle ? 'Staff vehicle inspection checklist' : isAdminModule ? 'Users, permissions, settings, audit controls and app-wide action items' : 'Assets, tasks, schedules and guides';
@@ -765,10 +764,8 @@
     if(state.currentView === 'vehicle-checks') return periodicVehicleChecksHtml();
     if(isAdminView(state.currentView)){
       if(!isAdmin()) return `<div class="ops-card"><h3>Admin access required</h3><p>This module is only available to Admin users.</p></div>`;
-      if(state.currentView === 'admin-users') return usersHtml();
       if(state.currentView === 'admin-settings') return adminSettingsHtml();
-      if(state.currentView === 'admin-notifications') return adminNotificationsHtml();
-      return adminDashboardHtml();
+      return usersHtml();
     }
     if(isManagementView(state.currentView) && !canUseManagement()) return `<div class="ops-card"><h3>Ops Management access required</h3><p>Use Vehicle Checks for staff vehicle checks. Management views require Admin, Equipment Manager, Office / Reports, or Viewer access.</p></div>`;
     if(state.currentView === 'assets') return assetsHtml();
@@ -860,7 +857,7 @@
       state.scheduleQuickFilter = 'due';
     }
     render();
-    setTimeout(()=>window.scrollTo({top:0,behavior:'smooth'}), 10);
+    window.scrollTo({top:0,left:0,behavior:'auto'});
   }
 
   function vehiclesHtml(){
@@ -1253,7 +1250,7 @@
     </div>`;
   }
 
-  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.29. */ }
+  function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.30. */ }
 
   async function saveActualUserRoles(userId){
     if(!isAdmin()) return alert('Only Admin users can manage permissions.');
@@ -1887,7 +1884,7 @@
 
 
 
-  // V4.0.29 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
+  // V4.0.30 - certificate filters, asset photos, inspection read-only records and preventive maintenance redesign.
 
   function certSetFilterFromDom(){
     state.certFilterType = byId('certFilterType')?.value || '';
@@ -2256,7 +2253,7 @@
   }
 
 
-  // V4.0.29 - certificate filter fix, admin tab cleanup, service-item workflow.
+  // V4.0.30 - certificate filter fix, admin tab cleanup, service-item workflow.
   function certSelectedIds(){
     return Array.from(state.certSelectedIds || []);
   }
@@ -2270,13 +2267,13 @@
   }
 
   function adminSettingsHtml(){
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Settings, audit log and backups</h3><p class="ops-subtle">These controls open the existing admin tools and are visible only to Admin users.</p></div><button class="ops-btn ghost" type="button" data-ops-view="admin-dashboard">← Back to Admin</button></div><div class="ops-actions"><button class="ops-btn primary" data-ops-action="legacyAdminTools">Open settings, audit log and backup tools</button></div></div>`;
+    return `<div class="ops-card"><h3>Backup</h3><p class="ops-subtle">Use these backup tools before major app or database updates.</p><div class="ops-actions"><button class="ops-btn primary" onclick="exportJSONBackup&&exportJSONBackup()">Full JSON backup</button><button class="ops-btn" onclick="SWOperationsV4.downloadTableCsvV424('equipment','equipment-register-backup.csv')">Download equipment register</button><button class="ops-btn" onclick="SWOperationsV4.downloadTableCsvV424('inspections','inspection-register-backup.csv')">Download inspection register</button><button class="ops-btn" onclick="exportAuditCSV&&exportAuditCSV()">Export audit CSV</button><button class="ops-btn" onclick="refreshAuditLogs&&refreshAuditLogs()">Refresh audit log</button><button class="ops-btn" data-ops-action="legacyAdminTools">Open Admin controls</button></div><div class="dangerBox"><b>Photo buckets</b><p>These CSV backups do not contain files from the equipment-photos or inspection-photos storage buckets.</p></div></div>`;
   }
 
   function usersHtml(){
     if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Users & Permissions</h3><p class="ops-subtle">Use one standard role list across the whole app. Permission presets have been removed.</p></div><button class="ops-btn ghost" type="button" data-ops-view="admin-dashboard">← Back to Admin</button></div>
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Users & Permissions</h3><p class="ops-subtle">Use one standard role list across the whole app. Permission presets have been removed.</p></div></div>
       <details class="ops-card" style="box-shadow:none;margin-top:1rem"><summary class="ops-btn primary" style="display:inline-flex;align-items:center;cursor:pointer">Add / pre-load user</summary>
         <form id="opsPreloadUserForm" class="ops-form" style="margin-top:1rem">
           <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
@@ -2298,7 +2295,7 @@
     const duePreventive = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
     const vehicleDue = state.vehicles.filter(v => v.status === 'Active').filter(v => { const d = daysUntil(dueDateFor('vehicle',v)); return d === null || d <= 0; });
     const washDue = state.washEquipment.filter(w => ['Active','Quarantined'].includes(w.status)).filter(w => { const d = daysUntil(dueDateFor('washing_equipment',w)); return d === null || d <= 0; });
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Notifications & Action Items</h3><p class="ops-subtle">This audit view confirms the Operations module is generating action items. The legacy bell/notification centre still covers the Height Equipment module.</p></div><button class="ops-btn ghost" type="button" data-ops-view="admin-dashboard">← Back to Admin</button></div>
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Notifications & Action Items</h3><p class="ops-subtle">This audit view confirms the Operations module is generating action items. The legacy bell/notification centre still covers the Height Equipment module.</p></div></div>
       <div class="ops-grid four" style="margin-top:1rem"><div class="ops-card ops-dashboard-stat ops-stat-total" data-ops-view="tasks"><span>Open tasks</span><div class="ops-stat">${openOpsTasks.length}</div><small>Operations task list</small></div><div class="ops-card ops-dashboard-stat ops-stat-amber" data-ops-view="schedules"><span>Preventive due</span><div class="ops-stat">${duePreventive.length}</div><small>Date-based service items</small></div><div class="ops-card ops-dashboard-stat ops-stat-green" data-ops-view="management-dashboard"><span>Vehicle checks due</span><div class="ops-stat">${vehicleDue.length}</div><small>Periodic vehicle checks</small></div><div class="ops-card ops-dashboard-stat ops-stat-blue" data-ops-view="assets"><span>Washing gear due</span><div class="ops-stat">${washDue.length}</div><small>Inspection status</small></div></div>
       <h3>Action item source check</h3><div class="ops-table-wrap"><table class="ops-table"><tr><th>Module</th><th>Action items currently surfaced</th><th>Where they appear</th></tr><tr><td>Height Equipment</td><td>Due/overdue, failed/quarantined, missing photos and inspection warnings</td><td>Height dashboard / notification centre</td></tr><tr><td>Vehicle Checks</td><td>Checklist items marked Issue to report create operations tasks</td><td>Ops Management → Tasks</td></tr><tr><td>Ops Management</td><td>Manual tasks, waiting on parts, preventive service records</td><td>Ops Management → Tasks / Preventive Maintenance</td></tr><tr><td>Admin</td><td>User/admin actions are not currently converted into tasks</td><td>Audit log / Admin controls</td></tr></table></div></div>`;
   }
@@ -2358,7 +2355,7 @@
 
 
 
-  // V4.0.29 - Height dashboard cleanup and certificate flow simplification.
+  // V4.0.30 - Height dashboard cleanup and certificate flow simplification.
   function postHeightEnhancementsV415(activeId){
     try{
       hideHeightActionTabsV415();
@@ -2367,7 +2364,7 @@
       if(id === 'dashboard') enhanceHeightDashboardV415();
       if(id === 'equipment') enhanceHeightEquipmentTabV415();
       if(id === 'certificates') enhanceCertificatesV415();
-    }catch(err){ console.warn('V4.0.29 UI enhancement skipped:', err); }
+    }catch(err){ console.warn('V4.0.30 UI enhancement skipped:', err); }
   }
 
   function hideHeightActionTabsV415(){
@@ -2465,7 +2462,7 @@
   function enhanceCertificatesV415(){
     const certs = byId('certificates');
     if(!certs) return;
-    // Hide old batch controls; V4.0.29 certificate generation is filter/search/list based.
+    // Hide old batch controls; V4.0.30 certificate generation is filter/search/list based.
     const mode = byId('certMode');
     if(mode){ mode.value = 'selected_items'; const modeLabel = mode.closest('label') || mode.previousElementSibling; if(modeLabel) modeLabel.style.display = 'none'; mode.style.display='none'; }
     ['certTypePanel','certDatePanel','certResultPanel'].forEach(id => { const el = byId(id); if(el) el.style.display = 'none'; });
@@ -2679,9 +2676,9 @@
   else boot();
 })();
 
-/* V4.0.29 corrective UI and certificate patch */
+/* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2978,11 +2975,11 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installCertificateUi();
     installRecentHistory();
-    /* equipment register is owned by app.js in V4.0.29 */
+    /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
     window.SWOperationsV4 = Object.assign(old, {
       generateCombinedCertificates,
@@ -2996,12 +2993,12 @@
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(install, 700)); else setTimeout(install, 700);
   document.addEventListener('click', e => { if(e.target && e.target.closest && e.target.closest('#certificateTabButton,#certificates,[data-tab="certificates"]')) setTimeout(installCertificateUi, 500); /* equipment tab handled by app.js */ });
-  // V4.0.29: disabled V4.0.29 repeating DOM patch timer to prevent version/layout flicker.
+  // V4.0.30: disabled V4.0.30 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.29 corrective UI/certificate/equipment/inspection patch */
+/* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3252,7 +3249,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3261,7 +3258,7 @@
 
   function install(){
     injectCss(); cleanStaticUi(); installRecentHistoryFix();
-    /* equipment register is owned by app.js in V4.0.29 */
+    /* equipment register is owned by app.js in V4.0.30 */
     if($('inspect')) installInspectionPicker();
     if($('certificates')) installCertificates();
     cleanQualificationsTab();
@@ -3269,13 +3266,13 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,800)); else setTimeout(install,800);
   document.addEventListener('click', e=>{ /* equipment tab handled by app.js */ if(e.target?.closest?.('[data-tab="inspect"],#inspect')) setTimeout(installInspectionPicker,500); if(e.target?.closest?.('[data-tab="certificates"],#certificateTabButton,#certificates')) setTimeout(installCertificates,500); if(e.target?.closest?.('#heightQualTabButton,[data-tab="heightQualifications"]')) setTimeout(cleanQualificationsTab,500); });
-  // V4.0.29: disabled V4.0.29 repeating DOM patch timer to prevent version/layout flicker.
+  // V4.0.30: disabled V4.0.30 repeating DOM patch timer to prevent version/layout flicker.
 })();
 
-/* V4.0.29 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
+/* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3637,7 +3634,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     cleanCertificatesV419();
     renderSavedQualificationsV419();
     installAccountBehaviourV419();
@@ -3646,7 +3643,7 @@
     injectV419Css();
     installAccountBehaviourV419();
     installRecentHistoryV419();
-    /* equipment register is owned by app.js in V4.0.29 */
+    /* equipment register is owned by app.js in V4.0.30 */
     if($('certificates')) cleanCertificatesV419();
     if($('heightQualifications')) renderSavedQualificationsV419();
     const old = api();
@@ -3676,13 +3673,13 @@
     const row = e.target.closest('#equipmentList [data-sw418-action="open"], #equipmentList [data-sw419-equipment-id]');
     if(row){ e.preventDefault(); e.stopImmediatePropagation(); openEquipmentPreserveScroll(row.dataset.equipmentId || row.dataset.sw419EquipmentId); }
   }, true);
-  // V4.0.29: removed repeating cleanup timer from V4.0.29 because it could fight the main app renderer and cause flickering.
+  // V4.0.30: removed repeating cleanup timer from V4.0.30 because it could fight the main app renderer and cause flickering.
 })();
 
-/* V4.0.29 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
+/* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3816,7 +3813,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -3844,9 +3841,9 @@
   document.addEventListener('change', e => { if(e.target?.closest?.('#certItemList')) setTimeout(bindStableHandlers, 50); }, true);
 })();
 
-/* V4.0.29 - dashboard, equipment, certificate, qualification and reports cleanup */
+/* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4234,8 +4231,8 @@
   }
 
   function refreshAll(){
-    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch(); installAdminHome();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ addDetailCertificateButton(); installCertificateCleanup(); patchQualificationsUi(); installReportsPatch();
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
     window.SWOperationsV4 = Object.assign(apiObj, { printQualificationDetailsV420:printQualDetails, printQualificationDetailsV419:printQualDetails, openQualificationFile:openQualFile, openQualificationFileV419:openQualFile, generateSeparateCertificates:generateSeparate421, generateCombinedCertificates:generateCombined421 });
     window.buildCertificatePacket=buildSeparateCertificates421; window.generateCertificates=generateSeparate421;
@@ -4250,10 +4247,10 @@
   installArchiveDisposeGuard();
 })();
 
-/* V4.0.29 - stabilisation and completion patch */
+/* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4394,19 +4391,19 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ if($('certificates')) installCertUi(); addDetailButtons(); installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList,printCurrentCertificateV422:printCurrentCertificate,generateSeparateCertificates:genSeparate,generateCombinedCertificates:genCombined}); window.generateCertificates=genSeparate; /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} /* equipment tab handled by app.js */ if(name==='detail') addDetailButtons(); if(name==='certificates') installCertUi(); if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
 })();
 
-/* V4.0.29 - app structure stabilisation marker and duplicate render guard */
+/* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function removeDuplicateStartInspection(){
@@ -4437,9 +4434,9 @@
   }, true);
 })();
 
-/* V4.0.29 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
+/* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4459,9 +4456,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.29"] .notifyBtn,
-      html[data-sw-version="4.0.29"] #notifyBadge,
-      html[data-sw-version="4.0.29"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.30"] .notifyBtn,
+      html[data-sw-version="4.0.30"] #notifyBadge,
+      html[data-sw-version="4.0.30"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4472,7 +4469,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4623,7 +4620,6 @@
     /* equipment register is owned by app.js */
     if($('certificates') && !$('certificates').classList.contains('hidden')) installCertificates();
     if($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) installQualifications();
-    installAdmin();
     const old=window.SWOperationsV4 || {};
     window.SWOperationsV4 = Object.assign(old,{ renderRecentHistoryV424:renderRecent, renderEquipmentRegisterV424:renderEquipmentList, installCertificatesV424:installCertificates, openQualificationFileV424:openQualFile, printQualificationDetailsV424:printQual, downloadTableCsvV424:downloadCsv, generateSeparateCertificates:generateSeparate, generateCombinedCertificates:generateCombined });
     window.generateCertificates = generateSeparate;
@@ -4633,12 +4629,12 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,1200)); else setTimeout(install,1200);
   document.addEventListener('click',e=>{
     const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='certificates') installCertificates(); if(name==='heightQualifications') installQualifications(); },250); }
-    if(e.target?.closest?.('[data-ops-view],.ops-branch-card')) setTimeout(installAdmin,250);
+    // Admin renders directly in its final layout; no delayed DOM patch is required.
   }, true);
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy'){ e.stopImmediatePropagation(); renderRecent(); } }, true);
 })();
 
-/* V4.0.29 - Recent Inspection History is owned by app.js.
+/* V4.0.30 - Recent Inspection History is owned by app.js.
  * Legacy operations patches intentionally target *Legacy element ids and do not
  * bind to #heightRecentLimit or #dashRecent.
  */
@@ -4646,14 +4642,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.29'
+    version: '4.0.30'
   });
 })();
 
 
-/* V4.0.29 - Equipment filter is owned exclusively by app.js. */
+/* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.29';
+  const VERSION='4.0.30';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -4674,7 +4670,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -4683,12 +4679,12 @@
 })();
 
 
-/* V4.0.29 - Certificate outer-wrapper layout cleanup.
+/* V4.0.30 - Certificate outer-wrapper layout cleanup.
  * CSS only: retains Search Filters, item list and Photo Options, while removing
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.29';
+  const VERSION='4.0.30';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -4716,12 +4712,12 @@
   window.SWOperationsV4=Object.assign(existing,{version:VERSION,installCertificateLayoutCssV428:installCertificateLayoutCss});
 })();
 
-/* V4.0.29 - verified inspector qualification uploads and replacement.
+/* V4.0.30 - verified inspector qualification uploads and replacement.
  * This is the single final owner of the Qualifications UI and file actions.
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.29';
+  const VERSION = '4.0.30';
   const BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const api = () => window.SWOperationsV4 || {};
@@ -5011,7 +5007,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.29 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.30 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) {
       refreshQualifications().then(renderQualifications).catch(error => console.warn('Could not refresh qualifications:', error));

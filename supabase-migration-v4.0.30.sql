@@ -1,0 +1,2 @@
+-- Spray & Wash Operations V4.0.30
+-- No Supabase database migration is required for this targeted Admin layout stability release.

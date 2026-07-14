@@ -1,0 +1,14 @@
+V4.0.30 TEST PLAN
+
+1. Confirm the top banner shows Version 4.0.30.
+2. From Home, click Admin.
+3. Confirm Admin opens directly to Users & Permissions.
+4. Confirm the page does not briefly show the old Admin dashboard or move to another tab.
+5. Confirm only one Home button is visible.
+6. Confirm the Admin tabs are:
+   - Users & Permissions
+   - Backup
+7. Click Backup and confirm the backup controls appear without a delayed layout change.
+8. Click Users & Permissions and confirm the user controls appear normally.
+9. Click Home and confirm it returns to the main module dashboard.
+10. Confirm Height Equipment, Vehicle Checks and Ops Management still open normally.
