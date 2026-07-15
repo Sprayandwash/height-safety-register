@@ -46,14 +46,15 @@
     @media(max-width:640px){.tabs{top:88px}.stat{min-height:108px}.stat b{font-size:32px}.lineItem{grid-template-columns:1fr auto}.hideMobile{display:none}.dateParts{grid-template-columns:1fr 1.25fr 1fr}.cropControls{grid-template-columns:1fr}.logo{width:60px;height:52px}header{padding-right:110px}}
   
 .equipmentFilterCore{background:#ecfdf5;border:1px solid #14b8a6}
-.equipmentFilterCore h3{margin-top:0}
+.equipmentFilterHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.equipmentFilterHeader h3{margin:0}
 .equipmentFilterGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .equipmentFilterGrid label{display:flex;flex-direction:column;gap:5px;font-weight:700}
 .equipmentFilterActions{margin-top:10px}
 .equipmentResultsCore{overflow-anchor:none;min-height:120px}
 #equipment .legacyEquipmentFilter,#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter:not(#equipmentFilterCore){display:none!important}
 
-    /* V4.0.34 Certificate layout cleanup: flatten redundant outer wrappers only. */
+    /* V4.0.35 Certificate layout cleanup: flatten redundant outer wrappers only. */
     #certificates > .card.sw421-cert-card,
     #certificates > .card,
     #certificates > .sw424-cert,
@@ -75,21 +76,18 @@
 <body>
 <header>
   <img class="logo" src="assets/logo.png" onerror="this.src='assets/icon.svg'" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.34 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
   <section id="signedOut" class="card"><h2>Sign in</h2><div class="grid two"><div><label>Email</label><input id="loginEmail" type="email"></div><div><label>Password</label><input id="loginPassword" type="password"></div></div><div class="row"><button class="primary" onclick="signIn()">Sign in</button><button onclick="signUp()">Create account</button></div></section>
-  <section id="signedIn" class="hidden accountTray"><button class="accountBtn" onclick="toggleAccountPanel()">Account</button><div id="accountPanel" class="hidden accountPanel"><div>Signed in as <b id="userEmail"></b></div><div class="muted">Roles: <b id="userRolesText">Loading...</b></div><button onclick="signOut()">Sign out</button></div></section>
+  <section id="signedIn" class="hidden accountTray"><button class="accountBtn" onclick="toggleAccountPanel()">Account</button><div id="accountPanel" class="hidden accountPanel"><div>Signed in as <b id="userEmail"></b></div><button onclick="signOut()">Sign out</button></div></section>
   <div id="appMain" class="hidden">
     <div class="tabs"><button class="tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button><button class="tab" data-tab="equipment" onclick="showTab('equipment')">Equipment</button><button id="certificateTabButton" class="tab" data-tab="certificates" onclick="showTab('certificates')">Certificates</button><button id="exportTabButton" class="tab" data-tab="export" onclick="showTab('export')">Reports</button></div>
     <section id="dashboard" class="tabpane"><div class="grid five"><div class="card stat total" onclick="setRegisterFilter('all','all')"><div><span>Total Items</span><small>Tap to view all</small></div><b id="dashTotal">0</b></div><div class="card stat service" onclick="setRegisterFilter('status','In Service')"><div><span>In Service</span><small>Safe for use</small></div><b id="dashInService">0</b></div><div class="card stat dueCard" onclick="setRegisterFilter('due','due')"><div><span>Due / Overdue</span><small>Needs inspection</small></div><b id="dashDue">0</b></div><div class="card stat failed" onclick="setRegisterFilter('failed','failed')"><div><span>Failed / Quarantined</span><small>Not for use</small></div><b id="dashFailed">0</b></div><div class="card stat archived" onclick="setRegisterFilter('archived','archived')"><div><span>Archived</span><small>Disposed / retired</small></div><b id="dashArchived">0</b></div></div><div id="heightNewInspectionAction" class="v415-action-panel"><div><strong>Start Inspection</strong><div class="muted">Quick action for recording a new inspection</div></div><button type="button" class="primary" onclick="window.SWOperationsV4&&SWOperationsV4.openNewHeightInspectionV415?SWOperationsV4.openNewHeightInspectionV415():showTab('inspect')">Start Inspection</button></div><div class="grid two"><div class="card"><h2>Next Inspections Due</h2><div id="dashNextDue"></div></div><div class="card"><details><summary><strong>Recent Inspection History</strong> <span class="muted">Click to show/hide</span></summary><div class="row"><label style="max-width:220px">Show last<select id="heightRecentLimit"><option>10</option><option>20</option><option>30</option><option>50</option></select></label></div><div id="dashRecent" aria-live="polite"></div></details></div></div></section>
     <section id="equipment" class="tabpane hidden">
-  <div class="filterBar">
-    <div class="row"><button id="addItemButton" class="primary" onclick="newEquipment()">+ Add item</button></div>
-  </div>
   <div id="equipmentFilterCore" class="card equipmentFilterCore">
-    <h3>Filter Equipment</h3>
+    <div class="equipmentFilterHeader"><h3>Filter Equipment</h3><button id="addItemButton" class="primary" onclick="newEquipment()">+ Add item</button></div>
     <div class="equipmentFilterGrid">
       <label>Equipment type<select id="equipmentFilterType"><option value="">All types</option></select></label>
       <label>Status<select id="equipmentFilterStatus"><option value="">All statuses</option></select></label>
@@ -169,7 +167,7 @@
 <div id="cropModal" class="modal hidden"><div class="modalBox"><h2>Crop photo</h2><p class="muted">The photo starts full-size. Crop each side only if needed, then save. For multiple photos, they will open one after another.</p><div id="cropQueueInfo" class="cropQueue hidden"></div><canvas id="cropCanvas" class="cropCanvas" width="1200" height="900"></canvas><div class="cropControls"><label>Crop left<input id="cropLeft" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('left',this.value)"></label><label>Crop right<input id="cropRight" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('right',this.value)"></label><label>Crop top<input id="cropTop" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('top',this.value)"></label><label>Crop bottom<input id="cropBottom" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('bottom',this.value)"></label></div><div class="row"><button onclick="rotateCrop()">Rotate</button><button onclick="resetCrop()">Reset crop</button><button class="primary" onclick="saveCrop()">Save photo</button><button onclick="cancelCrop()">Cancel</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=4.0.34"></script>
-<script src="./operations-v4.js?v=4.0.34"></script>
+<script src="app.js?v=4.0.35"></script>
+<script src="./operations-v4.js?v=4.0.35"></script>
 </body>
 </html>
