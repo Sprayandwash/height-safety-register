@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.38
+// Spray & Wash Operations App V4.0.39
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -23,7 +23,7 @@ let sb,currentUser=null,equipment=[],inspections=[],photos=[],inspectionPhotos=[
 let currentRoles=[],userProfiles=[],roleAssignments=[];
 const ROLE_DEFS=["Admin","Inspector","Equipment Manager","Certificate Approver","Office / Reports","Viewer"];
 let activeFilter={mode:"active",value:"active"};
-let equipmentFilterState={type:"",status:"",due:"",q:""};
+let equipmentFilterState={type:"",status:"",result:"",due:"",q:""};
 let equipmentFiltersBound=false;
 let pendingEquipmentPhotos=[];
 let pendingInspectionPhotos=[];
@@ -317,6 +317,7 @@ function equipmentFilterEls(){
   return {
     type:document.getElementById("equipmentFilterType"),
     status:document.getElementById("equipmentFilterStatus"),
+    result:document.getElementById("equipmentFilterResult"),
     due:document.getElementById("equipmentFilterDue"),
     q:document.getElementById("equipmentFilterSearch"),
     clear:document.getElementById("equipmentFilterClear"),
@@ -329,6 +330,7 @@ function readEquipmentFilterState(){
   equipmentFilterState={
     type:el.type?.value||"",
     status:el.status?.value||"",
+    result:el.result?.value||"",
     due:el.due?.value||"",
     q:(el.q?.value||"").trim().toLowerCase()
   };
@@ -338,6 +340,7 @@ function writeEquipmentFilterState(){
   const el=equipmentFilterEls();
   if(el.type) el.type.value=equipmentFilterState.type||"";
   if(el.status) el.status.value=equipmentFilterState.status||"";
+  if(el.result) el.result.value=equipmentFilterState.result||"";
   if(el.due) el.due.value=equipmentFilterState.due||"";
   if(el.q) el.q.value=equipmentFilterState.q||"";
 }
@@ -381,6 +384,7 @@ function filteredEquipment(){
   const f=equipmentFilterState;
   if(f.type) rows=rows.filter(e=>e.type===f.type);
   if(f.status) rows=rows.filter(e=>(isArchived(e)?"Archived / disposed":e.status)===f.status);
+  if(f.result) rows=rows.filter(e=>latest(e.serial)?.result===f.result);
   if(f.due) rows=rows.filter(e=>equipmentDueState(e)===f.due);
   if(f.q) rows=rows.filter(e=>JSON.stringify(e).toLowerCase().includes(f.q));
   return rows;
@@ -396,7 +400,7 @@ function renderEquipmentResults(){
 function bindEquipmentFilters(){
   if(equipmentFiltersBound)return;
   const el=equipmentFilterEls();
-  if(!el.type||!el.status||!el.due||!el.q)return;
+  if(!el.type||!el.status||!el.result||!el.due||!el.q)return;
   const update=e=>{
     e?.stopPropagation?.();
     activeFilter={mode:"active",value:"active"};
@@ -405,12 +409,13 @@ function bindEquipmentFilters(){
   };
   el.type.addEventListener("change",update);
   el.status.addEventListener("change",update);
+  el.result.addEventListener("change",update);
   el.due.addEventListener("change",update);
   el.q.addEventListener("input",update);
   el.clear?.addEventListener("click",e=>{
     e.preventDefault();e.stopPropagation();
     activeFilter={mode:"active",value:"active"};
-    equipmentFilterState={type:"",status:"",due:"",q:""};
+    equipmentFilterState={type:"",status:"",result:"",due:"",q:""};
     writeEquipmentFilterState();
     renderEquipmentResults();
   });
@@ -418,7 +423,7 @@ function bindEquipmentFilters(){
 }
 function setRegisterFilter(mode,value){
   activeFilter={mode,value};
-  equipmentFilterState={type:"",status:"",due:"",q:""};
+  equipmentFilterState={type:"",status:"",result:"",due:"",q:""};
   if(mode==="type") equipmentFilterState.type=value;
   if(mode==="status") equipmentFilterState.status=value;
   if(mode==="due"||mode==="overdue"||mode==="dueSoon") equipmentFilterState.due="due";
@@ -428,7 +433,7 @@ function setRegisterFilter(mode,value){
 }
 function clearFilter(){
   activeFilter={mode:"active",value:"active"};
-  equipmentFilterState={type:"",status:"",due:"",q:""};
+  equipmentFilterState={type:"",status:"",result:"",due:"",q:""};
   writeEquipmentFilterState();
   renderEquipmentResults();
 }
