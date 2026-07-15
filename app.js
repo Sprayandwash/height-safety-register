@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.36
+// Spray & Wash Operations App V4.0.37
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -284,7 +284,7 @@ async function loadData(){
   equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
 }
 function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory(); if(window.certMode) updateCertificateUI(); if(window.adminNotifyLead && !document.getElementById("admin")?.classList.contains("hidden")) renderAdmin();}
-function showTab(id){document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="certificates") renderCertificatesHome();if(id==="admin") renderAdmin();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
+function showTab(id){if(id==="certificates")window.SWOperationsV4?.installCertificatesV424?.();document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="admin") renderAdmin();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function recentInspectionLimit(){
   const value=Number(document.getElementById("heightRecentLimit")?.value||10);
   return [10,20,30,50].includes(value)?value:10;

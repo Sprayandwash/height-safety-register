@@ -45,16 +45,17 @@
     button,.buttonLike,.uploadBtn{transition:transform .08s ease,filter .12s ease,box-shadow .12s ease}button:active,.buttonLike:active,.uploadBtn:active,button.clicked,.buttonLike.clicked,.uploadBtn.clicked{transform:scale(.97);filter:brightness(.93)}button:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.15)}.busyOverlay{position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:250;display:flex;align-items:center;justify-content:center;padding:18px}.busyBox{background:white;border-radius:18px;box-shadow:0 24px 80px rgba(15,23,42,.35);padding:22px 26px;min-width:220px;text-align:center;border:1px solid #e2e8f0}.spinner{width:38px;height:38px;border:5px solid #dbeafe;border-top-color:#0f766e;border-radius:50%;animation:spin .85s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
     @media(max-width:640px){.tabs{top:88px}.stat{min-height:108px}.stat b{font-size:32px}.lineItem{grid-template-columns:1fr auto}.hideMobile{display:none}.dateParts{grid-template-columns:1fr 1.25fr 1fr}.cropControls{grid-template-columns:1fr}.logo{width:60px;height:52px}header{padding-right:110px}}
   
-.equipmentFilterCore{background:#ecfdf5;border:1px solid #14b8a6}
-.equipmentFilterHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.equipmentFilterHeader h3{margin:0}
-.equipmentFilterGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
-.equipmentFilterGrid label{display:flex;flex-direction:column;gap:5px;font-weight:700}
-.equipmentFilterActions{margin-top:10px}
+.registerFilterPanel{background:#ecfdf5;border:1px solid #14b8a6;border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
+.registerFilterHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;min-height:42px;margin-bottom:10px}
+.registerFilterHeader h3{margin:0;font-size:18px;line-height:1.3;font-weight:800}
+.registerFilterGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.registerFilterGrid label{display:flex;flex-direction:column;gap:5px;margin:0;font-size:13px;font-weight:800}
+.registerFilterActions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.registerFilterCount{margin-top:6px}
 .equipmentResultsCore{overflow-anchor:none;min-height:120px}
 #equipment .legacyEquipmentFilter,#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter:not(#equipmentFilterCore){display:none!important}
 
-    /* V4.0.36 Certificate layout cleanup: flatten redundant outer wrappers only. */
+    /* V4.0.37 Certificate layout cleanup: flatten redundant outer wrappers only. */
     #certificates > .card.sw421-cert-card,
     #certificates > .card,
     #certificates > .sw424-cert,
@@ -76,7 +77,7 @@
 <body>
 <header>
   <img class="logo" src="assets/logo.png" onerror="this.src='assets/icon.svg'" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.37 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -86,16 +87,16 @@
     <div class="tabs"><button class="tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button><button class="tab" data-tab="equipment" onclick="showTab('equipment')">Equipment</button><button id="certificateTabButton" class="tab" data-tab="certificates" onclick="showTab('certificates')">Certificates</button><button id="exportTabButton" class="tab" data-tab="export" onclick="showTab('export')">Reports</button></div>
     <section id="dashboard" class="tabpane"><div class="grid five"><div class="card stat total" onclick="setRegisterFilter('all','all')"><div><span>Total Items</span><small>Tap to view all</small></div><b id="dashTotal">0</b></div><div class="card stat service" onclick="setRegisterFilter('status','In Service')"><div><span>In Service</span><small>Safe for use</small></div><b id="dashInService">0</b></div><div class="card stat dueCard" onclick="setRegisterFilter('due','due')"><div><span>Due / Overdue</span><small>Needs inspection</small></div><b id="dashDue">0</b></div><div class="card stat failed" onclick="setRegisterFilter('failed','failed')"><div><span>Failed / Quarantined</span><small>Not for use</small></div><b id="dashFailed">0</b></div><div class="card stat archived" onclick="setRegisterFilter('archived','archived')"><div><span>Archived</span><small>Disposed / retired</small></div><b id="dashArchived">0</b></div></div><div id="heightNewInspectionAction" class="v415-action-panel"><div><strong>Start Inspection</strong><div class="muted">Quick action for recording a new inspection</div></div><button type="button" class="primary" onclick="window.SWOperationsV4&&SWOperationsV4.openNewHeightInspectionV415?SWOperationsV4.openNewHeightInspectionV415():showTab('inspect')">Start Inspection</button></div><div class="grid two"><div class="card"><h2>Next Inspections Due</h2><div id="dashNextDue"></div></div><div class="card"><details><summary><strong>Recent Inspection History</strong> <span class="muted">Click to show/hide</span></summary><div class="row"><label style="max-width:220px">Show last<select id="heightRecentLimit"><option>10</option><option>20</option><option>30</option><option>50</option></select></label></div><div id="dashRecent" aria-live="polite"></div></details></div></div></section>
     <section id="equipment" class="tabpane hidden">
-  <div id="equipmentFilterCore" class="card equipmentFilterCore">
-    <div class="equipmentFilterHeader"><h3>Filter Equipment</h3><button id="addItemButton" class="primary" onclick="newEquipment()">+ Add item</button></div>
-    <div class="equipmentFilterGrid">
-      <label>Equipment type<select id="equipmentFilterType"><option value="">All types</option></select></label>
+  <div id="equipmentFilterCore" class="registerFilterPanel">
+    <div class="registerFilterHeader"><h3>Filter Equipment</h3><button id="addItemButton" class="primary" onclick="newEquipment()">+ Add item</button></div>
+    <div class="registerFilterGrid">
+      <label>Equipment Type<select id="equipmentFilterType"><option value="">All types</option></select></label>
       <label>Status<select id="equipmentFilterStatus"><option value="">All statuses</option></select></label>
-      <label>Due status<select id="equipmentFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label>
-      <label>Keyword search<input id="equipmentFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label>
+      <label>Due Status<select id="equipmentFilterDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label>
+      <label>Keyword Search<input id="equipmentFilterSearch" type="search" placeholder="Serial, type, manufacturer, model"></label>
     </div>
-    <div class="row equipmentFilterActions"><button type="button" id="equipmentFilterClear">Clear filters</button></div>
-    <div id="equipmentFilterCount" class="muted"></div>
+    <div class="registerFilterActions"><button type="button" id="equipmentFilterClear">Clear filters</button></div>
+    <div id="equipmentFilterCount" class="muted registerFilterCount"></div>
   </div>
   <div id="equipmentList" class="equipmentResultsCore"></div>
 </section>
@@ -105,61 +106,7 @@
     <section id="inspectionDetail" class="tabpane hidden"><div id="inspectionDetailContent"></div></section>
     <section id="users" class="tabpane hidden legacyAdminOnly" style="display:none!important"><div class="card"><h2>User Accounts &amp; Roles</h2><p class="permissionNote">Users appear here after they create an account and sign in once. Admin users can assign multiple roles to each person.</p><div class="kv"><b>Your roles</b><span id="adminRoleSummary">Loading...</span></div><div class="row"><button class="primary" onclick="loadUsers()">Refresh users</button></div></div><div id="userList"></div><div class="card"><h3>Role guide</h3><div class="roleGrid"><div><b>Admin</b><p class="muted">Manage users and all app areas.</p></div><div><b>Inspector</b><p class="muted">Run inspections and add inspection/equipment photos.</p></div><div><b>Equipment Manager</b><p class="muted">Add, edit, archive and restore equipment.</p></div><div><b>Certificate Approver</b><p class="muted">Reserved for certificates.</p></div><div><b>Office / Reports</b><p class="muted">Export records and view reports.</p></div><div><b>Viewer</b><p class="muted">Read-only access.</p></div></div></div></section>
     <section id="admin" class="tabpane hidden legacyAdminOnly" style="display:none!important"><div class="card"><h2>Admin Controls</h2><p class="muted">Security status, shared app settings, audit log and backup tools.</p><div class="securityBox"><b>V4.0.2 security model</b><p>Users must have at least one assigned role before they can access business data. App buttons are role-controlled, and Supabase RLS policies can enforce role permissions.</p></div></div><div class="adminGrid"><div class="card"><h2>App Settings</h2><div class="settingRow"><div><label>Due-soon notification lead time</label><select id="adminNotifyLead"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></div><div><label>Default inspection frequency</label><select id="adminDefaultFrequency"><option>6 monthly</option><option>Annual</option><option>Other</option></select></div><div><label>Default certificate photo layout</label><select id="adminCertPhotoLayout"><option value="photo_page">Photos on second page</option><option value="inline">Inline photos</option></select></div><div><label>Company name on certificates</label><input id="adminCompanyName" placeholder="Spray & Wash"></div></div><label>Default certificate footer note</label><textarea id="adminCertFooter" placeholder="Certificate footer wording"></textarea><div class="row"><button class="primary" onclick="saveAdminSettings()">Save admin settings</button><button onclick="renderAdmin()">Refresh</button></div></div><div class="card"><h2>Backup &amp; Controls</h2><p class="muted">Run a full JSON backup before major updates or before changing security policies.</p><div class="row"><button class="primary" onclick="exportJSONBackup()">Full JSON backup</button><button onclick="exportAuditCSV()">Export audit CSV</button><button onclick="refreshAuditLogs()">Refresh audit log</button></div><div class="dangerBox"><b>Do not delete rows from Supabase manually.</b><p>Use Archive / Dispose from the equipment detail page so the action is recorded.</p></div></div><div class="card"><h2>Audit Log</h2><div class="auditFilters"><div><label>Action contains</label><input id="auditActionFilter" oninput="renderAuditLog()"></div><div><label>Entity type</label><select id="auditEntityFilter" onchange="renderAuditLog()"><option value="">All</option><option>equipment</option><option>inspection</option><option>equipment_photo</option><option>inspection_photo</option><option>certificate</option><option>user_role</option><option>settings</option><option>report</option></select></div><div><label>Show rows</label><select id="auditLimit" onchange="renderAuditLog()"><option>50</option><option>100</option><option>200</option></select></div><div><label>&nbsp;</label><button onclick="refreshAuditLogs()">Refresh</button></div></div><div id="auditLogList"><p class="muted">Loading audit log...</p></div></div></div></section>
-    <section id="certificates" class="tabpane hidden">
-  <div class="card sw421-cert-card">
-    <div class="certificateControls">
-      
-      <label>Certificate batch type</label>
-      <select id="certMode" onchange="updateCertificateUI()">
-        <option value="selected_items">Selected individual items</option>
-        <option value="type_latest">All active items of selected equipment type</option>
-        <option value="inspection_date_range">Inspections within selected date range</option>
-        <option value="inspection_result">Inspections by selected result</option>
-        <option value="due_overdue">Due / overdue items</option>
-      </select>
-      <div id="certModeHelp" class="certModeHelp">Use filters to select the items to include.</div>
-      <div id="certTypePanel" class="certPanel hidden">
-        <h3>2. Equipment type</h3>
-        <label>Equipment type</label>
-        <select id="certTypeFilter" onchange="updateCertificateUI()"></select>
-      </div>
-      <div id="certDatePanel" class="certPanel hidden">
-        <h3>2. Inspection date range</h3>
-        <div class="grid two">
-          <div><label>Inspection start date</label><input id="certStartDate" type="date" onchange="updateCertificateUI()"></div>
-          <div><label>Inspection end date</label><input id="certEndDate" type="date" onchange="updateCertificateUI()"></div>
-        </div>
-      </div>
-      <div id="certResultPanel" class="certPanel hidden">
-        <h3>2. Inspection result</h3>
-        <label>Inspection result</label>
-        <select id="certResult" onchange="updateCertificateUI()">
-          <option>Pass</option>
-          <option>Fail - Repair Required</option>
-          <option>Fail - Remove From Service / Disposal</option>
-        </select>
-      </div>
-      <div id="certItemsPanel" class="certPanel">
-        
-        <div class="certSelectionTools row">
-          <span id="certSelectedCount" class="selectedCount">0 selected</span>
-          <button type="button" onclick="selectAllCertItems(true)">Select all with inspections</button>
-          <button type="button" onclick="selectAllCertItems(false)">Clear selection</button>
-        </div>
-        <div id="certItemList" class="certSelectList"></div>
-      </div>
-      <div class="certPanel">
-        <h3>Photo options</h3>
-        <select id="certIncludeEquipmentPhotos" style="display:none"><option value="yes" selected>Yes</option><option value="no">No</option></select>
-        <select id="certIncludeInspectionPhotos" style="display:none"><option value="yes" selected>Yes</option><option value="no">No</option></select>
-        <div id="certPhotoOptionsCompact" class="v415-photo-options"><label><input type="checkbox" id="certIncludeEquipmentPhotosCheck" checked onchange="document.getElementById('certIncludeEquipmentPhotos').value=this.checked?'yes':'no'"> Include equipment photos</label><label><input type="checkbox" id="certIncludeInspectionPhotosCheck" checked onchange="document.getElementById('certIncludeInspectionPhotos').value=this.checked?'yes':'no'"> Include inspection photos</label></div>
-      </div>
-      <div id="certValidation" class="certValidation warn">Choose certificate options.</div>
-      <div class="certPanel certActionBox ops-cert-generate-step"><button id="certGenerateBtn" class="primary" onclick="generateCertificates()"><span class="miniSpinner"></span>Generate separate certificates</button><button id="certGenerateCombinedBtn" class="primary" type="button" onclick="window.SWOperationsV4&&SWOperationsV4.generateCombinedCertificates?SWOperationsV4.generateCombinedCertificates():alert('Combined certificate generator is still loading. Refresh and try again.')">Generate one combined certificate</button></div>
-    </div>
-  </div>
-  
-</section>
+    <section id="certificates" class="tabpane hidden"><p class="muted">Certificates are loading...</p></section>
     <section id="export" class="tabpane hidden"><div class="reportWorkspace"><div class="reportPanel"><h3>Quick reports</h3><div class="row"><button class="primary" onclick="runReport('equipment_register')">Equipment Register</button><button onclick="runReport('inspection_history')">Inspection History</button><button onclick="runReport('due_overdue')">Due / Overdue</button><button onclick="runReport('failed_quarantined')">Failed / Quarantined</button><button onclick="runReport('archived_disposed')">Archived / Disposed</button><button onclick="runReport('no_equipment_photos')">No Equipment Photos</button><button onclick="runReport('no_inspection_history')">No Inspection History</button></div></div><details class="reportPanel reportPanelCollapsible"><summary>Filtered Reports</summary><div class="reportPanelBody"><div class="row"><button type="button" id="sw421ReportClearFilters">Clear filters</button></div><div class="grid three"><div><label>Equipment type</label><select id="reportTypeFilter"></select><button onclick="runReport('equipment_type')">Run type report</button></div><div><label>Manufacturer</label><select id="reportManufacturer"></select><button onclick="runReport('equipment_manufacturer')">Run manufacturer report</button></div><div><label>Model</label><select id="reportModel"></select><button onclick="runReport('equipment_model')">Run model report</button></div><div><label>Inspection start date</label><input id="reportStartDate" type="date"></div><div><label>Inspection end date</label><input id="reportEndDate" type="date"></div><div><label>&nbsp;</label><button onclick="runReport('inspection_date_range')">Run date range</button></div><div><label>Inspection result</label><select id="reportResult"><option value="Pass">Pass</option><option value="Fail - Repair Required">Fail - Repair Required</option><option value="Fail - Remove From Service / Disposal">Fail - Remove From Service / Disposal</option></select><button onclick="runReport('inspection_result')">Run result report</button></div><div><label>Inspection type</label><select id="reportInspectionType"></select><button onclick="runReport('inspection_type')">Run inspection type</button></div><div><label>Due within</label><select id="reportDueDays"><option value="7">7 days</option><option value="14">14 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select><button onclick="runReport('due_within')">Run due report</button></div></div></div></details><details id="reportResultsDetails" class="reportPanel reportPanelCollapsible"><summary id="reportTitleOut">Equipment Register</summary><div class="reportPanelBody"><div class="row"><button class="primary" onclick="exportCurrentReportCSV()">Export current report CSV</button></div><div id="reportPreview" style="margin-top:12px"></div></div></details></div></section>
   </div>
 </main>
@@ -167,7 +114,7 @@
 <div id="cropModal" class="modal hidden"><div class="modalBox"><h2>Crop photo</h2><p class="muted">The photo starts full-size. Crop each side only if needed, then save. For multiple photos, they will open one after another.</p><div id="cropQueueInfo" class="cropQueue hidden"></div><canvas id="cropCanvas" class="cropCanvas" width="1200" height="900"></canvas><div class="cropControls"><label>Crop left<input id="cropLeft" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('left',this.value)"></label><label>Crop right<input id="cropRight" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('right',this.value)"></label><label>Crop top<input id="cropTop" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('top',this.value)"></label><label>Crop bottom<input id="cropBottom" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('bottom',this.value)"></label></div><div class="row"><button onclick="rotateCrop()">Rotate</button><button onclick="resetCrop()">Reset crop</button><button class="primary" onclick="saveCrop()">Save photo</button><button onclick="cancelCrop()">Cancel</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=4.0.36"></script>
-<script src="./operations-v4.js?v=4.0.36"></script>
+<script src="app.js?v=4.0.37"></script>
+<script src="./operations-v4.js?v=4.0.37"></script>
 </body>
 </html>
