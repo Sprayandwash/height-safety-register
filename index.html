@@ -54,7 +54,7 @@
 .equipmentResultsCore{overflow-anchor:none;min-height:120px}
 #equipment .legacyEquipmentFilter,#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter:not(#equipmentFilterCore){display:none!important}
 
-    /* V4.0.35 Certificate layout cleanup: flatten redundant outer wrappers only. */
+    /* V4.0.36 Certificate layout cleanup: flatten redundant outer wrappers only. */
     #certificates > .card.sw421-cert-card,
     #certificates > .card,
     #certificates > .sw424-cert,
@@ -76,7 +76,7 @@
 <body>
 <header>
   <img class="logo" src="assets/logo.png" onerror="this.src='assets/icon.svg'" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -167,7 +167,7 @@
 <div id="cropModal" class="modal hidden"><div class="modalBox"><h2>Crop photo</h2><p class="muted">The photo starts full-size. Crop each side only if needed, then save. For multiple photos, they will open one after another.</p><div id="cropQueueInfo" class="cropQueue hidden"></div><canvas id="cropCanvas" class="cropCanvas" width="1200" height="900"></canvas><div class="cropControls"><label>Crop left<input id="cropLeft" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('left',this.value)"></label><label>Crop right<input id="cropRight" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('right',this.value)"></label><label>Crop top<input id="cropTop" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('top',this.value)"></label><label>Crop bottom<input id="cropBottom" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('bottom',this.value)"></label></div><div class="row"><button onclick="rotateCrop()">Rotate</button><button onclick="resetCrop()">Reset crop</button><button class="primary" onclick="saveCrop()">Save photo</button><button onclick="cancelCrop()">Cancel</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=4.0.35"></script>
-<script src="./operations-v4.js?v=4.0.35"></script>
+<script src="app.js?v=4.0.36"></script>
+<script src="./operations-v4.js?v=4.0.36"></script>
 </body>
 </html>

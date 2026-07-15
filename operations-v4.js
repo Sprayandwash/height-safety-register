@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.35
+/* Spray & Wash Operations App V4.0.36
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -368,10 +368,11 @@
       main.appendChild(pane);
     }
     pane.classList.remove('hidden');
-    pane.innerHTML = heightQualificationsHtml();
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     byId('heightQualTabButton')?.classList.add('active');
-    byId('heightQualForm')?.addEventListener('submit', saveHeightQualification);
+    const renderCurrentQualifications = window.SWOperationsV4?.renderHeightQualificationsV431;
+    if(typeof renderCurrentQualifications === 'function') renderCurrentQualifications();
+    else pane.innerHTML = '<div class="card"><p class="muted">Qualifications are loading. Please reopen this tab.</p></div>';
     window.scrollTo({top:0, left:0, behavior:'auto'});
   }
 
@@ -1316,62 +1317,6 @@
   }
 
 
-
-  function heightQualificationsHtml(){
-    const rows = state.qualifications || [];
-    return `<div class="card">
-      <h2>Inspector Qualifications</h2>
-      <p class="muted">Record height-safety inspector qualification details and upload a PDF, scan or photo. Files are stored in the existing inspection photos storage bucket under height-inspector-qualifications.</p>
-      <form id="heightQualForm" class="ops-form">
-        <label>Inspector name *<input id="heightQualName" required placeholder="e.g. Brendan Harris"></label>
-        <label>Email<input id="heightQualEmail" type="email" placeholder="name@example.com"></label>
-        <label>Qualification type *<input id="heightQualType" required placeholder="e.g. Height Safety Inspector"></label>
-        <label>Provider<input id="heightQualProvider" placeholder="Training provider"></label>
-        <label>Reference / certificate number<input id="heightQualRef"></label>
-        <label>Issue date<input id="heightQualIssue" type="date"></label>
-        <label>Expiry date<input id="heightQualExpiry" type="date"></label>
-        <label>PDF / scan / photo<input id="heightQualFile" type="file" accept="application/pdf,image/*"></label>
-        <label class="ops-span-2">Notes<textarea id="heightQualNotes"></textarea></label>
-        <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save qualification</button></div>
-      </form>
-    </div>
-    <div class="card"><h2>Saved inspector qualifications</h2>
-      ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>File</th><th>Notes</th></tr>${rows.map(r=>`<tr><td>${esc(r.inspector_name)}<br><span class="ops-subtle">${esc(r.email||'')}</span></td><td>${esc(r.qualification_type)}</td><td>${esc(r.provider||'—')}</td><td>${esc(r.reference_number||'—')}</td><td>${nzDate(r.expiry_date)}</td><td>${r.storage_path ? `<button type="button" class="ops-btn ghost" onclick="SWOperationsV4.openQualificationFile('${esc(r.storage_path)}')">Open file</button>` : '—'}</td><td>${esc(r.notes||'')}</td></tr>`).join('')}</table></div>` : '<p class="muted">No inspector qualifications saved yet.</p>'}
-    </div>`;
-  }
-
-  async function saveHeightQualification(e){
-    e.preventDefault();
-    if(!state.user || !hasAny(['Admin','Equipment Manager','Office / Reports','Certificate Approver'])) return alert('You do not have permission to save qualifications.');
-    const file = byId('heightQualFile')?.files?.[0] || null;
-    let storagePath = null;
-    let fileName = file?.name || null;
-    if(file){
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-      storagePath = `height-inspector-qualifications/${Date.now()}-${safeName}`;
-      const up = await state.sb.storage.from(PHOTO_BUCKET).upload(storagePath, file, { upsert:false, contentType:file.type || undefined });
-      if(up.error) return alert('File upload failed: ' + up.error.message);
-    }
-    const row = {
-      inspector_name: titleCaseName(byId('heightQualName')?.value || ''),
-      email: String(byId('heightQualEmail')?.value || '').trim().toLowerCase() || null,
-      qualification_type: byId('heightQualType')?.value || '',
-      provider: byId('heightQualProvider')?.value || null,
-      reference_number: byId('heightQualRef')?.value || null,
-      issue_date: byId('heightQualIssue')?.value || null,
-      expiry_date: byId('heightQualExpiry')?.value || null,
-      storage_path: storagePath,
-      file_name: fileName,
-      notes: byId('heightQualNotes')?.value || null,
-      created_by: state.user.id
-    };
-    if(!row.inspector_name || !row.qualification_type) return alert('Inspector name and qualification type are required.');
-    const r = await state.sb.from('height_inspector_qualifications').insert(row);
-    if(r.error) return alert(r.error.message);
-    alert('Inspector qualification saved.');
-    state.qualifications = await loadTable('height_inspector_qualifications','*',{column:'expiry_date'});
-    openHeightQualifications();
-  }
 
   async function openQualificationFile(path){
     try{
@@ -2685,7 +2630,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2982,7 +2927,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     removeDuplicateStartInspection();
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
@@ -2998,7 +2943,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3249,7 +3194,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3270,7 +3215,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3632,7 +3577,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     cleanCertificatesV419();
     installAccountBehaviourV419();
   }
@@ -3667,7 +3612,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3801,7 +3746,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -3816,7 +3761,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4205,7 +4150,7 @@
 
   function refreshAll(){
     injectCss(); fixDashboardAction(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installCertificateCleanup(); installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4221,7 +4166,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4362,7 +4307,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance'); removeDuplicateStart(); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') {removeDuplicateStart(); installRecent();} /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4370,11 +4315,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function removeDuplicateStartInspection(){
@@ -4407,7 +4352,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4427,20 +4372,20 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.35"] .notifyBtn,
-      html[data-sw-version="4.0.35"] #notifyBadge,
-      html[data-sw-version="4.0.35"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.36"] .notifyBtn,
+      html[data-sw-version="4.0.36"] #notifyBadge,
+      html[data-sw-version="4.0.36"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
       #equipment .sw422-filter:not(#sw424EqFilter),#equipment #sw422EqFilter,#equipment .filterBar + .row{display:none!important}
-      .sw424-cert{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}.sw424-cert-list{max-height:430px;overflow:auto;border:1px solid #cbd5e1;border-radius:14px;background:white}.sw424-cert-list label{display:flex!important;justify-content:flex-start!important;align-items:flex-start!important;gap:10px;text-align:left!important;margin:0!important;padding:12px;border-bottom:1px solid #e2e8f0;width:100%;box-sizing:border-box}.sw424-cert-list input{width:auto!important;margin-top:4px;flex:0 0 auto}.sw424-cert-list span{display:block;text-align:left!important}.sw424-selected{text-align:left!important;font-weight:800;margin:8px 0}
+      .sw424-cert{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}.sw424-cert-list{display:grid;gap:10px;margin:10px 0;background:transparent}.sw424-cert-list label{display:flex!important;justify-content:flex-start!important;align-items:flex-start!important;gap:10px;text-align:left!important;margin:0!important;padding:14px;border:1px solid #e2e8f0;border-radius:16px;background:white;width:100%;box-sizing:border-box;cursor:pointer;transition:.15s transform,.15s box-shadow}.sw424-cert-list label:hover{transform:translateY(-1px);box-shadow:0 10px 22px #0f172a12}.sw424-cert-list input{width:auto!important;margin-top:4px;flex:0 0 auto}.sw424-cert-list span{display:block;text-align:left!important}.sw424-selected{text-align:left!important;font-weight:800;margin:8px 0}
       .sw424-qual details{border:1px solid #e2e8f0;border-radius:16px;background:white;margin:12px 0}.sw424-qual summary{cursor:pointer;padding:14px;font-weight:900}.sw424-qual-body{padding:0 14px 14px}.sw424-admin-tab-clean [data-ops-view="admin-dashboard"],.sw424-admin-tab-clean [data-ops-view="admin-notifications"]{display:none!important}
     `; document.head.appendChild(st);
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4524,7 +4469,7 @@
   function getCertFilter(){ return {type:$('sw424CertType')?.value||certState.type||'',status:$('sw424CertStatus')?.value||certState.status||'',result:$('sw424CertResult')?.value||certState.result||'',due:$('sw424CertDue')?.value||certState.due||'',q:$('sw424CertQ')?.value||certState.q||''}; }
   async function installCertificates(){
     const pane=$('certificates'); if(!pane) return;
-    pane.innerHTML=`<div class="sw424-filter"><div class="sw424-grid"><label>Equipment type<select id="sw424CertType"><option value="">All types</option></select></label><label>Status<select id="sw424CertStatus"><option value="">All statuses</option></select></label><label>Inspection result<select id="sw424CertResult"><option value="">All results</option><option value="Pass">Completed OK</option><option value="Fail - Repair Required">Issue - repair required</option><option value="Fail - Remove From Service / Disposal">Remove from service</option></select></label><label>Due status<select id="sw424CertDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="sw424CertQ" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="sw424-actions"><button type="button" id="sw424CertClear">Clear filters</button></div><div id="sw424CertCount" class="sw424-muted" style="margin-top:6px"></div></div><div id="sw424CertList" class="sw424-cert-list"></div><div id="sw424CertSelected" class="sw424-selected">No items selected.</div><div class="sw424-filter" style="background:#fff;border-color:#e2e8f0"><h3 style="margin-top:0">Photo options</h3><label><input type="checkbox" id="sw424CertEqPhotos" checked style="width:auto"> Include the equipment image on the certificate details page</label><label><input type="checkbox" id="sw424CertInspPhotos" checked style="width:auto"> Include the most recent inspection images on a separate evidence page</label></div><div class="row"><button type="button" class="primary" id="sw424GenSeparate">Generate separate certificates</button><button type="button" class="primary" id="sw424GenCombined">Generate one combined certificate</button></div>`;
+    pane.innerHTML=`<div class="sw424-filter"><h3 style="margin-top:0">Filter Certificates</h3><div class="sw424-grid"><label>Equipment type<select id="sw424CertType"><option value="">All types</option></select></label><label>Status<select id="sw424CertStatus"><option value="">All statuses</option></select></label><label>Inspection Result<select id="sw424CertResult"><option value="">All results</option><option value="Pass">Completed OK</option><option value="Fail - Repair Required">Issue - repair required</option><option value="Fail - Remove From Service / Disposal">Remove from service</option></select></label><label>Due status<select id="sw424CertDue"><option value="">All due states</option><option value="due">Due / overdue</option><option value="ok">Not due</option><option value="no_inspection">No inspection history</option></select></label><label>Keyword search<input id="sw424CertQ" type="search" placeholder="Serial, type, manufacturer, model"></label></div><div class="sw424-actions"><button type="button" id="sw424CertClear">Clear filters</button></div><div id="sw424CertCount" class="sw424-muted" style="margin-top:6px"></div></div><div id="sw424CertList" class="sw424-cert-list"></div><div id="sw424CertSelected" class="sw424-selected">No items selected.</div><div class="sw424-filter" style="background:#fff;border-color:#e2e8f0"><h3 style="margin-top:0">Photo options</h3><label><input type="checkbox" id="sw424CertEqPhotos" checked style="width:auto"> Include the equipment image on the certificate details page</label><label><input type="checkbox" id="sw424CertInspPhotos" checked style="width:auto"> Include the most recent inspection images on a separate evidence page</label></div><div class="row"><button type="button" class="primary" id="sw424GenSeparate">Generate separate certificates</button><button type="button" class="primary" id="sw424GenCombined">Generate one combined certificate</button></div>`;
     await renderCertList();
     ['sw424CertType','sw424CertStatus','sw424CertResult','sw424CertDue'].forEach(id=>$(id)?.addEventListener('change',()=>{certState=getCertFilter(); renderCertList();}));
     $('sw424CertQ')?.addEventListener('input',()=>{certState=getCertFilter(); renderCertList();});
@@ -4538,7 +4483,7 @@
     const types=[...new Set(active.map(e=>e.type).filter(Boolean))].sort(), statuses=[...new Set(active.map(e=>e.status).filter(Boolean))].sort();
     const typeEl=$('sw424CertType'), statusEl=$('sw424CertStatus'); if(typeEl){ typeEl.innerHTML='<option value="">All types</option>'+types.map(t=>`<option ${f.type===t?'selected':''}>${esc(t)}</option>`).join(''); } if(statusEl){ statusEl.innerHTML='<option value="">All statuses</option>'+statuses.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join(''); }
     const pairs=active.map(e=>({equipment:e,inspection:latestInspection(e,data.inspections)})).filter(p=>matches(p,f));
-    list.innerHTML=pairs.map(p=>{ const e=p.equipment,i=p.inspection; return `<label><input type="checkbox" data-id="${esc(e.id)}" ${certSel.has(String(e.id))?'checked':''} ${i?'':'disabled'}><span><strong>${esc(e.serial||'No serial')} · ${esc(e.type||'')}</strong><span class="sw424-muted">${esc(e.manufacturer||e.make||'')} ${esc(e.model||'')} · ${esc(e.status||'')} · Latest: ${i?`${nzDate(i.inspection_date)} ${resultLabel(i.result)}`:'No inspection history'}</span></span></label>`; }).join('') || '<p class="sw424-muted" style="padding:12px">No items match the current filters.</p>';
+    list.innerHTML=pairs.map(p=>{ const e=p.equipment,i=p.inspection; return `<label class="sw424-cert-item"><input type="checkbox" data-id="${esc(e.id)}" ${certSel.has(String(e.id))?'checked':''} ${i?'':'disabled'}><span><strong>${esc(e.serial||'No serial')} · ${esc(e.type||'')}</strong><span class="sw424-muted">${esc(e.manufacturer||e.make||'')} ${esc(e.model||'')} · ${esc(e.status||'')} · Latest: ${i?`${nzDate(i.inspection_date)} ${resultLabel(i.result)}`:'No inspection history'}</span></span></label>`; }).join('') || '<p class="sw424-muted" style="padding:12px">No items match the current filters.</p>';
     list.querySelectorAll('input[type="checkbox"]').forEach(ch=>ch.addEventListener('change',()=>{ if(ch.checked) certSel.add(String(ch.dataset.id)); else certSel.delete(String(ch.dataset.id)); updateCertCount(); }));
     $('sw424CertCount').textContent=`${pairs.length} item${pairs.length===1?'':'s'} shown; ${pairs.filter(p=>p.inspection).length} with inspection history.`; updateCertCount();
   }
@@ -4570,16 +4515,6 @@
   function openDoc(html,name){ const w=window.open('', '_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); } else { const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); } }
 
   async function loadQualifications(){ const sb=client(); if(!sb) return []; const r=await sb.from('height_inspector_qualifications').select('*').order('inspector_name',{ascending:true}); if(r.error) throw r.error; return r.data||[]; }
-  async function installQualifications(){
-    const pane=$('heightQualifications'); if(!pane) return;
-    const rows=await loadQualifications().catch(e=>{console.warn(e); return [];});
-    const oldForm=$('heightQualForm');
-    const addForm = oldForm ? oldForm.outerHTML : `<form id="heightQualForm" class="ops-form"><label>Inspector name *<input id="heightQualName" required></label><label>Email<input id="heightQualEmail" type="email"></label><label>Qualification type *<input id="heightQualType" required></label><label>Provider<input id="heightQualProvider"></label><label>Reference / certificate number<input id="heightQualRef"></label><label>Issue date<input id="heightQualIssue" type="date"></label><label>Expiry date<input id="heightQualExpiry" type="date"></label><label>PDF / scan / photo<input id="heightQualFile" type="file" accept="application/pdf,image/*"></label><label class="ops-span-2">Notes<textarea id="heightQualNotes"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save qualification</button></div></form>`;
-    pane.innerHTML=`<div class="sw424-qual"><details><summary>Saved Inspectors</summary><div class="sw424-qual-body">${rows.length?`<div class="ops-table-wrap"><table class="ops-table"><tr><th>Inspector</th><th>Qualification</th><th>Provider</th><th>Reference</th><th>Expiry</th><th>Actions</th><th>Notes</th></tr>${rows.map(r=>`<tr><td>${esc(r.inspector_name||'')}<br><span class="ops-subtle">${esc(r.email||'')}</span></td><td>${esc(r.qualification_type||'—')}</td><td>${esc(r.provider||'—')}</td><td>${esc(r.reference_number||'—')}</td><td>${nzDate(r.expiry_date)}</td><td><div class="row">${r.storage_path?`<button type="button" class="ops-btn ghost" data-sw424-open-qual="${esc(r.id)}">Open File</button>`:''}<button type="button" class="ops-btn primary" data-sw424-print-qual="${esc(r.id)}">Print Qualification Details</button></div></td><td>${esc(r.notes||'—')}</td></tr>`).join('')}</table></div>`:'<p class="muted">No inspectors saved yet.</p>'}</div></details><details><summary>Add Inspector</summary><div class="sw424-qual-body">${addForm}</div></details></div>`;
-    pane.querySelectorAll('[data-sw424-open-qual]').forEach(b=>b.addEventListener('click',()=>openQualFile(b.dataset.sw424OpenQual)));
-    pane.querySelectorAll('[data-sw424-print-qual]').forEach(b=>b.addEventListener('click',()=>printQual(b.dataset.sw424PrintQual)));
-    const form=$('heightQualForm'); if(form && !form.dataset.sw424){ form.dataset.sw424='1'; if(window.SWOperationsV4?.saveHeightQualification) form.addEventListener('submit', window.SWOperationsV4.saveHeightQualification); }
-  }
   async function fileUrlFromQual(q){ if(!q?.storage_path) return {url:'', type:'', note:'No file attached'}; try{ const dl=await client().storage.from(PHOTO_BUCKET).download(q.storage_path); if(dl.error) throw dl.error; const blob=dl.data; const url=URL.createObjectURL(blob); return {url,type:blob.type||q.file_name||'',note:q.file_name||q.storage_path,object:true}; }catch(e){ try{ const u=await signedUrl(PHOTO_BUCKET,q.storage_path); return {url:u,type:q.file_name||'',note:u?'Signed file link':'Could not open file'}; }catch(_){return {url:'',type:'',note:'Could not open file: '+(e.message||e)}} } }
   async function openQualFile(id){ const rows=await loadQualifications(); const q=rows.find(r=>String(r.id)===String(id)); if(!q) return alert('Qualification record not found.'); const f=await fileUrlFromQual(q); if(!f.url) return alert(f.note); const w=window.open(f.url,'_blank'); if(!w){ const a=document.createElement('a'); a.href=f.url; a.download=q.file_name||'qualification-file'; a.click(); } if(f.object) setTimeout(()=>URL.revokeObjectURL(f.url),60000); }
   async function printQual(id){ const rows=await loadQualifications(); const q=rows.find(r=>String(r.id)===String(id)); if(!q) return alert('Qualification record not found.'); const f=await fileUrlFromQual(q); let evidence=''; if(f.url){ if(String(f.type).toLowerCase().includes('pdf')) evidence=`<iframe src="${esc(f.url)}" style="width:100%;height:720px;border:1px solid #dbe7ee;border-radius:12px"></iframe><p><a href="${esc(f.url)}" target="_blank">Open uploaded qualification evidence</a></p>`; else evidence=`<img src="${esc(f.url)}" style="max-width:100%;max-height:720px;border:1px solid #dbe7ee;border-radius:12px" alt="Qualification evidence">`; } const html=`<!doctype html><html><head><meta charset="utf-8"><title>Inspector Qualification Details</title><style>${certCss()}</style></head><body><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Inspector Qualification Details</div></div><div class="meta">Generated ${new Date().toLocaleDateString('en-NZ')}</div></div><div class="grid"><div class="label">Inspector</div><div class="value">${esc(q.inspector_name||'—')}</div><div class="label">Email</div><div class="value">${esc(q.email||'—')}</div><div class="label">Qualification</div><div class="value">${esc(q.qualification_type||'—')}</div><div class="label">Provider</div><div class="value">${esc(q.provider||'—')}</div><div class="label">Reference</div><div class="value">${esc(q.reference_number||'—')}</div><div class="label">Issue date</div><div class="value">${nzDate(q.issue_date)}</div><div class="label">Expiry date</div><div class="value">${nzDate(q.expiry_date)}</div><div class="label">Saved file</div><div class="value">${esc(f.note)}</div><div class="label">Notes</div><div class="value">${esc(q.notes||'—')}</div></div></section>${evidence?`<section class="page"><div class="head"><div><div class="brand">Spray &amp; Wash Operations</div><div class="title">Uploaded Qualification Evidence</div></div></div>${evidence}</section>`:''}</body></html>`; openDoc(html,'inspector-qualification-details.html'); setTimeout(()=>{ if(f.object) URL.revokeObjectURL(f.url); },60000); }
@@ -4626,14 +4561,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.35'
+    version: '4.0.36'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.35';
+  const VERSION='4.0.36';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -4654,7 +4589,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -4668,7 +4603,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.35';
+  const VERSION='4.0.36';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -4701,7 +4636,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.35';
+  const VERSION = '4.0.36';
   const BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const api = () => window.SWOperationsV4 || {};
@@ -5001,7 +4936,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.35 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.36 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
@@ -5030,9 +4965,6 @@
     if (replace) { event.preventDefault(); event.stopImmediatePropagation(); chooseReplacementFile(replace.dataset.sw429Replace); return; }
     const print = event.target.closest('[data-sw429-print]');
     if (print) { event.preventDefault(); event.stopImmediatePropagation(); printQualificationDetails(print.dataset.sw429Print); return; }
-    if (event.target.closest('[data-tab="heightQualifications"],#heightQualTabButton')) {
-      refreshAndRenderQualifications();
-    }
     if (event.target.closest('[data-tab="certificates"],#certificateTabButton')) {
       removeDuplicateInspectorPanels();
     }
