@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.41
+// Spray & Wash Operations App V4.0.42
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -30,6 +30,8 @@ let pendingInspectionPhotos=[];
 let cropState=null;
 let photoQueue=[];
 let busyDepth=0;
+let companyLogoDataUrl="",companyLogoPath="";
+try{companyLogoDataUrl=localStorage.getItem("swCompanyLogoDataUrl")||"";companyLogoPath=localStorage.getItem("swCompanyLogoPath")||"";}catch(_){/* local cache is optional */}
 function setBusy(on,msg="Working..."){
   const overlay=document.getElementById("busyOverlay");
   const text=document.getElementById("busyText");
@@ -127,14 +129,48 @@ function toggleAccountPanel(){const panel=document.getElementById("accountPanel"
 
 
 function appSettingValue(key,fallback=""){return appSettings && appSettings[key]!==undefined ? appSettings[key] : fallback;}
-function setAdminSelectValue(id,value){const el=document.getElementById(id);if(el)el.value=String(value??"");}
-function setAdminInputValue(id,value){const el=document.getElementById(id);if(el)el.value=String(value??"");}
+function blobToDataUrl(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(reader.error||new Error("Could not read image."));reader.readAsDataURL(blob);});}
+function getCompanyLogoDataUrl(){return companyLogoDataUrl||"";}
+function companyLogoMarkup(className="certificateLogo"){
+  const safeClass=String(className||"certificateLogo").replace(/[^a-zA-Z0-9 _-]/g,"");
+  return companyLogoDataUrl?`<img class="${safeClass}" src="${esc(companyLogoDataUrl)}" alt="${esc(appSettingValue("company_name","Spray & Wash"))} logo">`:"";
+}
+function applyCompanyLogo(){
+  const banner=document.querySelector("header .logo");
+  if(banner) banner.src=companyLogoDataUrl||"assets/logo.png";
+  const preview=document.getElementById("opsCompanyLogoPreview");
+  if(preview){preview.src=companyLogoDataUrl||"assets/logo.png";preview.classList.remove("hidden");}
+  const status=document.getElementById("opsCompanyLogoStatus");
+  if(status) status.textContent=companyLogoDataUrl?`Current logo: ${appSettingValue("company_logo_file_name","Uploaded company logo")}`:"Using the packaged Spray & Wash logo.";
+}
+async function loadCompanyLogo(force=false){
+  const path=String(appSettingValue("company_logo_path","")||"");
+  if(!path){companyLogoDataUrl="";companyLogoPath="";try{localStorage.removeItem("swCompanyLogoDataUrl");localStorage.removeItem("swCompanyLogoPath");}catch(_){}applyCompanyLogo();return;}
+  if(!force&&path===companyLogoPath&&companyLogoDataUrl){applyCompanyLogo();return;}
+  try{
+    const downloaded=await sb.storage.from("inspection-photos").download(path);
+    if(downloaded.error)throw downloaded.error;
+    if(!downloaded.data||downloaded.data.size<=0)throw new Error("The saved logo file is empty.");
+    const dataUrl=await blobToDataUrl(downloaded.data);
+    if(!dataUrl.startsWith("data:image/"))throw new Error("The saved logo is not a readable image.");
+    companyLogoDataUrl=dataUrl;companyLogoPath=path;
+    try{localStorage.setItem("swCompanyLogoDataUrl",dataUrl);localStorage.setItem("swCompanyLogoPath",path);}catch(_){}
+  }catch(err){
+    console.warn("Company logo not loaded",err);
+    if(path!==companyLogoPath){
+      companyLogoDataUrl="";companyLogoPath="";
+      try{localStorage.removeItem("swCompanyLogoDataUrl");localStorage.removeItem("swCompanyLogoPath");}catch(_){}
+    }
+  }
+  applyCompanyLogo();
+}
 async function loadAppSettings(){
   appSettings={};
   try{
     const r=await sb.from("app_settings").select("key,value,updated_at,updated_by");
     if(!r.error){(r.data||[]).forEach(row=>{appSettings[row.key]=row.value;});}
   }catch(err){console.warn("App settings not loaded",err);}
+  await loadCompanyLogo();
 }
 async function refreshAuditLogs(){
   if(!currentUser)return;
@@ -143,7 +179,6 @@ async function refreshAuditLogs(){
     if(r.error){console.warn("Audit log not loaded",r.error.message); auditLogs=[];}
     else auditLogs=r.data||[];
   }catch(err){console.warn("Audit log not loaded",err); auditLogs=[];}
-  renderAuditLog();
 }
 async function logAudit(action,entityType="",entityId=null,summary="",details={}){
   if(!sb||!currentUser)return;
@@ -156,52 +191,77 @@ async function logAudit(action,entityType="",entityId=null,summary="",details={}
     });
   }catch(err){console.warn("Audit log skipped",err);}
 }
-function auditFilteredRows(){
-  const action=(document.getElementById("auditActionFilter")?.value||"").toLowerCase();
-  const entity=document.getElementById("auditEntityFilter")?.value||"";
-  const limit=parseInt(document.getElementById("auditLimit")?.value||"50",10)||50;
-  return (auditLogs||[]).filter(r=>{
-    const text=(`${r.action||""} ${r.summary||""} ${r.actor_email||""}`).toLowerCase();
-    return (!action||text.includes(action)) && (!entity||r.entity_type===entity);
-  }).slice(0,limit);
-}
-function renderAuditLog(){
-  const target=document.getElementById("auditLogList"); if(!target)return;
-  const rows=auditFilteredRows();
-  if(!auditLogs.length){target.innerHTML=`<p class="muted">No audit log entries loaded yet. New V3.4 actions will appear here after the SQL has been run.</p>`;return;}
-  target.innerHTML=rows.map(r=>`<div class="auditItem"><b>${esc(r.action||"Action")}</b><div>${esc(r.summary||"")}</div><div class="auditMeta">${esc(r.created_at||"")} · ${esc(r.actor_email||"")} · ${esc(r.entity_type||"")}</div></div>`).join("") || `<p class="muted">No audit entries match the current filters.</p>`;
-}
-function renderAdmin(){
-  if(!requirePerm(canAdminControls(),"Only Admin users can open Admin Controls."))return;
-  setAdminSelectValue("adminNotifyLead",getNotificationLeadDays());
-  setAdminSelectValue("adminDefaultFrequency",appSettingValue("default_inspection_frequency","6 monthly"));
-  setAdminSelectValue("adminCertPhotoLayout",appSettingValue("certificate_photo_layout","photo_page"));
-  setAdminInputValue("adminCompanyName",appSettingValue("company_name","Spray & Wash"));
-  setAdminInputValue("adminCertFooter",appSettingValue("certificate_footer","This certificate was generated from the Spray & Wash Height Safety Register. Verify against the live register before relying on expired downloaded copies."));
-  renderAuditLog();
-}
-async function saveAdminSettings(){
+function adminSettingsSnapshot(){return {
+  notificationLeadDays:getNotificationLeadDays(),
+  defaultInspectionFrequency:appSettingValue("default_inspection_frequency","6 monthly"),
+  companyName:appSettingValue("company_name","Spray & Wash"),
+  certificateFooter:appSettingValue("certificate_footer","This certificate was generated from the Spray & Wash Height Safety Register. Verify against the live register before relying on expired downloaded copies."),
+  logoDataUrl:getCompanyLogoDataUrl(),
+  logoFileName:appSettingValue("company_logo_file_name","")
+};}
+async function saveAdminSettingsFromOperations(event){
+  event?.preventDefault?.();
   if(!requirePerm(canAdminControls(),"Only Admin users can save settings."))return;
+  const lead=document.getElementById("opsAdminNotifyLead");
+  const frequency=document.getElementById("opsAdminDefaultFrequency");
+  const company=document.getElementById("opsAdminCompanyName");
+  const footer=document.getElementById("opsAdminCertFooter");
   const rows=[
-    {key:"notification_lead_days",value:Number(adminNotifyLead.value)},
-    {key:"default_inspection_frequency",value:adminDefaultFrequency.value},
-    {key:"certificate_photo_layout",value:adminCertPhotoLayout.value},
-    {key:"company_name",value:adminCompanyName.value.trim()||"Spray & Wash"},
-    {key:"certificate_footer",value:adminCertFooter.value.trim()}
+    {key:"notification_lead_days",value:Number(lead?.value||30)},
+    {key:"default_inspection_frequency",value:frequency?.value||"6 monthly"},
+    {key:"company_name",value:company?.value.trim()||"Spray & Wash"},
+    {key:"certificate_footer",value:footer?.value.trim()||""}
   ].map(r=>({...r,updated_by:currentUser.id,updated_at:nowIso()}));
   const res=await sb.from("app_settings").upsert(rows,{onConflict:"key"});
   if(res.error)return alert("Settings were not saved: "+res.error.message);
-  localStorage.setItem("hsrNotifyLeadDays",String(adminNotifyLead.value));
+  localStorage.setItem("hsrNotifyLeadDays",String(lead?.value||30));
   await logAudit("settings_updated","settings",null,"Admin settings updated",Object.fromEntries(rows.map(r=>[r.key,r.value])));
-  await loadAppSettings(); renderNotifications(); renderAdmin(); alert("Settings saved.");
+  await loadAppSettings();renderNotifications();alert("App settings saved.");
 }
-function exportAuditCSV(){if(!requirePerm(canAdminControls(),"Only Admin users can export audit logs."))return;downloadRowsCSV((auditLogs||[]).map(r=>({created_at:r.created_at,actor:r.actor_email,action:r.action,entity_type:r.entity_type,entity_id:r.entity_id,summary:r.summary,details:JSON.stringify(r.details||{})})),"audit-log.csv");}
+async function uploadCompanyLogo(file){
+  if(!requirePerm(canAdminControls(),"Only Admin users can upload the company logo."))return false;
+  if(!file)return alert("Choose a logo image first."),false;
+  if(!file.size)return alert("The selected logo file is empty."),false;
+  if(!String(file.type||"").startsWith("image/"))return alert("Choose a PNG, JPEG, WebP or other image file."),false;
+  if(file.size>5*1024*1024)return alert("Choose a logo image smaller than 5 MB."),false;
+  return withBusy("Uploading and verifying company logo...",async()=>{
+    const oldPath=String(appSettingValue("company_logo_path","")||"");
+    const extension=(String(file.name||"").split(".").pop()||"png").replace(/[^a-zA-Z0-9]/g,"").toLowerCase()||"png";
+    const path=`app-branding/company-logo-${Date.now()}.${extension}`;
+    const uploaded=await sb.storage.from("inspection-photos").upload(path,file,{cacheControl:"3600",contentType:file.type,upsert:false});
+    if(uploaded.error){alert("Logo upload failed: "+uploaded.error.message);return false;}
+    const verified=await sb.storage.from("inspection-photos").download(path);
+    if(verified.error||!verified.data||verified.data.size<=0){await sb.storage.from("inspection-photos").remove([path]);alert("The uploaded logo could not be verified and was not saved.");return false;}
+    const dataUrl=await blobToDataUrl(verified.data);
+    if(!dataUrl.startsWith("data:image/")){await sb.storage.from("inspection-photos").remove([path]);alert("The uploaded file was not a readable image and was not saved.");return false;}
+    const rows=[
+      {key:"company_logo_path",value:path,updated_by:currentUser.id,updated_at:nowIso()},
+      {key:"company_logo_file_name",value:file.name||"company-logo",updated_by:currentUser.id,updated_at:nowIso()}
+    ];
+    const saved=await sb.from("app_settings").upsert(rows,{onConflict:"key"});
+    if(saved.error){await sb.storage.from("inspection-photos").remove([path]);alert("The logo setting was not saved: "+saved.error.message);return false;}
+    appSettings.company_logo_path=path;appSettings.company_logo_file_name=file.name||"company-logo";
+    companyLogoPath=path;companyLogoDataUrl=dataUrl;
+    try{localStorage.setItem("swCompanyLogoDataUrl",dataUrl);localStorage.setItem("swCompanyLogoPath",path);}catch(_){}
+    applyCompanyLogo();
+    if(oldPath&&oldPath!==path)await sb.storage.from("inspection-photos").remove([oldPath]);
+    await logAudit("company_logo_updated","settings",null,"Company logo updated",{file_name:file.name||"company-logo",storage_path:path});
+    alert("Company logo uploaded and verified.");
+    return true;
+  });
+}
+window.adminSettingsSnapshot=adminSettingsSnapshot;
+window.saveAdminSettingsFromOperations=saveAdminSettingsFromOperations;
+window.uploadCompanyLogo=uploadCompanyLogo;
+window.getCompanyLogoDataUrl=getCompanyLogoDataUrl;
+window.companyLogoMarkup=companyLogoMarkup;
 
 window.addEventListener("DOMContentLoaded",init);
 async function init(){
   if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(console.warn);}
   if(!window.SUPABASE_URL || window.SUPABASE_URL.includes("PASTE_")) configWarning.classList.remove("hidden");
   sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
+  applyCompanyLogo();
   fillTypes(); inDate.value=today(); inNextDue.value=addMonths(today(),6); renderChecklist(); initDateParts(); bindCropCanvas(); bindRecentInspectionLimit();
   const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser){await ensureCurrentProfile(); await loadRoles(); await loadAppSettings(); await loadData(); await refreshAuditLogs();}
 }
@@ -283,8 +343,8 @@ async function loadData(){
   try{let al=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(250); if(!al.error) auditLogs=al.data||[];}catch(e){console.warn("Audit log skipped",e);}
   equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
 }
-function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory(); if(window.certMode) updateCertificateUI(); if(window.adminNotifyLead && !document.getElementById("admin")?.classList.contains("hidden")) renderAdmin();}
-function showTab(id){if(id==="certificates")window.SWOperationsV4?.installCertificatesV424?.();document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export") renderReportsHome();if(id==="admin") renderAdmin();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
+function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory();if(window.certMode) updateCertificateUI();}
+function showTab(id){if(id==="certificates")window.SWOperationsV4?.installCertificatesV424?.();document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));const pane=document.getElementById(id);if(!pane)return;pane.classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export")renderReportsHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
 function recentInspectionLimit(){
   const value=Number(document.getElementById("heightRecentLimit")?.value||10);
   return [10,20,30,50].includes(value)?value:10;
@@ -806,8 +866,8 @@ function checklistHtml(i){const checks=Array.isArray(i.checklist)?i.checklist:[]
 function photoStrip(urls){return urls.length?`<div class="photos">${urls.map(u=>`<img src="${u}">`).join("")}</div>`:`<p class="muted">No photos included.</p>`;}
 function certificatePageHtml(records,title){
   const generated=new Date().toLocaleString();
-  const body=records.map(r=>{const e=r.equipment,i=r.inspection;return `<section class="cert"><div class="certHeader"><div><h1>${esc(appSettingValue("company_name","Spray & Wash"))} Height Safety Inspection Certificate</h1><p>Certificate No: <b>${esc(r.certificate_number)}</b></p></div><div class="brand">SPRAY<br>& WASH</div></div><div class="status ${String(i.result||"").includes("Fail")?"bad":"good"}">${esc(i.result)}</div><div class="grid"><div><h2>Equipment</h2><table><tr><th>Serial</th><td>${esc(e.serial)}</td></tr><tr><th>Type</th><td>${esc(e.type)}</td></tr><tr><th>Manufacturer</th><td>${esc(e.manufacturer||"—")}</td></tr><tr><th>Model</th><td>${esc(e.model||"—")}</td></tr><tr><th>Rope length</th><td>${e.rope_length_m?esc(e.rope_length_m)+" m":"—"}</td></tr><tr><th>Manufactured</th><td>${esc(e.date_manufactured||"—")}</td></tr><tr><th>First used</th><td>${esc(e.date_first_used||"—")}</td></tr><tr><th>Retirement date</th><td>${esc(e.retirement_date||"—")}</td></tr></table></div><div><h2>Inspection</h2><table><tr><th>Date</th><td>${esc(i.inspection_date)}</td></tr><tr><th>Inspector</th><td>${esc(i.inspector||"—")}</td></tr><tr><th>Result</th><td>${esc(i.result)}</td></tr><tr><th>Next due</th><td>${esc(i.next_due||"—")}</td></tr><tr><th>Generated</th><td>${esc(generated)}</td></tr></table></div></div><h2>Checklist</h2>${checklistHtml(i)}<h2>Inspection Notes</h2><p>${esc(i.notes||"No notes recorded.")}</p><div class="photoPage"><h2>Certificate Photos</h2><h3>Equipment Photos</h3>${photoStrip(r.images.equipmentUrls)}<h3>Inspection Photos</h3>${photoStrip(r.images.inspectionUrls)}</div><footer>${esc(appSettingValue("certificate_footer","This certificate was generated from the Spray & Wash Height Safety Register. Verify against the live register before relying on expired downloaded copies."))}</footer></section>`}).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.toolbar{position:sticky;top:0;background:#0f766e;color:white;padding:12px;display:flex;gap:8px;align-items:center;z-index:5}.toolbar button{border:0;border-radius:8px;padding:10px 14px;font-weight:800}.cert{background:white;margin:18px auto;padding:28px;max-width:900px;box-shadow:0 8px 30px #0001;page-break-after:always}.certHeader{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #0f766e;padding-bottom:16px;margin-bottom:16px}.brand{background:#0f766e;color:white;border-radius:12px;padding:14px;font-weight:900;text-align:center}.status{display:inline-block;border-radius:999px;padding:8px 14px;font-weight:900;margin-bottom:12px}.good{background:#dcfce7;color:#166534}.bad{background:#fee2e2;color:#991b1b}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;vertical-align:top}th{width:140px;color:#475569}ul{columns:2}.photoPage{page-break-before:always;margin-top:22px}.photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:start}.photos img{width:100%;height:240px;object-fit:contain;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:4px}.muted{color:#64748b}footer{margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:12px;color:#64748b}@media print{.toolbar{display:none}.cert{box-shadow:none;margin:0;max-width:none;page-break-after:always}body{background:white}}@media(max-width:700px){.grid{grid-template-columns:1fr}ul{columns:1}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save PDF</button><button onclick="window.close()">Close</button><span>${esc(title)} · ${records.length} certificate(s)</span></div>${body}</body></html>`;
+  const body=records.map(r=>{const e=r.equipment,i=r.inspection;return `<section class="cert"><div class="certHeader"><div><h1>${esc(appSettingValue("company_name","Spray & Wash"))} Height Safety Inspection Certificate</h1><p>Certificate No: <b>${esc(r.certificate_number)}</b></p></div><div class="brand">${companyLogoMarkup("certificateLogo")||"SPRAY<br>&amp; WASH"}</div></div><div class="status ${String(i.result||"").includes("Fail")?"bad":"good"}">${esc(i.result)}</div><div class="grid"><div><h2>Equipment</h2><table><tr><th>Serial</th><td>${esc(e.serial)}</td></tr><tr><th>Type</th><td>${esc(e.type)}</td></tr><tr><th>Manufacturer</th><td>${esc(e.manufacturer||"—")}</td></tr><tr><th>Model</th><td>${esc(e.model||"—")}</td></tr><tr><th>Rope length</th><td>${e.rope_length_m?esc(e.rope_length_m)+" m":"—"}</td></tr><tr><th>Manufactured</th><td>${esc(e.date_manufactured||"—")}</td></tr><tr><th>First used</th><td>${esc(e.date_first_used||"—")}</td></tr><tr><th>Retirement date</th><td>${esc(e.retirement_date||"—")}</td></tr></table></div><div><h2>Inspection</h2><table><tr><th>Date</th><td>${esc(i.inspection_date)}</td></tr><tr><th>Inspector</th><td>${esc(i.inspector||"—")}</td></tr><tr><th>Result</th><td>${esc(i.result)}</td></tr><tr><th>Next due</th><td>${esc(i.next_due||"—")}</td></tr><tr><th>Generated</th><td>${esc(generated)}</td></tr></table></div></div><h2>Checklist</h2>${checklistHtml(i)}<h2>Inspection Notes</h2><p>${esc(i.notes||"No notes recorded.")}</p><div class="photoPage"><h2>Certificate Photos</h2><h3>Equipment Photos</h3>${photoStrip(r.images.equipmentUrls)}<h3>Inspection Photos</h3>${photoStrip(r.images.inspectionUrls)}</div><footer>${esc(appSettingValue("certificate_footer","This certificate was generated from the Spray & Wash Height Safety Register. Verify against the live register before relying on expired downloaded copies."))}</footer></section>`}).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;color:#0f172a;margin:0;background:#f8fafc}.toolbar{position:sticky;top:0;background:#0f766e;color:white;padding:12px;display:flex;gap:8px;align-items:center;z-index:5}.toolbar button{border:0;border-radius:8px;padding:10px 14px;font-weight:800}.cert{background:white;margin:18px auto;padding:28px;max-width:900px;box-shadow:0 8px 30px #0001;page-break-after:always}.certHeader{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #0f766e;padding-bottom:16px;margin-bottom:16px}.brand{background:#0f766e;color:white;border-radius:12px;padding:14px;font-weight:900;text-align:center}.certificateLogo{display:block;max-width:150px;max-height:70px;object-fit:contain;background:white;border-radius:8px}.status{display:inline-block;border-radius:999px;padding:8px 14px;font-weight:900;margin-bottom:12px}.good{background:#dcfce7;color:#166534}.bad{background:#fee2e2;color:#991b1b}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;vertical-align:top}th{width:140px;color:#475569}ul{columns:2}.photoPage{page-break-before:always;margin-top:22px}.photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:start}.photos img{width:100%;height:240px;object-fit:contain;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:4px}.muted{color:#64748b}footer{margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:12px;color:#64748b}@media print{.toolbar{display:none}.cert{box-shadow:none;margin:0;max-width:none;page-break-after:always}body{background:white}}@media(max-width:700px){.grid{grid-template-columns:1fr}ul{columns:1}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save PDF</button><button onclick="window.close()">Close</button><span>${esc(title)} · ${records.length} certificate(s)</span></div>${body}</body></html>`;
 }
 function openCertificateWindow(records,title){const html=certificatePageHtml(records,title);const w=window.open("","_blank");if(!w){downloadBlob(html,"inspection-certificates.html","text/html");alert("Popup blocked. The certificate HTML file has been downloaded instead.");return;}w.document.open();w.document.write(html);w.document.close();}
 async function loadCertificateHistory(){const r=await sb.from("certificates").select("*").order("created_at",{ascending:false}).limit(100);if(r.error){console.warn(r.error.message);return;}certificates=r.data||[];renderCertificateHistory();}
