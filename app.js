@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.47
+// Spray & Wash Operations App V4.0.48
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"

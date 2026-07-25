@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.47
+/* Spray & Wash Operations App V4.0.48
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,10 +6,13 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
+  const MACHINERY_TYPE_CODES = { Engine:'ENG', Gearbox:'GBX', Pump:'PMP' };
+  const MACHINERY_TYPE_LABELS = { Engine:'Engine', Gearbox:'Reduction gearbox', Pump:'Pump' };
+  const MACHINERY_SIDE_CODES = { Driver:'DS', Passenger:'PS' };
   const ROLE_DEFS = ['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer'];
   const ROLE_PRESETS = {
     'Field Staff': ['Inspector'],
@@ -48,16 +51,17 @@
     certFilterSearch: '',
     certSelectedIds: new Set(),
     serviceRunAssetId: '',
-    assetFilterClass: '',
-    assetFilterStatus: '',
-    assetFilterDue: '',
-    assetFilterTasks: '',
+    assetSearch: '',
+    assetShow: 'active',
     currentView: 'vehicle-checks',
     editingVehicleId: '',
     editingWashId: '',
+    prefillMachineryVehicleId: '',
+    prefillMachinerySide: '',
     openTaskId: '',
     lastError: ''
   };
+  let assetSearchTimer = null;
 
   function byId(id){ return document.getElementById(id); }
   function esc(v){ return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
@@ -67,6 +71,30 @@
   function addDays(dateStr, days){ const d = new Date((dateStr || today()) + 'T00:00:00'); d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0,10); }
   function daysUntil(dateStr){ if(!dateStr) return null; const d = new Date(dateStr + 'T00:00:00'); const n = new Date(today() + 'T00:00:00'); return Math.ceil((d - n) / 86400000); }
   function optionList(values, selected){ return values.map(v => `<option value="${esc(v)}" ${String(v)===String(selected)?'selected':''}>${esc(v)}</option>`).join(''); }
+  function normalizeRego(value){ return String(value || '').toUpperCase().replace(/\s+/g,'').trim(); }
+  function machineryType(item){
+    const saved = String(item?.machinery_type || '').trim();
+    if(MACHINERY_TYPE_CODES[saved]) return saved;
+    const legacy = `${item?.equipment_type || ''} ${item?.name || ''}`.toLowerCase();
+    if(legacy.includes('gear')) return 'Gearbox';
+    if(legacy.includes('pump')) return 'Pump';
+    return 'Engine';
+  }
+  function machineryTypeLabel(itemOrType){
+    const type = typeof itemOrType === 'string' ? itemOrType : machineryType(itemOrType);
+    return MACHINERY_TYPE_LABELS[type] || type || 'Machinery';
+  }
+  function buildInstalledMachineryIdentifier(rego, side, type){
+    const reg = normalizeRego(rego);
+    const sideCode = MACHINERY_SIDE_CODES[side] || '';
+    const typeCode = MACHINERY_TYPE_CODES[type] || '';
+    return reg && sideCode && typeCode ? `${reg}-${sideCode}-${typeCode}` : '';
+  }
+  function machineryIdentifier(item){
+    const vehicle = state.vehicles.find(v => String(v.id) === String(item?.assigned_vehicle_id || ''));
+    const installed = buildInstalledMachineryIdentifier(vehicle?.rego, item?.mounting_side, machineryType(item));
+    return installed || item?.asset_identifier || item?.name || 'Unassigned machinery';
+  }
   function roleText(){ return state.roles.length ? state.roles.join(', ') : 'No V4 role loaded'; }
   function isAdmin(){ return state.roles.includes('Admin'); }
   function hasRole(role){ return isAdmin() || state.roles.includes(role); }
@@ -78,8 +106,8 @@
   function targetName(taskOrInspection){
     const v = state.vehicles.find(x => x.id === taskOrInspection.vehicle_id);
     const w = state.washEquipment.find(x => x.id === taskOrInspection.washing_equipment_id);
-    if(v && w) return `${v.rego || v.name || 'Vehicle'} / ${w.name}`;
-    if(w) return w.name;
+    if(v && w) return `${normalizeRego(v.rego) || v.name || 'Vehicle'} / ${machineryIdentifier(w)}`;
+    if(w) return machineryIdentifier(w);
     if(v) return v.rego || v.name || 'Vehicle';
     return 'Unknown target';
   }
@@ -233,6 +261,23 @@
       .ops-filter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.75rem; margin:.75rem 0; }
       .ops-filter-grid label { display:flex; flex-direction:column; gap:.25rem; font-size:.86rem; font-weight:800; color:#334155; }
       .ops-filter-grid select,.ops-filter-grid input { border:1px solid #cfd8e3; border-radius:.65rem; padding:.58rem .65rem; font:inherit; background:white; }
+      .ops-asset-toolbar{display:grid;grid-template-columns:minmax(240px,2fr) minmax(180px,1fr) auto;gap:.75rem;align-items:end}
+      .ops-asset-toolbar label{display:flex;flex-direction:column;gap:.25rem;font-size:.86rem;font-weight:800;color:#334155}
+      .ops-asset-toolbar input,.ops-asset-toolbar select{width:100%;border:1px solid #cfd8e3;border-radius:.65rem;padding:.68rem .72rem;font:inherit;background:white;box-sizing:border-box}
+      .ops-vehicle-asset{border:1px solid #dbe3ec;border-radius:1rem;background:#fff;margin:1rem 0;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+      .ops-vehicle-asset-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;padding:1rem;background:#f8fafc;border-bottom:1px solid #e5ebf2}
+      .ops-asset-id{font-size:1.15rem;font-weight:900;letter-spacing:.02em;color:#0f4f4a}
+      .ops-asset-meta{display:flex;gap:.45rem .8rem;flex-wrap:wrap;margin-top:.35rem;color:#64748b;font-size:.88rem}
+      .ops-service-note{margin-top:.65rem;padding:.65rem .75rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:.7rem;color:#7c2d12;white-space:pre-wrap}
+      .ops-machinery-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;padding:1rem}
+      .ops-machinery-side{border:1px solid #dbe3ec;border-radius:.85rem;padding:.85rem;background:#fbfdff}
+      .ops-machinery-side-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.6rem}
+      .ops-machinery-side h4{margin:0}
+      .ops-machinery-card{border:1px solid #e5ebf2;border-radius:.75rem;padding:.75rem;background:white;margin:.55rem 0}
+      .ops-machinery-card-head{display:flex;justify-content:space-between;gap:.65rem;align-items:flex-start;flex-wrap:wrap}
+      .ops-spec-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.35rem .75rem;margin-top:.55rem;font-size:.86rem;color:#475569}
+      .ops-unassigned{margin-top:1rem}
+      .ops-machinery-fields[hidden]{display:none!important}
       .ops-cert-generate-step { margin-top:1rem; }
       .ops-cert-generate-step button { width:100%; }
       .certSelectList{max-height:360px!important;}
@@ -242,7 +287,7 @@
       .v415-selected-review{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;margin-top:8px;}
       .v415-compact-card{padding:12px!important;}
       .v415-card-hidden{display:none!important;}
-      @media (max-width: 720px){ .ops-header { flex-direction:column; } .ops-table { min-width:620px; } .ops-logo-setting{grid-template-columns:1fr} }
+      @media (max-width: 720px){ .ops-header { flex-direction:column; } .ops-table { min-width:620px; } .ops-logo-setting{grid-template-columns:1fr} .ops-asset-toolbar{grid-template-columns:1fr}.ops-machinery-sides{grid-template-columns:1fr} }
     `;
     const style = document.createElement('style');
     style.id = 'operationsV4Styles';
@@ -810,7 +855,7 @@
     return `
       <div class="ops-grid">
         ${statCard('Vehicles due/overdue', vehicleDue.length, 'Fortnightly vehicle checks needing action','ops-stat-amber','assets-due-vehicles')}
-        ${statCard('Washing gear due/overdue', washDue.length, 'Water blasters, pumps and gear needing checks','ops-stat-green','assets-due-washing')}
+        ${statCard('Machinery due/overdue', washDue.length, 'Engines, gearboxes and pumps needing attention','ops-stat-green','assets-due-washing')}
         ${statCard('Open tasks', open.length, 'Reactive, scheduled and manual work items','ops-stat-total','tasks-open')}
         ${statCard('Waiting on parts', waiting.length, 'Tasks blocked by parts or supplies','ops-stat-red','tasks-waiting')}
         ${statCard('Preventive services due', scheduledDue.length, 'Scheduled date-based maintenance','ops-stat-blue','schedules-due')}
@@ -824,7 +869,7 @@
   function dueListHtml(){
     const rows = [];
     state.vehicles.filter(v=>v.status==='Active').forEach(v => rows.push({type:'Vehicle', name:v.rego || v.name, due:dueDateFor('vehicle',v)}));
-    state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).forEach(w => rows.push({type:'Washing equipment', name:w.name, due:dueDateFor('washing_equipment',w)}));
+    state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).forEach(w => rows.push({type:'Machinery', name:machineryIdentifier(w), due:dueDateFor('washing_equipment',w)}));
     rows.sort((a,b)=> (a.due || '').localeCompare(b.due || '')).splice(10);
     if(!rows.length) return '<p class="ops-subtle">No registered active items yet.</p>';
     return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Type</th><th>Item</th><th>Due</th><th>Status</th></tr>${rows.map(r=>`<tr><td>${esc(r.type)}</td><td>${esc(r.name || 'Unnamed')}</td><td>${nzDate(r.due)}</td><td>${targetDueStatus(daysUntil(r.due))}</td></tr>`).join('')}</table></div>`;
@@ -836,17 +881,11 @@
     state.currentView = 'management-dashboard';
     if(shortcut === 'assets-due-vehicles'){
       state.currentView = 'assets';
-      state.assetFilterClass = 'Vehicle';
-      state.assetFilterDue = 'due';
-      state.assetFilterStatus = '';
-      state.assetFilterTasks = '';
+      state.assetShow = 'attention';
       state.assetSearch = '';
     } else if(shortcut === 'assets-due-washing'){
       state.currentView = 'assets';
-      state.assetFilterClass = '';
-      state.assetFilterDue = 'due';
-      state.assetFilterStatus = '';
-      state.assetFilterTasks = '';
+      state.assetShow = 'attention';
       state.assetSearch = '';
     } else if(shortcut === 'tasks-open'){
       state.currentView = 'tasks';
@@ -870,21 +909,6 @@
       </div>
       <div class="ops-card" style="margin-top:1rem"><h3>Vehicle register</h3>${vehicleTableHtml()}</div>`;
   }
-  function vehicleFormHtml(){
-    const v = state.vehicles.find(x=>x.id===state.editingVehicleId) || {};
-    return `<form id="opsVehicleForm" class="ops-form">
-      <input type="hidden" id="opsVehicleId" value="${esc(v.id||'')}">
-      <label>Rego *<input id="opsVehicleRego" required value="${esc(v.rego||'')}"></label>
-      <label>Name<input id="opsVehicleName" value="${esc(v.name||'')}"></label>
-      <label>Make/model<input id="opsVehicleMake" value="${esc(v.make_model||'')}"></label>
-      <label>Year<input id="opsVehicleYear" type="number" value="${esc(v.year||'')}"></label>
-      <label>Status<select id="opsVehicleStatus">${optionList(['Active','Inactive','Sold','Retired'], v.status||'Active')}</select></label>
-      <label>Assigned driver<input id="opsVehicleDriver" value="${esc(v.assigned_driver||'')}"></label>
-      <label>Inspection frequency days<input id="opsVehicleFreq" type="number" min="1" value="${esc(v.inspection_frequency_days||14)}"></label>
-      <label class="ops-span-2">Notes<textarea id="opsVehicleNotes">${esc(v.notes||'')}</textarea></label>
-      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save vehicle</button><button class="ops-btn ghost" type="button" data-ops-action="clearVehicle">Clear</button></div>
-    </form>`;
-  }
   function vehicleTableHtml(rows){
     rows = rows || state.vehicles;
     if(!rows.length) return '<p class="ops-subtle">No vehicles added yet.</p>';
@@ -894,89 +918,155 @@
   function washingHtml(){
     return `
       <div class="ops-card">
-        <h3>${state.editingWashId ? 'Edit washing equipment' : 'Add washing equipment'}</h3>
-        ${canManage() ? washingFormHtml() : '<p class="ops-subtle">Read-only. Ask an Admin or Equipment Manager to edit washing equipment.</p>'}
+        <h3>${state.editingWashId ? 'Edit machinery' : 'Add machinery'}</h3>
+        ${canManage() ? washingFormHtml() : '<p class="ops-subtle">Read-only. Ask an Admin or Equipment Manager to edit machinery.</p>'}
       </div>
-      <div class="ops-card" style="margin-top:1rem"><h3>Washing equipment register</h3>${washingTableHtml()}</div>`;
-  }
-  function washingFormHtml(){
-    const w = state.washEquipment.find(x=>x.id===state.editingWashId) || {};
-    return `<form id="opsWashingForm" class="ops-form">
-      <input type="hidden" id="opsWashId" value="${esc(w.id||'')}">
-      <label>Name *<input id="opsWashName" required value="${esc(w.name||'')}"></label>
-      <label>Type<input id="opsWashType" value="${esc(w.equipment_type||'Water Blaster')}"></label>
-      <label>Serial number<input id="opsWashSerial" value="${esc(w.serial_number||'')}"></label>
-      <label>Assigned vehicle<select id="opsWashVehicle"><option value="">Not assigned</option>${state.vehicles.map(v=>`<option value="${v.id}" ${v.id===w.assigned_vehicle_id?'selected':''}>${esc(v.rego || v.name)}</option>`).join('')}</select></label>
-      <label>Status<select id="opsWashStatus">${optionList(['Active','Inactive','Retired','Quarantined'], w.status||'Active')}</select></label>
-      <label>Inspection frequency days<input id="opsWashFreq" type="number" min="1" value="${esc(w.inspection_frequency_days||14)}"></label>
-      <label>Engine make/model<input id="opsWashEngine" value="${esc(w.engine_make_model||'')}"></label>
-      <label>Pump make/model<input id="opsWashPump" value="${esc(w.pump_make_model||'')}"></label>
-      <label class="ops-span-2">Notes<textarea id="opsWashNotes">${esc(w.notes||'')}</textarea></label>
-      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save washing equipment</button><button class="ops-btn ghost" type="button" data-ops-action="clearWash">Clear</button></div>
-    </form>`;
+      <div class="ops-card" style="margin-top:1rem"><h3>Machinery register</h3>${washingTableHtml()}</div>`;
   }
   function washingTableHtml(rows){
     rows = rows || state.washEquipment;
-    if(!rows.length) return '<p class="ops-subtle">No washing equipment added yet.</p>';
-    return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Type</th><th>Vehicle</th><th>Status</th><th>Engine / pump</th><th>Next due</th><th>Actions</th></tr>${rows.map(w=>{ const v=state.vehicles.find(x=>x.id===w.assigned_vehicle_id); const due=dueDateFor('washing_equipment',w); return `<tr><td><strong>${esc(w.name)}</strong><br><span class="ops-subtle">${esc(w.serial_number||'')}</span></td><td>${esc(w.equipment_type)}</td><td>${esc(v?.rego || v?.name || '—')}</td><td>${statusPill(w.status)}</td><td>${esc(w.engine_make_model||'—')}<br><span class="ops-subtle">${esc(w.pump_make_model||'—')}</span></td><td>${nzDate(due)} ${targetDueStatus(daysUntil(due))}</td><td>${canManage()?`<button class="ops-btn ghost" data-ops-edit-wash="${w.id}">Edit</button>`:''}</td></tr>`; }).join('')}</table></div>`;
+    if(!rows.length) return '<p class="ops-subtle">No machinery added yet.</p>';
+    return `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Identifier</th><th>Type</th><th>Vehicle / side</th><th>Status</th><th>Make / model</th><th>Next due</th><th>Actions</th></tr>${rows.map(w=>{ const v=state.vehicles.find(x=>x.id===w.assigned_vehicle_id); const due=dueDateFor('washing_equipment',w); return `<tr><td><strong>${esc(machineryIdentifier(w))}</strong><br><span class="ops-subtle">${esc(w.serial_number||'')}</span></td><td>${esc(machineryTypeLabel(w))}</td><td>${esc(v?.rego || 'Unassigned')}${w.mounting_side?` · ${esc(w.mounting_side)} side`:''}</td><td>${statusPill(w.status)}</td><td>${esc(w.make_model||'—')}</td><td>${nzDate(due)} ${targetDueStatus(daysUntil(due))}</td><td>${canManage()?`<button class="ops-btn ghost" data-ops-edit-wash="${w.id}">Edit</button>`:''}</td></tr>`; }).join('')}</table></div>`;
   }
 
 
   function uniqueValues(values){ return Array.from(new Set(values.map(v=>String(v||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b)); }
 
   function assetSearchHaystack(kind, item){
-    if(kind === 'vehicle') return [item.rego,item.name,item.make_model,item.year,item.status,item.assigned_driver,item.notes,'vehicle'].join(' ').toLowerCase();
-    const v = state.vehicles.find(x=>x.id===item.assigned_vehicle_id);
-    return [item.name,item.equipment_type,item.serial_number,item.status,item.engine_make_model,item.pump_make_model,item.notes,v?.rego,v?.name,'washing equipment','water blaster'].join(' ').toLowerCase();
+    if(kind === 'vehicle'){
+      return [
+        normalizeRego(item.rego),item.name,item.make_model,item.year,item.status,item.assigned_driver,
+        item.vin_chassis_number,item.engine_code,item.fuel_type,item.oil_filter_part_number,
+        item.engine_air_filter_part_number,item.service_notes,item.notes,'vehicle'
+      ].join(' ').toLowerCase();
+    }
+    const v = state.vehicles.find(x=>String(x.id)===String(item.assigned_vehicle_id||''));
+    return [
+      machineryIdentifier(item),machineryTypeLabel(item),item.make_model,item.serial_number,item.status,
+      item.oil_grade,item.spark_plug_part_number,item.air_filter_part_number,item.service_notes,item.notes,
+      v?.rego,v?.name,item.mounting_side,'machinery'
+    ].join(' ').toLowerCase();
   }
-  function assetMatches(kind, item){
-    const q = String(state.assetSearch || '').trim().toLowerCase();
-    if(q && !assetSearchHaystack(kind, item).includes(q)) return false;
-    const cls = state.assetFilterClass || '';
-    if(cls){
-      if(cls === 'Vehicle' && kind !== 'vehicle') return false;
-      if(cls !== 'Vehicle' && kind === 'vehicle') return false;
-      if(cls !== 'Vehicle' && kind === 'washing' && String(item.equipment_type || '') !== cls) return false;
+  function assetHasOpenTasks(kind, item){
+    return openTasks().some(t => kind === 'vehicle' ? String(t.vehicle_id) === String(item.id) : String(t.washing_equipment_id) === String(item.id));
+  }
+  function assetNeedsAttention(kind, item){
+    if(String(item.status || '') === 'Quarantined') return true;
+    if(assetHasOpenTasks(kind, item)) return true;
+    const due = daysUntil(dueDateFor(kind === 'vehicle' ? 'vehicle' : 'washing_equipment', item));
+    return due !== null && due <= 0;
+  }
+  function assetShowMatches(kind, item){
+    const show = state.assetShow || 'active';
+    const status = String(item.status || '');
+    if(show === 'all') return true;
+    if(show === 'attention') return assetNeedsAttention(kind, item);
+    if(show === 'inactive') return ['Inactive','Retired','Sold'].includes(status);
+    return status === 'Active';
+  }
+  function vehicleMachinery(vehicleId){
+    return state.washEquipment
+      .filter(w=>String(w.assigned_vehicle_id||'')===String(vehicleId))
+      .sort((a,b)=>String(a.mounting_side||'').localeCompare(String(b.mounting_side||'')) || machineryTypeLabel(a).localeCompare(machineryTypeLabel(b)));
+  }
+  function specValue(label, value, suffix=''){
+    if(value === null || value === undefined || value === '') return '';
+    return `<div><strong>${esc(label)}:</strong> ${esc(value)}${esc(suffix)}</div>`;
+  }
+  function machinerySpecsHtml(w){
+    const type = machineryType(w);
+    const common = [
+      specValue('Make/model', w.make_model),
+      specValue('Serial', w.serial_number),
+      specValue('Oil', [w.oil_grade, w.oil_volume_l ? `${w.oil_volume_l} L` : ''].filter(Boolean).join(' · '))
+    ];
+    if(type === 'Engine'){
+      common.push(specValue('Spark plug',w.spark_plug_part_number),specValue('Air filter',w.air_filter_part_number));
     }
-    const status = state.assetFilterStatus || '';
-    if(status && String(item.status || '') !== status) return false;
-    const due = state.assetFilterDue || '';
-    if(due){
-      const d = daysUntil(dueDateFor(kind === 'vehicle' ? 'vehicle' : 'washing_equipment', item));
-      if(due === 'overdue' && !(d !== null && d < 0)) return false;
-      if(due === 'due' && !(d === null || d <= 0)) return false;
-      if(due === 'ok' && !(d !== null && d > 0)) return false;
-      if(due === 'no-history' && d !== null) return false;
+    if(type === 'Pump'){
+      common.push(specValue('Pressure',w.pressure_psi,' PSI'),specValue('Max output',w.max_output_lpm,' L/min'));
     }
-    const taskFilter = state.assetFilterTasks || '';
-    if(taskFilter){
-      const itemTasks = openTasks().filter(t => kind === 'vehicle' ? t.vehicle_id === item.id : t.washing_equipment_id === item.id);
-      if(taskFilter === 'open' && !itemTasks.length) return false;
-      if(taskFilter === 'none' && itemTasks.length) return false;
-      if(taskFilter === 'waiting' && !itemTasks.some(t=>t.status === 'Waiting on Parts' || t.status === 'Waiting on Someone')) return false;
-    }
-    return true;
+    return common.filter(Boolean).join('') || '<div class="ops-subtle">No machinery specifications entered.</div>';
+  }
+  function machineryCardHtml(w){
+    return `<div class="ops-machinery-card">
+      <div class="ops-machinery-card-head">
+        <div><div class="ops-asset-id">${esc(machineryIdentifier(w))}</div><strong>${esc(machineryTypeLabel(w))}</strong></div>
+        <div>${statusPill(w.status)} ${canManage()?`<button class="ops-btn ghost" type="button" data-ops-edit-wash="${esc(w.id)}">Edit</button>`:''}</div>
+      </div>
+      <div class="ops-spec-list">${machinerySpecsHtml(w)}</div>
+      ${w.service_notes || w.notes ? `<div class="ops-service-note"><strong>Current service state / notes</strong><br>${esc(w.service_notes || w.notes)}</div>` : ''}
+    </div>`;
+  }
+  function sideMachineryHtml(vehicle, side, rows){
+    return `<div class="ops-machinery-side">
+      <div class="ops-machinery-side-head"><h4>${esc(side)} side</h4>${canManage()?`<button class="ops-btn ghost" type="button" data-ops-add-machinery="${esc(vehicle.id)}" data-ops-machinery-side="${esc(side)}">+ Add machinery</button>`:''}</div>
+      ${rows.length ? rows.map(machineryCardHtml).join('') : '<p class="ops-subtle">No machinery installed on this side.</p>'}
+    </div>`;
+  }
+  function vehicleServiceSpecsHtml(v){
+    return [
+      specValue('Make/model',v.make_model),
+      specValue('Year',v.year),
+      specValue('Fuel',v.fuel_type),
+      specValue('Engine',v.engine_code),
+      specValue('Engine oil',[v.engine_oil_grade,v.engine_oil_volume_l?`${v.engine_oil_volume_l} L`:''].filter(Boolean).join(' · ')),
+      specValue('Oil filter',v.oil_filter_part_number),
+      specValue('Air filter',v.engine_air_filter_part_number),
+      specValue('Service interval',[v.service_interval_km?`${v.service_interval_km} km`:'',v.service_interval_months?`${v.service_interval_months} months`:''].filter(Boolean).join(' or '))
+    ].filter(Boolean).join('');
+  }
+  function vehicleAssetCardHtml(v, machineryRows){
+    const driver = machineryRows.filter(w=>w.mounting_side==='Driver');
+    const passenger = machineryRows.filter(w=>w.mounting_side==='Passenger');
+    return `<div class="ops-vehicle-asset">
+      <div class="ops-vehicle-asset-head">
+        <div>
+          <div class="ops-asset-id">${esc(normalizeRego(v.rego) || 'Vehicle')}</div>
+          <strong>${esc(v.name || v.make_model || 'Vehicle')}</strong>
+          <div class="ops-asset-meta"><span>${statusPill(v.status)}</span>${v.assigned_driver?`<span>Driver: ${esc(v.assigned_driver)}</span>`:''}${v.current_odometer?`<span>Odometer: ${esc(v.current_odometer)} km</span>`:''}</div>
+          <div class="ops-spec-list">${vehicleServiceSpecsHtml(v) || '<div class="ops-subtle">No vehicle service specifications entered.</div>'}</div>
+          ${v.service_notes || v.notes ? `<div class="ops-service-note"><strong>Current service state / notes</strong><br>${esc(v.service_notes || v.notes)}</div>` : ''}
+        </div>
+        ${canManage()?`<button class="ops-btn ghost" type="button" data-ops-edit-vehicle="${esc(v.id)}">Edit vehicle</button>`:''}
+      </div>
+      <div class="ops-machinery-sides">${sideMachineryHtml(v,'Driver',driver)}${sideMachineryHtml(v,'Passenger',passenger)}</div>
+    </div>`;
   }
   function assetsHtml(){
-    const assetClasses = ['Vehicle'].concat(uniqueValues(state.washEquipment.map(w=>w.equipment_type || 'Washing Equipment')));
-    const statuses = uniqueValues(state.vehicles.map(v=>v.status).concat(state.washEquipment.map(w=>w.status)));
-    const vehicleRows = state.vehicles.filter(v => assetMatches('vehicle', v));
-    const washRows = state.washEquipment.filter(w => assetMatches('washing', w));
+    const q = String(state.assetSearch || '').trim().toLowerCase();
+    const vehicles = state.vehicles.map(v=>{
+      const allMachinery = vehicleMachinery(v.id);
+      const vehicleSearchMatch = !q || assetSearchHaystack('vehicle',v).includes(q);
+      const machinerySearchRows = !q || vehicleSearchMatch ? allMachinery : allMachinery.filter(w=>assetSearchHaystack('machinery',w).includes(q));
+      const shownMachinery = machinerySearchRows.filter(w=>assetShowMatches('machinery',w));
+      const showVehicle = assetShowMatches('vehicle',v);
+      const hasMatchingMachinery = shownMachinery.length > 0;
+      return {v,rows:shownMachinery,visible:(vehicleSearchMatch && showVehicle) || hasMatchingMachinery};
+    }).filter(x=>x.visible);
+    const unassigned = state.washEquipment
+      .filter(w=>!w.assigned_vehicle_id)
+      .filter(w=>!q || assetSearchHaystack('machinery',w).includes(q))
+      .filter(w=>assetShowMatches('machinery',w));
+    const machineryCount = vehicles.reduce((n,x)=>n+x.rows.length,0) + unassigned.length;
+    const filterActive = Boolean(q) || (state.assetShow || 'active') !== 'active';
     return `<div class="ops-card">
-      <div class="ops-section-title"><div><h3>Assets</h3><p class="ops-subtle">Filter the vehicle and washing equipment registers by asset class, status, due items and open tasks.</p></div></div>
-      <div class="ops-filter-grid">
-        <label>Asset class<select id="opsAssetFilterClass"><option value="">All asset classes</option>${assetClasses.map(v=>`<option value="${esc(v)}" ${state.assetFilterClass===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
-        <label>Status<select id="opsAssetFilterStatus"><option value="">All statuses</option>${statuses.map(v=>`<option value="${esc(v)}" ${state.assetFilterStatus===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
-        <label>Due status<select id="opsAssetFilterDue"><option value="">All due states</option><option value="due" ${state.assetFilterDue==='due'?'selected':''}>Due / overdue / no history</option><option value="overdue" ${state.assetFilterDue==='overdue'?'selected':''}>Overdue only</option><option value="no-history" ${state.assetFilterDue==='no-history'?'selected':''}>No history</option><option value="ok" ${state.assetFilterDue==='ok'?'selected':''}>Not due</option></select></label>
-        <label>Tasks<select id="opsAssetFilterTasks"><option value="">All task states</option><option value="open" ${state.assetFilterTasks==='open'?'selected':''}>Has open tasks</option><option value="waiting" ${state.assetFilterTasks==='waiting'?'selected':''}>Waiting on someone/parts</option><option value="none" ${state.assetFilterTasks==='none'?'selected':''}>No open tasks</option></select></label>
-        <label>Keyword<input id="opsAssetSearch" type="search" value="${esc(state.assetSearch||'')}" placeholder="Rego, serial, model, notes"></label>
+      <div class="ops-section-title"><div><h3>Assets</h3><p class="ops-subtle">Vehicles are primary assets. Engines, reduction gearboxes and pumps are recorded beneath their current vehicle and side.</p></div></div>
+      <div class="ops-asset-toolbar">
+        <label>Search assets<input id="opsAssetSearch" type="search" value="${esc(state.assetSearch||'')}" placeholder="Registration, machinery ID, model, serial or notes"></label>
+        <label>Show<select id="opsAssetShow"><option value="active" ${(state.assetShow||'active')==='active'?'selected':''}>Active assets</option><option value="attention" ${state.assetShow==='attention'?'selected':''}>Needs attention</option><option value="inactive" ${state.assetShow==='inactive'?'selected':''}>Inactive or retired</option><option value="all" ${state.assetShow==='all'?'selected':''}>All assets</option></select></label>
+        ${filterActive?'<button class="ops-btn ghost" type="button" data-ops-action="clearAssetFilters">Clear filter</button>':''}
       </div>
-      <div class="ops-actions"><button class="ops-btn ghost" type="button" data-ops-action="clearAssetFilters">Clear filters</button></div>
-      <div class="ops-subtle">${vehicleRows.length} vehicle${vehicleRows.length===1?'':'s'} and ${washRows.length} washing equipment item${washRows.length===1?'':'s'} shown.</div>
+      <div class="ops-subtle" style="margin-top:.65rem">${vehicles.length} vehicle${vehicles.length===1?'':'s'} and ${machineryCount} machinery item${machineryCount===1?'':'s'} shown.</div>
     </div>
-    ${canManage() ? `<div class="ops-grid"><div class="ops-card"><details ${state.editingVehicleId?'open':''}><summary><strong>${state.editingVehicleId ? 'Edit vehicle' : 'Add vehicle'}</strong></summary><div style="margin-top:.8rem">${vehicleFormHtml()}</div></details></div><div class="ops-card"><details ${state.editingWashId?'open':''}><summary><strong>${state.editingWashId ? 'Edit washing equipment' : 'Add washing equipment'}</strong></summary><div style="margin-top:.8rem">${washingFormHtml()}</div></details></div></div>` : '<div class="ops-card"><p class="ops-subtle">Read-only. Ask an Admin or Equipment Manager to edit assets.</p></div>'}
-    <div class="ops-card"><h3>Vehicles</h3>${vehicleTableHtml(vehicleRows)}</div>
-    <div class="ops-card"><h3>Washing equipment</h3>${washingTableHtml(washRows)}</div>`;
+    ${canManage() ? `<div class="ops-grid">
+      <div class="ops-card"><details ${state.editingVehicleId?'open':''}><summary><strong>${state.editingVehicleId ? 'Edit vehicle' : 'Add vehicle'}</strong></summary><div style="margin-top:.8rem">${vehicleFormHtml()}</div></details></div>
+      <div class="ops-card"><details ${state.editingWashId||state.prefillMachineryVehicleId?'open':''}><summary><strong>${state.editingWashId ? 'Edit machinery' : 'Add machinery'}</strong></summary><div style="margin-top:.8rem">${washingFormHtml()}</div></details></div>
+    </div>` : '<div class="ops-card"><p class="ops-subtle">Read-only. Ask an Admin or Equipment Manager to edit assets.</p></div>'}
+    ${vehicles.length ? vehicles.map(x=>vehicleAssetCardHtml(x.v,x.rows)).join('') : '<div class="ops-card"><p class="ops-subtle">No vehicles match the current filter.</p></div>'}
+    <div class="ops-card ops-unassigned"><div class="ops-section-title"><div><h3>Unassigned machinery</h3><p class="ops-subtle">Machinery held as a spare or not currently installed on a vehicle.</p></div></div>
+      ${unassigned.length ? unassigned.map(machineryCardHtml).join('') : '<p class="ops-subtle">No unassigned machinery matches the current filter.</p>'}
+    </div>`;
   }
 
   function inspectionHtml(){
@@ -992,7 +1082,7 @@
       <label>Inspection date *<input id="opsInspectionDate" type="date" value="${today()}" required></label>
       <label>Inspector<input id="opsInspectorName" value="${esc(inspectorDisplayName())}" readonly></label>
       ${['vehicle','combined'].includes(type) ? `<label>Vehicle *<select id="opsInspectionVehicle" required><option value="">Select vehicle</option>${state.vehicles.filter(v=>v.status==='Active').map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>` : ''}
-      ${['washing_equipment','combined'].includes(type) ? `<label>Washing equipment<select id="opsInspectionWash"><option value="">Select washing equipment</option>${state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>` : ''}
+      ${['washing_equipment','combined'].includes(type) ? `<label>Machinery<select id="opsInspectionWash"><option value="">Select machinery</option>${state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))}</option>`).join('')}</select></label>` : ''}
       <label>Odometer / mileage<input id="opsInspectionOdo" type="number" step="0.1"></label>
       <label class="ops-span-2">General notes<textarea id="opsInspectionNotes"></textarea></label>
       <div class="ops-span-2"><h3>Checklist</h3>${checklistQuestionsHtml(template.id)}</div>
@@ -1061,11 +1151,11 @@
   function taskQuickFilterLabel(){ return ({open:'Open tasks', waiting:'Waiting on parts/someone'}[state.taskQuickFilter] || state.taskQuickFilter || 'Filtered'); }
   function manualTaskFormHtml(){
     return `<details><summary><strong>Add manual task</strong></summary><form id="opsManualTaskForm" class="ops-form" style="margin-top:.8rem">
-      <label>Target type<select id="opsManualTargetType"><option value="washing_equipment">Washing equipment</option><option value="vehicle">Vehicle</option></select></label>
-      <label>Washing equipment<select id="opsManualWash"><option value="">None</option>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>
+      <label>Target type<select id="opsManualTargetType"><option value="washing_equipment">Machinery</option><option value="vehicle">Vehicle</option></select></label>
+      <label>Machinery<select id="opsManualWash"><option value="">None</option>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))}</option>`).join('')}</select></label>
       <label>Vehicle<select id="opsManualVehicle"><option value="">None</option>${state.vehicles.map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>
       <label>Title<input id="opsManualTitle" required></label>
-      <label><span>Apply to matching equipment type</span><select id="opsManualApplyScope"><option value="single">Standalone/single task only</option><option value="same_type">Create one for all washing equipment of the same type</option></select></label>
+      <label><span>Apply to matching machinery type</span><select id="opsManualApplyScope"><option value="single">Standalone/single task only</option><option value="same_type">Create one for all machinery of the same type</option></select></label>
       <label>Priority<select id="opsManualPriority">${optionList(PRIORITIES,'Medium')}</select></label>
       <label>Due date<input id="opsManualDue" type="date"></label>
       <label class="ops-span-2">Description<textarea id="opsManualDescription"></textarea></label>
@@ -1120,15 +1210,15 @@
   }
   function standardMaintenanceHtml(){
     return `<details open><summary><strong>Standard maintenance templates</strong></summary><div class="ops-form" style="margin-top:.8rem">
-      <label>Equipment<select id="opsStdWash">${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)} (${esc(w.equipment_type||'')})</option>`).join('')}</select></label>
+      <label>Machinery<select id="opsStdWash">${state.washEquipment.map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))} (${esc(machineryTypeLabel(w))})</option>`).join('')}</select></label>
       <label>Default next due date<input id="opsStdNextDate" type="date" value="${addDays(today(), 30)}"></label>
       <div class="ops-span-2"><div class="ops-subtle">These procedure templates will be attached as date-based schedules. Adding a new Water Blaster item also automatically receives these templates.</div>${standardProcedures().map(p=>`<label class="ops-check"><input type="checkbox" class="ops-std-proc" value="${p.id}" checked> ${esc(p.name)} ${p.frequency_days?`(${p.frequency_days} days)`:''}</label>`).join('') || '<p class="ops-subtle">No standard procedures found. Run the V4.0.4 migration.</p>'}</div>
-      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="button" data-ops-action="applyStdSelected">Apply to selected equipment</button><button class="ops-btn ghost" type="button" data-ops-action="applyStdSameType">Apply to all equipment of same type</button></div>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="button" data-ops-action="applyStdSelected">Apply to selected machinery</button><button class="ops-btn ghost" type="button" data-ops-action="applyStdSameType">Apply to all machinery of same type</button></div>
     </div></details>`;
   }
   function scheduleFormHtml(){
     return `<details><summary><strong>Add standalone maintenance schedule</strong></summary><form id="opsScheduleForm" class="ops-form" style="margin-top:.8rem">
-      <label>Washing equipment<select id="opsScheduleWash" required>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></label>
+      <label>Machinery<select id="opsScheduleWash" required>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))}</option>`).join('')}</select></label>
       <label>Procedure<select id="opsScheduleProcedure" required>${state.procedures.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>
       <label>Frequency days<input id="opsScheduleFreqDays" type="number" min="1" placeholder="e.g. 180"></label>
       <label>Next due date<input id="opsScheduleNextDate" type="date"></label>
@@ -1139,7 +1229,7 @@
     let scheduleRows = state.schedules.slice();
     if(state.scheduleQuickFilter === 'due') scheduleRows = scheduleRows.filter(scheduleIsDue);
     if(!scheduleRows.length) return '<p class="ops-subtle">No preventive maintenance schedules match the current filter.</p>';
-    return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment</th><th>Procedure</th><th>Frequency</th><th>Next due</th><th>Status</th></tr>${scheduleRows.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name||'Unknown')}</td><td>${esc(p?.name||'Unknown')}</td><td>${esc(s.frequency_days||p?.frequency_days||'—')} days</td><td>${nzDate(s.next_due_at)}</td><td>${scheduleIsDue(s)?'<span class="ops-pill ops-bad">Due</span>':'<span class="ops-pill ops-ok">Scheduled</span>'}</td></tr>`; }).join('')}</table></div>`;
+    return `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Machinery</th><th>Procedure</th><th>Frequency</th><th>Next due</th><th>Status</th></tr>${scheduleRows.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w ? machineryIdentifier(w) : 'Unknown')}</td><td>${esc(p?.name||'Unknown')}</td><td>${esc(s.frequency_days||p?.frequency_days||'—')} days</td><td>${nzDate(s.next_due_at)}</td><td>${scheduleIsDue(s)?'<span class="ops-pill ops-bad">Due</span>':'<span class="ops-pill ops-ok">Scheduled</span>'}</td></tr>`; }).join('')}</table></div>`;
   }
   function scheduleIsDue(s){
     if(s.is_active === false) return false;
@@ -1148,14 +1238,14 @@
 
   async function applyDefaultSchedulesForEquipment(wash){
     const w = typeof wash === 'string' ? (state.washEquipment.find(x=>x.id===wash) || {id:wash, equipment_type:''}) : (wash || {});
-    if(!/water\s*blaster|engine|pump/i.test(String(w.equipment_type || ''))) return;
+    if(!/water\s*blaster|engine|gearbox|pump/i.test(String(w.equipment_type || ''))) return;
     const procs = standardProcedures();
     if(procs.length) await upsertSchedulesForWashIds([w.id], procs.map(p=>p.id), addDays(today(), 30));
   }
   async function applyStandardSchedules(scope){
     if(!canMaintain()) return alert('Only Admin or Equipment Manager users can apply schedules.');
     const washId = byId('opsStdWash')?.value;
-    if(!washId) return alert('Choose equipment first.');
+    if(!washId) return alert('Choose machinery first.');
     const selectedProcIds = Array.from(document.querySelectorAll('.ops-std-proc:checked')).map(x=>x.value);
     if(!selectedProcIds.length) return alert('Choose at least one maintenance template.');
     let washIds = [washId];
@@ -1164,7 +1254,7 @@
       if(base) washIds = state.washEquipment.filter(w=>w.equipment_type === base.equipment_type).map(w=>w.id);
     }
     await upsertSchedulesForWashIds(washIds, selectedProcIds, byId('opsStdNextDate')?.value || addDays(today(),30));
-    alert(`Applied ${selectedProcIds.length} template${selectedProcIds.length===1?'':'s'} to ${washIds.length} equipment item${washIds.length===1?'':'s'}.`);
+    alert(`Applied ${selectedProcIds.length} template${selectedProcIds.length===1?'':'s'} to ${washIds.length} machinery item${washIds.length===1?'':'s'}.`);
     await loadAll();
   }
   async function upsertSchedulesForWashIds(washIds, procedureIds, nextDate){
@@ -1328,90 +1418,6 @@
       if(r.error) throw r.error;
       window.open(r.data.signedUrl, '_blank');
     }catch(err){ alert('Could not open file: ' + (err.message || err)); }
-  }
-
-  function bindRenderedEvents(){
-    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
-    document.querySelectorAll('[data-ops-shortcut]').forEach(card => {
-      const go = () => handleDashboardShortcut(card.dataset.opsShortcut);
-      card.addEventListener('click', go);
-      card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } });
-    });
-    byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
-    byId('opsWashingForm')?.addEventListener('submit', saveWashing);
-    byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
-    byId('opsManualTaskForm')?.addEventListener('submit', createManualTask);
-    byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
-    byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
-    byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
-    byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
-    document.querySelectorAll('[data-ops-save-user-roles]').forEach(b => b.addEventListener('click', () => saveActualUserRoles(b.dataset.opsSaveUserRoles)));
-    byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
-    byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
-    byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
-    byId('opsAssetFilterDue')?.addEventListener('change', e => { state.assetFilterDue = e.target.value; render(); });
-    byId('opsAssetFilterTasks')?.addEventListener('change', e => { state.assetFilterTasks = e.target.value; render(); });
-    updatePreloadRolePreview();
-    document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
-    document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
-    document.querySelectorAll('[data-ops-open-task]').forEach(b => b.addEventListener('click', () => { state.openTaskId = b.dataset.opsOpenTask; render(); }));
-    document.querySelectorAll('[data-ops-action]').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.opsAction)));
-  }
-  async function handleAction(action){
-    if(action === 'clearVehicle'){ state.editingVehicleId=''; render(); }
-    if(action === 'clearWash'){ state.editingWashId=''; render(); }
-    if(action === 'closeTask'){ state.openTaskId=''; render(); }
-    if(action === 'generateDueTasks'){ await generateDueTasks(); }
-    if(action === 'applyStdSelected'){ await applyStandardSchedules('selected'); }
-    if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
-    if(action === 'legacyUserTools'){ openLegacyUserTools(); }
-    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
-    if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
-    if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; render(); }
-  }
-
-  async function saveVehicle(e){
-    e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save vehicles.');
-    const id = byId('opsVehicleId').value;
-    const row = {
-      rego: byId('opsVehicleRego').value.trim(),
-      name: byId('opsVehicleName').value.trim() || null,
-      make_model: byId('opsVehicleMake').value.trim() || null,
-      year: byId('opsVehicleYear').value ? Number(byId('opsVehicleYear').value) : null,
-      status: byId('opsVehicleStatus').value,
-      assigned_driver: byId('opsVehicleDriver').value.trim() || null,
-      inspection_frequency_days: Number(byId('opsVehicleFreq').value || 14),
-      notes: byId('opsVehicleNotes').value.trim() || null,
-      created_by: state.user.id
-    };
-    if(!row.rego) return alert('Rego is required.');
-    const r = id ? await state.sb.from('operations_vehicles').update(row).eq('id', id) : await state.sb.from('operations_vehicles').insert(row);
-    if(r.error) return alert(r.error.message);
-    state.editingVehicleId=''; await loadAll();
-  }
-
-  async function saveWashing(e){
-    e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save washing equipment.');
-    const id = byId('opsWashId').value;
-    const row = {
-      name: byId('opsWashName').value.trim(),
-      equipment_type: byId('opsWashType').value.trim() || 'Water Blaster',
-      serial_number: byId('opsWashSerial').value.trim() || null,
-      assigned_vehicle_id: byId('opsWashVehicle').value || null,
-      status: byId('opsWashStatus').value,
-      inspection_frequency_days: Number(byId('opsWashFreq').value || 14),
-      engine_make_model: byId('opsWashEngine').value.trim() || null,
-      pump_make_model: byId('opsWashPump').value.trim() || null,
-      notes: byId('opsWashNotes').value.trim() || null,
-      created_by: state.user.id
-    };
-    if(!row.name) return alert('Name is required.');
-    let r;
-    if(id) r = await state.sb.from('operations_washing_equipment').update(row).eq('id', id).select().single();
-    else r = await state.sb.from('operations_washing_equipment').insert(row).select().single();
-    if(r.error) return alert(r.error.message);
-    if(!id && r.data) await applyDefaultSchedulesForEquipment(r.data);
-    state.editingWashId=''; await loadAll();
   }
 
   function itemIsProblem(item, answer){
@@ -1621,7 +1627,7 @@
         washing_equipment_id: s.washing_equipment_id,
         procedure_id: s.procedure_id,
         schedule_id: s.id,
-        title: `${p?.name || 'Scheduled maintenance'} - ${w?.name || 'Washing equipment'}`,
+        title: `${p?.name || 'Scheduled maintenance'} - ${w ? machineryIdentifier(w) : 'Machinery'}`,
         description: p?.description || 'Scheduled preventive maintenance.',
         status: 'Open',
         priority: 'Medium',
@@ -1980,69 +1986,233 @@
   }
   async function uploadAssetPhoto(file, kind, id){
     if(!file || !id) return null;
+    if(!file.size){ alert('The selected asset photo is empty. Choose a valid image file.'); return null; }
     const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `operations-assets/${kind}/${id}/${Date.now()}-${clean}`;
     const up = await state.sb.storage.from(PHOTO_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false, contentType:file.type || 'image/jpeg' });
     if(up.error){ alert('Asset photo upload failed: ' + up.error.message); return null; }
+    const check = await state.sb.storage.from(PHOTO_BUCKET).download(path);
+    if(check.error || !check.data || !check.data.size){
+      await state.sb.storage.from(PHOTO_BUCKET).remove([path]);
+      alert('The asset photo could not be verified after upload. The asset was not changed.');
+      return null;
+    }
     return { path, name: file.name };
+  }
+  function numberOrNull(id){
+    const value = byId(id)?.value;
+    return value === '' || value === null || value === undefined ? null : Number(value);
+  }
+  function textOrNull(id){ return String(byId(id)?.value || '').trim() || null; }
+  function nextSpareIdentifier(type, excludeId=''){
+    const code = MACHINERY_TYPE_CODES[type] || 'MCH';
+    const rx = new RegExp(`^SPARE-${code}-(\\d+)$`,'i');
+    const used = state.washEquipment
+      .filter(w=>String(w.id)!==String(excludeId))
+      .map(w=>String(w.asset_identifier||'').match(rx))
+      .filter(Boolean)
+      .map(m=>Number(m[1])||0);
+    return `SPARE-${code}-${String((used.length?Math.max(...used):0)+1).padStart(3,'0')}`;
+  }
+  async function refreshMachineryIdentifiersForVehicle(vehicle){
+    const children = state.washEquipment.filter(w=>String(w.assigned_vehicle_id||'')===String(vehicle.id));
+    const failures = [];
+    for(const w of children){
+      const identifier = buildInstalledMachineryIdentifier(vehicle.rego,w.mounting_side,machineryType(w));
+      if(!identifier) continue;
+      const r = await state.sb.from('operations_washing_equipment').update({
+        asset_identifier:identifier,
+        name:`${machineryTypeLabel(w)} - ${identifier}`
+      }).eq('id',w.id);
+      if(r.error) failures.push(machineryIdentifier(w));
+    }
+    return failures;
+  }
+  async function removeReplacedAssetPhoto(oldPath, newPath){
+    if(oldPath && oldPath !== newPath) await state.sb.storage.from(PHOTO_BUCKET).remove([oldPath]);
   }
   function vehicleFormHtml(){
     const v = state.vehicles.find(x=>x.id===state.editingVehicleId) || {};
     return `<form id="opsVehicleForm" class="ops-form">
       <input type="hidden" id="opsVehicleId" value="${esc(v.id||'')}">
-      <label>Rego *<input id="opsVehicleRego" required value="${esc(v.rego||'')}"></label>
+      <label>Registration *<input id="opsVehicleRego" required value="${esc(normalizeRego(v.rego||''))}" placeholder="ABC123"></label>
       <label>Name<input id="opsVehicleName" value="${esc(v.name||'')}"></label>
       <label>Make/model<input id="opsVehicleMake" value="${esc(v.make_model||'')}"></label>
       <label>Year<input id="opsVehicleYear" type="number" value="${esc(v.year||'')}"></label>
       <label>Status<select id="opsVehicleStatus">${optionList(['Active','Inactive','Sold','Retired'], v.status||'Active')}</select></label>
       <label>Assigned driver<input id="opsVehicleDriver" value="${esc(v.assigned_driver||'')}"></label>
+      <label>VIN / chassis number<input id="opsVehicleVin" value="${esc(v.vin_chassis_number||'')}"></label>
+      <label>Engine model / code<input id="opsVehicleEngineCode" value="${esc(v.engine_code||'')}"></label>
+      <label>Fuel type<select id="opsVehicleFuelType"><option value="">Select fuel type</option>${optionList(['Petrol','Diesel','Hybrid','Electric','Other'],v.fuel_type||'')}</select></label>
+      <label>Current odometer (km)<input id="opsVehicleOdometer" type="number" min="0" step="1" value="${esc(v.current_odometer??'')}"></label>
+      <label>Engine oil grade<input id="opsVehicleOilGrade" value="${esc(v.engine_oil_grade||'')}" placeholder="e.g. 5W-30"></label>
+      <label>Engine oil volume (L)<input id="opsVehicleOilVolume" type="number" min="0" step="0.01" value="${esc(v.engine_oil_volume_l??'')}"></label>
+      <label>Oil filter part number<input id="opsVehicleOilFilter" value="${esc(v.oil_filter_part_number||'')}"></label>
+      <label>Engine air-filter part number<input id="opsVehicleAirFilter" value="${esc(v.engine_air_filter_part_number||'')}"></label>
+      <label>Fuel-filter part number<input id="opsVehicleFuelFilter" value="${esc(v.fuel_filter_part_number||'')}"></label>
+      <label>Spark-plug part number<input id="opsVehicleSparkPlug" value="${esc(v.spark_plug_part_number||'')}"></label>
+      <label>Service interval (km)<input id="opsVehicleServiceKm" type="number" min="1" step="1" value="${esc(v.service_interval_km??'')}"></label>
+      <label>Service interval (months)<input id="opsVehicleServiceMonths" type="number" min="1" step="1" value="${esc(v.service_interval_months??'')}"></label>
       <label>Inspection frequency days<input id="opsVehicleFreq" type="number" min="1" value="${esc(v.inspection_frequency_days||14)}"></label>
       <label>Asset photo<input id="opsVehiclePhoto" type="file" accept="image/*"></label>
       ${v.photo_path ? `<div class="ops-span-2"><span class="ops-pill ops-ok">Photo saved</span></div>` : ''}
-      <label class="ops-span-2">Notes<textarea id="opsVehicleNotes">${esc(v.notes||'')}</textarea></label>
+      <details class="ops-span-2"><summary><strong>Additional service specifications</strong></summary><div class="ops-form" style="margin-top:.8rem">
+        <label>Coolant type<input id="opsVehicleCoolantType" value="${esc(v.coolant_type||'')}"></label>
+        <label>Coolant capacity (L)<input id="opsVehicleCoolantCapacity" type="number" min="0" step="0.01" value="${esc(v.coolant_capacity_l??'')}"></label>
+        <label>Transmission-fluid grade<input id="opsVehicleTransmissionFluid" value="${esc(v.transmission_fluid_grade||'')}"></label>
+        <label>Transmission-fluid capacity (L)<input id="opsVehicleTransmissionCapacity" type="number" min="0" step="0.01" value="${esc(v.transmission_fluid_capacity_l??'')}"></label>
+        <label>Differential-oil grade<input id="opsVehicleDifferentialOil" value="${esc(v.differential_oil_grade||'')}"></label>
+        <label>Differential-oil capacity (L)<input id="opsVehicleDifferentialCapacity" type="number" min="0" step="0.01" value="${esc(v.differential_oil_capacity_l??'')}"></label>
+        <label>Brake-fluid specification<input id="opsVehicleBrakeFluid" value="${esc(v.brake_fluid_spec||'')}"></label>
+        <label>Drive-belt part number<input id="opsVehicleDriveBelt" value="${esc(v.drive_belt_part_number||'')}"></label>
+        <label>Battery type / size<input id="opsVehicleBattery" value="${esc(v.battery_type_size||'')}"></label>
+        <label>Front tyre size<input id="opsVehicleFrontTyre" value="${esc(v.front_tyre_size||'')}"></label>
+        <label>Rear tyre size<input id="opsVehicleRearTyre" value="${esc(v.rear_tyre_size||'')}"></label>
+        <label>Front tyre pressure (PSI)<input id="opsVehicleFrontPressure" type="number" min="0" step="0.1" value="${esc(v.front_tyre_pressure_psi??'')}"></label>
+        <label>Rear tyre pressure (PSI)<input id="opsVehicleRearPressure" type="number" min="0" step="0.1" value="${esc(v.rear_tyre_pressure_psi??'')}"></label>
+        <label>Front wiper-blade size<input id="opsVehicleFrontWiper" value="${esc(v.front_wiper_size||'')}"></label>
+        <label>Rear wiper-blade size<input id="opsVehicleRearWiper" value="${esc(v.rear_wiper_size||'')}"></label>
+      </div></details>
+      <label class="ops-span-2">Current service state / notes<textarea id="opsVehicleServiceNotes" placeholder="Current condition, recent work and anything requiring attention">${esc(v.service_notes||v.notes||'')}</textarea></label>
       <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save vehicle</button><button class="ops-btn ghost" type="button" data-ops-action="clearVehicle">Clear</button></div>
     </form>`;
   }
   function washingFormHtml(){
     const w = state.washEquipment.find(x=>x.id===state.editingWashId) || {};
+    const selectedVehicle = w.assigned_vehicle_id || state.prefillMachineryVehicleId || '';
+    const selectedSide = w.mounting_side || state.prefillMachinerySide || '';
+    const selectedType = machineryType(w);
+    const identifier = w.id ? machineryIdentifier(w) : buildInstalledMachineryIdentifier(state.vehicles.find(v=>String(v.id)===String(selectedVehicle))?.rego,selectedSide,selectedType);
     return `<form id="opsWashingForm" class="ops-form">
       <input type="hidden" id="opsWashId" value="${esc(w.id||'')}">
-      <label>Name *<input id="opsWashName" required value="${esc(w.name||'')}"></label>
-      <label>Type<input id="opsWashType" value="${esc(w.equipment_type||'Water Blaster')}"></label>
+      <label>Machinery type *<select id="opsMachineryType" required><option value="Engine" ${selectedType==='Engine'?'selected':''}>Engine</option><option value="Gearbox" ${selectedType==='Gearbox'?'selected':''}>Reduction gearbox</option><option value="Pump" ${selectedType==='Pump'?'selected':''}>Pump</option></select></label>
+      <label>Identifier<input id="opsMachineryIdentifier" value="${esc(identifier)}" placeholder="Generated when saved" readonly></label>
+      <label>Vehicle<select id="opsWashVehicle"><option value="">Unassigned / spare</option>${state.vehicles.map(v=>`<option value="${v.id}" ${String(v.id)===String(selectedVehicle)?'selected':''}>${esc(normalizeRego(v.rego) || v.name)}</option>`).join('')}</select></label>
+      <label>Installation side<select id="opsMachinerySide"><option value="">Not installed</option>${optionList(['Driver','Passenger'],selectedSide)}</select></label>
+      <label>Make/model<input id="opsMachineryMakeModel" value="${esc(w.make_model||'')}"></label>
       <label>Serial number<input id="opsWashSerial" value="${esc(w.serial_number||'')}"></label>
-      <label>Assigned vehicle<select id="opsWashVehicle"><option value="">Not assigned</option>${state.vehicles.map(v=>`<option value="${v.id}" ${v.id===w.assigned_vehicle_id?'selected':''}>${esc(v.rego || v.name)}</option>`).join('')}</select></label>
       <label>Status<select id="opsWashStatus">${optionList(['Active','Inactive','Retired','Quarantined'], w.status||'Active')}</select></label>
       <label>Inspection frequency days<input id="opsWashFreq" type="number" min="1" value="${esc(w.inspection_frequency_days||14)}"></label>
-      <label>Engine make/model<input id="opsWashEngine" value="${esc(w.engine_make_model||'')}"></label>
-      <label>Pump make/model<input id="opsWashPump" value="${esc(w.pump_make_model||'')}"></label>
+      <label>Oil grade<input id="opsMachineryOilGrade" value="${esc(w.oil_grade||'')}" placeholder="e.g. SAE 10W-30"></label>
+      <label>Oil volume (L)<input id="opsMachineryOilVolume" type="number" min="0" step="0.01" value="${esc(w.oil_volume_l??'')}"></label>
+      <div class="ops-machinery-fields ops-span-2" data-machinery-types="Engine"><div class="ops-form">
+        <label>Spark-plug part number<input id="opsMachinerySparkPlug" value="${esc(w.spark_plug_part_number||'')}"></label>
+        <label>Air-filter part number<input id="opsMachineryAirFilter" value="${esc(w.air_filter_part_number||'')}"></label>
+      </div></div>
+      <div class="ops-machinery-fields ops-span-2" data-machinery-types="Pump"><div class="ops-form">
+        <label>PSI rating<input id="opsMachineryPressure" type="number" min="0" step="1" value="${esc(w.pressure_psi??'')}"></label>
+        <label>Maximum volume output (L/min)<input id="opsMachineryOutput" type="number" min="0" step="0.1" value="${esc(w.max_output_lpm??'')}"></label>
+      </div></div>
       <label>Asset photo<input id="opsWashPhoto" type="file" accept="image/*"></label>
       ${w.photo_path ? `<div class="ops-span-2"><span class="ops-pill ops-ok">Photo saved</span></div>` : ''}
-      <label class="ops-span-2">Notes<textarea id="opsWashNotes">${esc(w.notes||'')}</textarea></label>
-      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save washing equipment</button><button class="ops-btn ghost" type="button" data-ops-action="clearWash">Clear</button></div>
+      <label class="ops-span-2">Current service state / notes<textarea id="opsMachineryServiceNotes" placeholder="Current condition, recent work and anything requiring attention">${esc(w.service_notes||w.notes||'')}</textarea></label>
+      <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save machinery</button><button class="ops-btn ghost" type="button" data-ops-action="clearWash">Clear</button></div>
     </form>`;
+  }
+  function updateMachineryFormVisibility(){
+    const type = byId('opsMachineryType')?.value || 'Engine';
+    const vehicleId = byId('opsWashVehicle')?.value || '';
+    const side = byId('opsMachinerySide');
+    document.querySelectorAll('.ops-machinery-fields').forEach(group=>{
+      const types = String(group.dataset.machineryTypes||'').split(',');
+      group.hidden = !types.includes(type);
+    });
+    if(side){
+      side.disabled = !vehicleId;
+      if(!vehicleId) side.value = '';
+    }
+    const vehicle = state.vehicles.find(v=>String(v.id)===String(vehicleId));
+    const existing = state.washEquipment.find(w=>String(w.id)===String(byId('opsWashId')?.value||''));
+    const preview = buildInstalledMachineryIdentifier(vehicle?.rego,side?.value,type) || existing?.asset_identifier || '';
+    if(byId('opsMachineryIdentifier')) byId('opsMachineryIdentifier').value = preview;
   }
   async function saveVehicle(e){
     e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save vehicles.');
+    const submit = e.submitter; if(submit?.disabled) return; if(submit) submit.disabled=true;
     const id = byId('opsVehicleId').value;
-    const row = { rego: byId('opsVehicleRego').value.trim(), name: byId('opsVehicleName').value.trim() || null, make_model: byId('opsVehicleMake').value.trim() || null, year: byId('opsVehicleYear').value ? Number(byId('opsVehicleYear').value) : null, status: byId('opsVehicleStatus').value, assigned_driver: byId('opsVehicleDriver').value.trim() || null, inspection_frequency_days: Number(byId('opsVehicleFreq').value || 14), notes: byId('opsVehicleNotes').value.trim() || null, created_by: state.user.id };
-    if(!row.rego) return alert('Rego is required.');
-    let r = id ? await state.sb.from('operations_vehicles').update(row).eq('id', id).select().single() : await state.sb.from('operations_vehicles').insert(row).select().single();
-    if(r.error) return alert(r.error.message);
+    const existing = state.vehicles.find(v=>String(v.id)===String(id)) || {};
+    const row = {
+      rego:normalizeRego(byId('opsVehicleRego').value), name:textOrNull('opsVehicleName'), make_model:textOrNull('opsVehicleMake'),
+      year:numberOrNull('opsVehicleYear'), status:byId('opsVehicleStatus').value, assigned_driver:textOrNull('opsVehicleDriver'),
+      vin_chassis_number:textOrNull('opsVehicleVin'), engine_code:textOrNull('opsVehicleEngineCode'), fuel_type:textOrNull('opsVehicleFuelType'),
+      current_odometer:numberOrNull('opsVehicleOdometer'), engine_oil_grade:textOrNull('opsVehicleOilGrade'), engine_oil_volume_l:numberOrNull('opsVehicleOilVolume'),
+      oil_filter_part_number:textOrNull('opsVehicleOilFilter'), engine_air_filter_part_number:textOrNull('opsVehicleAirFilter'),
+      fuel_filter_part_number:textOrNull('opsVehicleFuelFilter'), spark_plug_part_number:textOrNull('opsVehicleSparkPlug'),
+      service_interval_km:numberOrNull('opsVehicleServiceKm'), service_interval_months:numberOrNull('opsVehicleServiceMonths'),
+      coolant_type:textOrNull('opsVehicleCoolantType'), coolant_capacity_l:numberOrNull('opsVehicleCoolantCapacity'),
+      transmission_fluid_grade:textOrNull('opsVehicleTransmissionFluid'), transmission_fluid_capacity_l:numberOrNull('opsVehicleTransmissionCapacity'),
+      differential_oil_grade:textOrNull('opsVehicleDifferentialOil'), differential_oil_capacity_l:numberOrNull('opsVehicleDifferentialCapacity'),
+      brake_fluid_spec:textOrNull('opsVehicleBrakeFluid'), drive_belt_part_number:textOrNull('opsVehicleDriveBelt'),
+      battery_type_size:textOrNull('opsVehicleBattery'), front_tyre_size:textOrNull('opsVehicleFrontTyre'), rear_tyre_size:textOrNull('opsVehicleRearTyre'),
+      front_tyre_pressure_psi:numberOrNull('opsVehicleFrontPressure'), rear_tyre_pressure_psi:numberOrNull('opsVehicleRearPressure'),
+      front_wiper_size:textOrNull('opsVehicleFrontWiper'), rear_wiper_size:textOrNull('opsVehicleRearWiper'),
+      inspection_frequency_days:Number(byId('opsVehicleFreq').value || 14), service_notes:textOrNull('opsVehicleServiceNotes'), created_by:state.user.id
+    };
+    if(!row.rego){ if(submit)submit.disabled=false; return alert('Registration is required.'); }
+    if(state.vehicles.some(v=>String(v.id)!==String(id) && normalizeRego(v.rego)===row.rego)){ if(submit)submit.disabled=false; return alert('That vehicle registration is already in use.'); }
     const file = byId('opsVehiclePhoto')?.files?.[0] || null;
-    if(file){ const up = await uploadAssetPhoto(file, 'vehicles', r.data.id); if(up){ const ur = await state.sb.from('operations_vehicles').update({photo_path: up.path, photo_file_name: up.name}).eq('id', r.data.id); if(ur.error) alert('Vehicle saved, but photo path failed: ' + ur.error.message); } }
-    state.editingVehicleId=''; await loadAll();
+    let upload = null;
+    try{
+      if(file){
+        upload = await uploadAssetPhoto(file,'vehicles',id||crypto.randomUUID());
+        if(!upload) return;
+        row.photo_path=upload.path; row.photo_file_name=upload.name;
+      }
+      const r = id ? await state.sb.from('operations_vehicles').update(row).eq('id',id).select().single() : await state.sb.from('operations_vehicles').insert(row).select().single();
+      if(r.error){ if(upload) await state.sb.storage.from(PHOTO_BUCKET).remove([upload.path]); return alert(r.error.message); }
+      if(upload) await removeReplacedAssetPhoto(existing.photo_path,upload.path);
+      const failed = await refreshMachineryIdentifiersForVehicle(r.data);
+      state.editingVehicleId='';
+      await loadAll();
+      alert(failed.length ? `Vehicle saved. ${failed.length} linked machinery identifier${failed.length===1?'':'s'} could not be refreshed.` : 'Vehicle saved.');
+    }finally{ if(submit) submit.disabled=false; }
   }
   async function saveWashing(e){
-    e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save washing equipment.');
+    e.preventDefault(); if(!canManage()) return alert('Only Admin or Equipment Manager users can save machinery.');
+    const submit=e.submitter; if(submit?.disabled)return; if(submit)submit.disabled=true;
     const id = byId('opsWashId').value;
-    const row = { name: byId('opsWashName').value.trim(), equipment_type: byId('opsWashType').value.trim() || 'Water Blaster', serial_number: byId('opsWashSerial').value.trim() || null, assigned_vehicle_id: byId('opsWashVehicle').value || null, status: byId('opsWashStatus').value, inspection_frequency_days: Number(byId('opsWashFreq').value || 14), engine_make_model: byId('opsWashEngine').value.trim() || null, pump_make_model: byId('opsWashPump').value.trim() || null, notes: byId('opsWashNotes').value.trim() || null, created_by: state.user.id };
-    if(!row.name) return alert('Name is required.');
-    let r = id ? await state.sb.from('operations_washing_equipment').update(row).eq('id', id).select().single() : await state.sb.from('operations_washing_equipment').insert(row).select().single();
-    if(r.error) return alert(r.error.message);
-    const file = byId('opsWashPhoto')?.files?.[0] || null;
-    if(file){ const up = await uploadAssetPhoto(file, 'washing-equipment', r.data.id); if(up){ const ur = await state.sb.from('operations_washing_equipment').update({photo_path: up.path, photo_file_name: up.name}).eq('id', r.data.id); if(ur.error) alert('Washing equipment saved, but photo path failed: ' + ur.error.message); } }
-    if(!id && r.data) await applyDefaultSchedulesForEquipment(r.data);
-    state.editingWashId=''; await loadAll();
+    const existing=state.washEquipment.find(w=>String(w.id)===String(id))||{};
+    const type=byId('opsMachineryType').value;
+    const vehicleId=byId('opsWashVehicle').value||null;
+    const side=vehicleId?(byId('opsMachinerySide').value||null):null;
+    if(vehicleId&&!side){ if(submit)submit.disabled=false; return alert('Choose Driver or Passenger side for machinery installed on a vehicle.'); }
+    if(vehicleId&&state.washEquipment.some(w=>String(w.id)!==String(id)&&String(w.assigned_vehicle_id||'')===String(vehicleId)&&w.mounting_side===side&&machineryType(w)===type&&w.status!=='Retired')){
+      if(submit)submit.disabled=false;
+      return alert(`That vehicle already has a ${machineryTypeLabel(type).toLowerCase()} recorded on the ${side.toLowerCase()} side.`);
+    }
+    const vehicle=state.vehicles.find(v=>String(v.id)===String(vehicleId||''));
+    let identifier=vehicleId?buildInstalledMachineryIdentifier(vehicle?.rego,side,type):'';
+    if(!identifier){
+      const sameSpareType=String(existing.asset_identifier||'').startsWith(`SPARE-${MACHINERY_TYPE_CODES[type]}-`);
+      identifier=sameSpareType?existing.asset_identifier:nextSpareIdentifier(type,id);
+    }
+    const row={
+      asset_identifier:identifier, name:`${machineryTypeLabel(type)} - ${identifier}`, machinery_type:type,
+      equipment_type:machineryTypeLabel(type), make_model:textOrNull('opsMachineryMakeModel'), serial_number:textOrNull('opsWashSerial'),
+      assigned_vehicle_id:vehicleId, mounting_side:side, status:byId('opsWashStatus').value,
+      inspection_frequency_days:Number(byId('opsWashFreq').value||14), oil_grade:textOrNull('opsMachineryOilGrade'),
+      oil_volume_l:numberOrNull('opsMachineryOilVolume'), spark_plug_part_number:type==='Engine'?textOrNull('opsMachinerySparkPlug'):null,
+      air_filter_part_number:type==='Engine'?textOrNull('opsMachineryAirFilter'):null,
+      pressure_psi:type==='Pump'?numberOrNull('opsMachineryPressure'):null,
+      max_output_lpm:type==='Pump'?numberOrNull('opsMachineryOutput'):null,
+      service_notes:textOrNull('opsMachineryServiceNotes'), created_by:state.user.id
+    };
+    const file=byId('opsWashPhoto')?.files?.[0]||null;
+    let upload=null;
+    try{
+      if(file){
+        upload=await uploadAssetPhoto(file,'machinery',id||crypto.randomUUID());
+        if(!upload)return;
+        row.photo_path=upload.path; row.photo_file_name=upload.name;
+      }
+      const r=id?await state.sb.from('operations_washing_equipment').update(row).eq('id',id).select().single():await state.sb.from('operations_washing_equipment').insert(row).select().single();
+      if(r.error){ if(upload)await state.sb.storage.from(PHOTO_BUCKET).remove([upload.path]); return alert(r.error.message); }
+      if(upload)await removeReplacedAssetPhoto(existing.photo_path,upload.path);
+      if(!id&&r.data)await applyDefaultSchedulesForEquipment(r.data);
+      state.editingWashId='';state.prefillMachineryVehicleId='';state.prefillMachinerySide='';
+      await loadAll();
+      alert('Machinery saved.');
+    }finally{if(submit)submit.disabled=false;}
   }
   function historyHtml(){
     const rows = state.inspections.slice(0,100);
@@ -2066,7 +2236,7 @@
   }
   function schedulesHtml(){
     const current = state.pmView || 'due';
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Use Due Now to see upcoming work, Record Service when you actually service equipment, and Service Items to define the routine work list.</p></div></div>${scheduleSubnav()}${preventiveBodyHtml(current)}</div>`;
+    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Use Due Now to see upcoming work, Record Service when you actually service machinery, and Service Items to define the routine work list.</p></div></div>${scheduleSubnav()}${preventiveBodyHtml(current)}</div>`;
   }
   function preventiveBodyHtml(view){
     if(view === 'service') return serviceRunHtml();
@@ -2077,13 +2247,13 @@
   function dueNowPreventiveHtml(){
     const due = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
     const soon = state.schedules.filter(s=>s.next_due_at && daysUntil(s.next_due_at)>0 && daysUntil(s.next_due_at)<=14);
-    return `<div class="ops-grid four" style="margin:.8rem 0"><div class="ops-card ops-dashboard-stat ops-stat-amber"><span>Due / overdue</span><div class="ops-stat">${due.length}</div><small>Service intervals that need attention</small></div><div class="ops-card ops-dashboard-stat ops-stat-total"><span>Due soon</span><div class="ops-stat">${soon.length}</div><small>Due within 14 days</small></div><div class="ops-card ops-dashboard-stat ops-stat-green"><span>Active schedules</span><div class="ops-stat">${state.schedules.filter(s=>s.is_active!==false).length}</div><small>Current scheduled items</small></div><div class="ops-card ops-dashboard-stat ops-stat-blue"><span>Completed this month</span><div class="ops-stat">${completedServiceRows().length}</div><small>Completed service records</small></div></div>${due.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Service item</th><th>Due</th><th>Action</th></tr>${due.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w?.name || 'Unknown')}</td><td><strong>${esc(p?.name || 'Unknown')}</strong><br><span class="ops-subtle">${esc(p?.category || '')}</span></td><td>${nzDate(s.next_due_at)} ${targetDueStatus(daysUntil(s.next_due_at))}</td><td>${canMaintain()?`<button class="ops-btn primary" data-ops-pm-view="service" onclick="SWOperationsV4.state.serviceRunAssetId='${esc(w?.id||'')}';">Record service</button>`:''}</td></tr>`; }).join('')}</table></div>` : '<p class="ops-subtle">No preventive service items are due right now.</p>'}<div class="ops-actions"><button class="ops-btn primary" data-ops-pm-view="service">Record a service</button><button class="ops-btn ghost" data-ops-pm-view="items">Manage service items</button></div>`;
+    return `<div class="ops-grid four" style="margin:.8rem 0"><div class="ops-card ops-dashboard-stat ops-stat-amber"><span>Due / overdue</span><div class="ops-stat">${due.length}</div><small>Service intervals that need attention</small></div><div class="ops-card ops-dashboard-stat ops-stat-total"><span>Due soon</span><div class="ops-stat">${soon.length}</div><small>Due within 14 days</small></div><div class="ops-card ops-dashboard-stat ops-stat-green"><span>Active schedules</span><div class="ops-stat">${state.schedules.filter(s=>s.is_active!==false).length}</div><small>Current scheduled items</small></div><div class="ops-card ops-dashboard-stat ops-stat-blue"><span>Completed this month</span><div class="ops-stat">${completedServiceRows().length}</div><small>Completed service records</small></div></div>${due.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Service item</th><th>Due</th><th>Action</th></tr>${due.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w ? machineryIdentifier(w) : 'Unknown')}</td><td><strong>${esc(p?.name || 'Unknown')}</strong><br><span class="ops-subtle">${esc(p?.category || '')}</span></td><td>${nzDate(s.next_due_at)} ${targetDueStatus(daysUntil(s.next_due_at))}</td><td>${canMaintain()?`<button class="ops-btn primary" data-ops-pm-view="service" onclick="SWOperationsV4.state.serviceRunAssetId='${esc(w?.id||'')}';">Record service</button>`:''}</td></tr>`; }).join('')}</table></div>` : '<p class="ops-subtle">No preventive service items are due right now.</p>'}<div class="ops-actions"><button class="ops-btn primary" data-ops-pm-view="service">Record a service</button><button class="ops-btn ghost" data-ops-pm-view="items">Manage service items</button></div>`;
   }
   function serviceItemAppliesTo(proc, asset){
     if(!proc || !asset) return false;
     const cat = certNorm(proc.category || 'General');
     const type = certNorm(asset.equipment_type || asset.type || '');
-    if(!cat || cat === 'general' || cat === 'all' || cat === 'washing equipment') return true;
+    if(!cat || cat === 'general' || cat === 'all' || cat === 'washing equipment' || cat === 'machinery') return true;
     return cat === type || type.includes(cat) || cat.includes(type);
   }
   function applicableServiceItemsForAsset(assetId){
@@ -2098,17 +2268,17 @@
     const items = asset ? applicableServiceItemsForAsset(asset.id) : [];
     return `<h3>Record service</h3><p class="ops-subtle">Choose the asset being serviced. The app lists service items that match that asset type. Tick what you actually completed, add any one-off items, then save. Completed routine items reset their date-based service interval.</p>
       <form id="opsServiceRunForm">
-        <div class="ops-form"><label>Asset being serviced<select id="opsServiceRunAsset" required><option value="">Select asset</option>${activeAssets.map(w=>`<option value="${esc(w.id)}" ${asset && w.id===asset.id?'selected':''}>${esc(w.name)}${w.equipment_type?' - '+esc(w.equipment_type):''}</option>`).join('')}</select></label><label>Service date<input id="opsServiceRunDate" type="date" value="${esc(today())}"></label></div>
-        ${asset ? `<div class="ops-card" style="margin-top:1rem"><h4>Routine service items for ${esc(asset.name)}</h4>${items.length ? items.map(p=>`<label class="ops-check"><input type="checkbox" data-service-item="${esc(p.id)}"> <span><strong>${esc(p.name)}</strong><br><span class="ops-subtle">${esc(p.category || 'General')} · every ${esc(p.frequency_days || '—')} days</span></span></label>`).join('') : '<p class="ops-subtle">No service items match this asset type yet. Add them under Service Items.</p>'}</div>` : '<p class="ops-subtle">Add an asset first.</p>'}
+        <div class="ops-form"><label>Machinery being serviced<select id="opsServiceRunAsset" required><option value="">Select machinery</option>${activeAssets.map(w=>`<option value="${esc(w.id)}" ${asset && w.id===asset.id?'selected':''}>${esc(machineryIdentifier(w))} - ${esc(machineryTypeLabel(w))}</option>`).join('')}</select></label><label>Service date<input id="opsServiceRunDate" type="date" value="${esc(today())}"></label></div>
+        ${asset ? `<div class="ops-card" style="margin-top:1rem"><h4>Routine service items for ${esc(machineryIdentifier(asset))}</h4>${items.length ? items.map(p=>`<label class="ops-check"><input type="checkbox" data-service-item="${esc(p.id)}"> <span><strong>${esc(p.name)}</strong><br><span class="ops-subtle">${esc(p.category || 'General')} · every ${esc(p.frequency_days || '—')} days</span></span></label>`).join('') : '<p class="ops-subtle">No service items match this machinery type yet. Add them under Service Items.</p>'}</div>` : '<p class="ops-subtle">Add machinery first.</p>'}
         <label style="margin-top:1rem">Additional one-off service items completed<textarea id="opsServiceRunAdhoc" placeholder="One item per line, e.g. Replaced cracked hose fitting"></textarea></label>
         <label>Service notes<textarea id="opsServiceRunNotes" placeholder="General service notes"></textarea></label>
         <div class="ops-actions"><button class="ops-btn primary" type="submit">Save completed service</button></div>
       </form>`;
   }
   function serviceItemsHtml(){
-    const types = uniqueValues(state.washEquipment.map(w=>w.equipment_type || 'Washing Equipment')).concat(['General']);
+    const types = uniqueValues(state.washEquipment.map(w=>machineryTypeLabel(w))).concat(['General']);
     const rows = state.procedures.filter(p=>p.is_active!==false).sort((a,b)=>String(a.category||'').localeCompare(String(b.category||'')) || String(a.name||'').localeCompare(String(b.name||'')));
-    return `<h3>Service items</h3><p class="ops-subtle">Create routine service items once. Each item has an equipment type/tag, a task description and a date-based interval.</p>${canMaintain()?`<form id="opsServiceItemForm" class="ops-form"><label>Equipment type / tag<select id="opsServiceItemCategory"><option value="General">General / all equipment</option>${types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label><label>Service item / task<input id="opsServiceItemName" required placeholder="e.g. Engine oil change"></label><label>Frequency days<input id="opsServiceItemFrequency" type="number" min="1" value="90"></label><label>Priority<select id="opsServiceItemPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></label><label class="ops-span-2">Description / notes<textarea id="opsServiceItemDescription" placeholder="What is done and anything important to check"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Add service item</button></div></form>`:''}${rows.length ? `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Equipment type / tag</th><th>Service item</th><th>Frequency</th><th>Description</th></tr>${rows.map(p=>`<tr><td>${esc(p.category || 'General')}</td><td><strong>${esc(p.name)}</strong></td><td>${esc(p.frequency_days || '—')} days</td><td>${esc(p.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No service items saved yet.</p>'}`;
+    return `<h3>Service items</h3><p class="ops-subtle">Create routine service items once. Each item has a machinery type/tag, a task description and a date-based interval.</p>${canMaintain()?`<form id="opsServiceItemForm" class="ops-form"><label>Machinery type / tag<select id="opsServiceItemCategory"><option value="General">General / all machinery</option>${types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label><label>Service item / task<input id="opsServiceItemName" required placeholder="e.g. Engine oil change"></label><label>Frequency days<input id="opsServiceItemFrequency" type="number" min="1" value="90"></label><label>Priority<select id="opsServiceItemPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></label><label class="ops-span-2">Description / notes<textarea id="opsServiceItemDescription" placeholder="What is done and anything important to check"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Add service item</button></div></form>`:''}${rows.length ? `<div class="ops-table-wrap" style="margin-top:1rem"><table class="ops-table"><tr><th>Machinery type / tag</th><th>Service item</th><th>Frequency</th><th>Description</th></tr>${rows.map(p=>`<tr><td>${esc(p.category || 'General')}</td><td><strong>${esc(p.name)}</strong></td><td>${esc(p.frequency_days || '—')} days</td><td>${esc(p.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No service items saved yet.</p>'}`;
   }
   function completedServiceRows(){
     const firstDay = new Date(); firstDay.setDate(1); const start = firstDay.toISOString().slice(0,10);
@@ -2156,53 +2326,6 @@
     alert(`Recorded ${created} service item${created===1?'':'s'}.`);
     state.pmView='completed'; await loadAll();
   }
-
-  function bindRenderedEvents(){
-    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
-    document.querySelectorAll('[data-ops-pm-view]').forEach(btn => btn.addEventListener('click', () => { state.pmView = btn.dataset.opsPmView; state.scheduleQuickFilter=''; render(); }));
-    document.querySelectorAll('[data-ops-shortcut]').forEach(card => { const go = () => handleDashboardShortcut(card.dataset.opsShortcut); card.addEventListener('click', go); card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
-    byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);
-    byId('opsWashingForm')?.addEventListener('submit', saveWashing);
-    byId('opsInspectionForm')?.addEventListener('submit', submitInspection);
-    byId('opsManualTaskForm')?.addEventListener('submit', createManualTask);
-    byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
-    byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
-    byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
-    byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
-    document.querySelectorAll('[data-ops-save-user-roles]').forEach(b => b.addEventListener('click', () => saveActualUserRoles(b.dataset.opsSaveUserRoles)));
-    document.querySelectorAll('[data-ops-open-inspection]').forEach(r => { const go = () => { state.openInspectionId = r.dataset.opsOpenInspection; render(); }; r.addEventListener('click', go); r.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
-    document.querySelectorAll('[data-ops-create-schedule-task]').forEach(b => b.addEventListener('click', () => createTaskFromSchedule(b.dataset.opsCreateScheduleTask)));
-    ['certFilterType','certFilterStatus','certFilterResult','certFilterDue','certFilterSearch'].forEach(id => byId(id)?.addEventListener(id==='certFilterSearch'?'input':'change', renderCertificateFilterSelector));
-    byId('certFilterClear')?.addEventListener('click', () => { ['certFilterType','certFilterStatus','certFilterResult','certFilterDue','certFilterSearch'].forEach(id=>{ if(byId(id)) byId(id).value=''; }); renderCertificateFilterSelector(); });
-    byId('certSelectVisible')?.addEventListener('click', () => document.querySelectorAll('#certItemList .certItemCheck:not(:disabled)').forEach(i=>i.checked=true));
-    byId('certClearSelected')?.addEventListener('click', () => document.querySelectorAll('#certItemList .certItemCheck').forEach(i=>i.checked=false));
-    byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
-    byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
-    byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
-    byId('opsAssetFilterDue')?.addEventListener('change', e => { state.assetFilterDue = e.target.value; render(); });
-    byId('opsAssetFilterTasks')?.addEventListener('change', e => { state.assetFilterTasks = e.target.value; render(); });
-    document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
-    document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
-    document.querySelectorAll('[data-ops-open-task]').forEach(b => b.addEventListener('click', () => { state.openTaskId = b.dataset.opsOpenTask; render(); }));
-    document.querySelectorAll('[data-ops-action]').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.opsAction)));
-  }
-  async function handleAction(action){
-    if(action === 'clearVehicle'){ state.editingVehicleId=''; render(); }
-    if(action === 'clearWash'){ state.editingWashId=''; render(); }
-    if(action === 'closeTask'){ state.openTaskId=''; render(); }
-    if(action === 'closeInspectionRecord'){ state.openInspectionId=''; render(); }
-    if(action === 'generateDueTasks'){ await generateDueTasks(); }
-    if(action === 'applyStdSelected'){ await applyStandardSchedules('selected'); }
-    if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
-    if(action === 'legacyUserTools'){ openLegacyUserTools(); }
-    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
-    if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
-    if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; state.pmView='due'; render(); }
-    if(action === 'pmSchedules'){ state.pmView='schedules'; render(); }
-    if(action === 'pmTemplates'){ state.pmView='templates'; render(); }
-    if(action === 'pmCompleted'){ state.pmView='completed'; render(); }
-  }
-
 
   // V4.0.30 - certificate filter fix, admin tab cleanup, service-item workflow.
   function certSelectedIds(){
@@ -2274,20 +2397,33 @@
     byId('certSelectVisible')?.addEventListener('click', () => { document.querySelectorAll('#certItemList .certItemCheck:not(:disabled)').forEach(i=>{ i.checked=true; state.certSelectedIds.add(String(i.value)); }); renderCertificateFilterSelector(); });
     byId('certClearSelected')?.addEventListener('click', () => { state.certSelectedIds = new Set(); renderCertificateFilterSelector(); });
     document.querySelectorAll('#certItemList .certItemCheck').forEach(i => i.addEventListener('change', () => { if(i.checked) state.certSelectedIds.add(String(i.value)); else state.certSelectedIds.delete(String(i.value)); renderCertificateFilterSelector(); }));
-    byId('opsAssetSearch')?.addEventListener('input', e => { state.assetSearch = e.target.value; render(); });
-    byId('opsAssetFilterClass')?.addEventListener('change', e => { state.assetFilterClass = e.target.value; render(); });
-    byId('opsAssetFilterStatus')?.addEventListener('change', e => { state.assetFilterStatus = e.target.value; render(); });
-    byId('opsAssetFilterDue')?.addEventListener('change', e => { state.assetFilterDue = e.target.value; render(); });
-    byId('opsAssetFilterTasks')?.addEventListener('change', e => { state.assetFilterTasks = e.target.value; render(); });
+    byId('opsAssetSearch')?.addEventListener('input', e => {
+      state.assetSearch = e.target.value;
+      clearTimeout(assetSearchTimer);
+      assetSearchTimer = setTimeout(() => {
+        render();
+        const search = byId('opsAssetSearch');
+        if(search){ search.focus(); search.setSelectionRange(search.value.length,search.value.length); }
+      },250);
+    });
+    byId('opsAssetShow')?.addEventListener('change', e => { state.assetShow = e.target.value; render(); });
+    ['opsMachineryType','opsWashVehicle','opsMachinerySide'].forEach(id=>byId(id)?.addEventListener('change',updateMachineryFormVisibility));
+    updateMachineryFormVisibility();
     document.querySelectorAll('[data-ops-edit-vehicle]').forEach(b => b.addEventListener('click', () => { state.editingVehicleId = b.dataset.opsEditVehicle; render(); }));
-    document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; render(); }));
+    document.querySelectorAll('[data-ops-edit-wash]').forEach(b => b.addEventListener('click', () => { state.editingWashId = b.dataset.opsEditWash; state.prefillMachineryVehicleId=''; state.prefillMachinerySide=''; render(); }));
+    document.querySelectorAll('[data-ops-add-machinery]').forEach(b => b.addEventListener('click', () => {
+      state.editingWashId='';
+      state.prefillMachineryVehicleId=b.dataset.opsAddMachinery||'';
+      state.prefillMachinerySide=b.dataset.opsMachinerySide||'';
+      render();
+    }));
     document.querySelectorAll('[data-ops-open-task]').forEach(b => b.addEventListener('click', () => { state.openTaskId = b.dataset.opsOpenTask; render(); }));
     document.querySelectorAll('[data-ops-action]').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.opsAction)));
   }
 
   async function handleAction(action){
     if(action === 'clearVehicle'){ state.editingVehicleId=''; render(); }
-    if(action === 'clearWash'){ state.editingWashId=''; render(); }
+    if(action === 'clearWash'){ state.editingWashId=''; state.prefillMachineryVehicleId=''; state.prefillMachinerySide=''; render(); }
     if(action === 'closeTask'){ state.openTaskId=''; render(); }
     if(action === 'closeInspectionRecord'){ state.openInspectionId=''; render(); }
     if(action === 'generateDueTasks'){ await generateDueTasks(); }
@@ -2295,7 +2431,7 @@
     if(action === 'applyStdSameType'){ await applyStandardSchedules('same_type'); }
     if(action === 'legacyUserTools'){ openLegacyUserTools(); }
     if(action === 'uploadCompanyLogo'){ await window.uploadCompanyLogo?.(byId('opsCompanyLogoFile')?.files?.[0]); }
-    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetFilterClass=''; state.assetFilterStatus=''; state.assetFilterDue=''; state.assetFilterTasks=''; render(); }
+    if(action === 'clearAssetFilters'){ state.assetSearch=''; state.assetShow='active'; render(); }
     if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
     if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; state.pmView='due'; render(); }
     if(action === 'pmSchedules'){ state.pmView='items'; render(); }
@@ -2617,7 +2753,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2904,7 +3040,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
@@ -2919,7 +3055,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3170,7 +3306,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3191,7 +3327,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3553,7 +3689,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     installAccountBehaviourV419();
   }
   function install(){
@@ -3582,7 +3718,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3716,7 +3852,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -3731,7 +3867,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4092,7 +4228,7 @@
 
   function refreshAll(){
     injectCss(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4108,7 +4244,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4238,7 +4374,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4246,11 +4382,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function stabiliseOnce(){
@@ -4261,7 +4397,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4281,9 +4417,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.47"] .notifyBtn,
-      html[data-sw-version="4.0.47"] #notifyBadge,
-      html[data-sw-version="4.0.47"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.48"] .notifyBtn,
+      html[data-sw-version="4.0.48"] #notifyBadge,
+      html[data-sw-version="4.0.48"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4294,7 +4430,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4463,14 +4599,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.47'
+    version: '4.0.48'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.47';
+  const VERSION='4.0.48';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -4491,7 +4627,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -4505,7 +4641,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.47';
+  const VERSION='4.0.48';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -4538,7 +4674,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.47';
+  const VERSION = '4.0.48';
   const BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const api = () => window.SWOperationsV4 || {};
@@ -4840,7 +4976,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.47 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.48 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
