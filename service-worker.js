@@ -1,6 +1,6 @@
-// Spray & Wash Operations V4.0.65 service worker
+// Spray & Wash Operations V4.0.66 service worker
 // Stabilisation release: network-first, clears old caches, avoids stale mixed-version UI.
-const CACHE_NAME = "spray-wash-operations-v4-0-65";
+const CACHE_NAME = "spray-wash-operations-v4-0-66";
 
 self.addEventListener("install", event => {
   self.skipWaiting();
