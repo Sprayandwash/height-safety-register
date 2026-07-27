@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.56
+// Spray & Wash Operations App V4.0.57
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -275,7 +275,13 @@ async function ensureCurrentProfile(){
   if(!currentUser)return;
   try{
     const email=currentUser.email||"";
-    await sb.from("profiles").upsert({user_id:currentUser.id,email,display_name:email.split("@")[0]||email,last_seen_at:nowIso()},{onConflict:"user_id"});
+    const existing=await sb.from("profiles").select("display_name").eq("user_id",currentUser.id).maybeSingle();
+    if(existing.error)throw existing.error;
+    const metadata=currentUser.user_metadata||{};
+    const fullName=[metadata.first_name||metadata.firstName,metadata.last_name||metadata.lastName].filter(Boolean).join(" ")||metadata.full_name||metadata.name||"";
+    const row={user_id:currentUser.id,email,last_seen_at:nowIso()};
+    if(!existing.data?.display_name)row.display_name=fullName||email.split("@")[0]||email;
+    await sb.from("profiles").upsert(row,{onConflict:"user_id"});
   }catch(err){console.warn("Profile sync skipped",err);}
 }
 async function loadRoles(){
