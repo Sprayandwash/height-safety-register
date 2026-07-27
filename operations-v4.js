@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.59
+/* Spray & Wash Operations App V4.0.60
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -307,25 +307,29 @@
       .ops-transfer-card{border:2px solid #99f6e4;background:#f0fdfa}
       .ops-cert-generate-step { margin-top:1rem; }
       .ops-cert-generate-step button { width:100%; }
-      /* Spray & Wash brand system: deep ocean, teal and aqua. */
-      .ops-shell{color:#123640}
-      .ops-btn,.ops-nav button{background:#e3f2f3!important;border:1px solid #b8dadd!important;color:#123640!important;box-shadow:none}
-      .ops-btn.primary,.ops-nav button.active,.ops-home-btn,.ops-home-tab{background:#087887!important;border-color:#087887!important;color:white!important}
-      .ops-btn.ghost{background:white!important;border-color:#9ecfd3!important;color:#087887!important}
-      .ops-btn.danger{background:#f9e2e2!important;border-color:#eab3b3!important;color:#912f35!important}
-      .ops-card,.ops-user-row,.ops-vehicle-asset,.ops-table-wrap,.ops-log-entry{border-color:#cfe3e6!important;box-shadow:0 5px 18px rgba(7,84,99,.08)}
+      /* Spray & Wash brand system: logo navy, blue and green. */
+      .ops-shell{color:#28266f}
+      .ops-btn,.ops-nav button{background:#edf6fc!important;border:1px solid #c2dcef!important;color:#302d7e!important;box-shadow:none}
+      .ops-btn.primary,.ops-nav button.active,.ops-home-btn,.ops-home-tab{background:#302d7e!important;border-color:#302d7e!important;color:white!important}
+      .ops-btn.ghost{background:white!important;border-color:#a9d2ed!important;color:#369bd5!important}
+      .ops-btn.danger{background:#fbe6e6!important;border-color:#efb5b5!important;color:#b60909!important}
+      .ops-card,.ops-user-row,.ops-vehicle-asset,.ops-table-wrap,.ops-log-entry{border-color:#d9e2f0!important;box-shadow:0 5px 18px rgba(48,45,126,.08)}
       .ops-card,.ops-user-row,.ops-vehicle-asset,.ops-table-wrap,.ops-log-entry,.ops-machinery-card{background:#fff!important}
-      .ops-table th,.ops-vehicle-asset-head,.ops-log-entry[open] summary,.ops-maintenance-choice,.ops-repeatable-maintenance,.ops-permission-check,.ops-question,.ops-check-section{background:#f1fbfc!important;border-color:#cfe3e6!important;color:#123640}
-      .ops-form input,.ops-form select,.ops-form textarea,.ops-filter-grid input,.ops-filter-grid select,.ops-log-filter input,.ops-log-filter select{border-color:#b7d4d8!important;color:#123640}
-      .ops-form input:focus,.ops-form select:focus,.ops-form textarea:focus,.ops-filter-grid input:focus,.ops-filter-grid select:focus{outline:3px solid rgba(33,183,194,.22);border-color:#087887!important}
-      .ops-subtle,.ops-asset-meta{color:#58727b!important}
-      .ops-role-chip,.ops-cert-search,.ops-transfer-card{background:#e4f6f7!important;border-color:#83cbd1!important;color:#075463!important}
-      .ops-dashboard-stat,.ops-branch-card{box-shadow:0 14px 30px rgba(7,84,99,.18)!important}
-      .ops-stat-total,.ops-home-height{background:linear-gradient(135deg,#087887,#21b7c2)!important}
-      .ops-stat-green,.ops-home-vehicle{background:linear-gradient(135deg,#087887,#15929b)!important}
-      .ops-stat-amber,.ops-home-management{background:linear-gradient(135deg,#0b6977,#199caa)!important}
-      .ops-stat-blue,.ops-home-admin{background:linear-gradient(135deg,#075463,#2a7886)!important}
-      .ops-ok{background:#dcf3f2!important;color:#08655f!important}.ops-warn{background:#fff0d6!important;color:#8b510a!important}.ops-bad{background:#fbe4e4!important;color:#912f35!important}
+      .ops-table th,.ops-vehicle-asset-head,.ops-log-entry[open] summary,.ops-maintenance-choice,.ops-repeatable-maintenance,.ops-permission-check,.ops-question,.ops-check-section{background:#f6f9fe!important;border-color:#d9e2f0!important;color:#28266f}
+      .ops-form input,.ops-form select,.ops-form textarea,.ops-filter-grid input,.ops-filter-grid select,.ops-log-filter input,.ops-log-filter select{border-color:#c5d8ee!important;color:#28266f}
+      .ops-form input:focus,.ops-form select:focus,.ops-form textarea:focus,.ops-filter-grid input:focus,.ops-filter-grid select:focus{outline:3px solid rgba(54,155,213,.20);border-color:#369bd5!important}
+      .ops-subtle,.ops-asset-meta{color:#61729b!important}
+      .ops-role-chip,.ops-cert-search,.ops-transfer-card{background:#edf6fc!important;border-color:#a9d2ed!important;color:#302d7e!important}
+      .ops-dashboard-stat,.ops-branch-card{box-shadow:0 14px 30px rgba(48,45,126,.18)!important}
+      .ops-stat-total,.ops-home-height{background:linear-gradient(135deg,#302d7e,#369bd5)!important}
+      .ops-stat-green,.ops-home-vehicle{background:linear-gradient(135deg,#00813a,#00a848)!important}
+      .ops-stat-amber,.ops-home-management{background:linear-gradient(135deg,#302d7e,#369bd5)!important}
+      .ops-stat-blue,.ops-home-admin{background:linear-gradient(135deg,#24215f,#302d7e)!important}
+      .ops-ok{background:#e1f7e9!important;color:#007d34!important}.ops-warn{background:#fff0d6!important;color:#8b510a!important}.ops-bad{background:#fbe4e4!important;color:#b60909!important}
+      .ops-card-icon,.ops-stat-icon{display:grid;place-items:center;flex:0 0 auto;width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.16);color:currentColor}
+      .ops-card-icon svg,.ops-stat-icon svg{width:29px;height:29px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+      .ops-branch-card{display:flex!important;align-items:center;gap:.85rem;text-align:left!important}
+      .ops-branch-card>span:last-child{display:flex;flex:1;flex-direction:column;gap:.2rem}
       .certSelectList{max-height:360px!important;}
       .v415-photo-options{display:flex;gap:1rem;flex-wrap:wrap;align-items:center;}
       .v415-photo-options label{display:flex!important;flex-direction:row!important;align-items:center;gap:.5rem;margin:0;font-weight:800;}
@@ -696,9 +700,21 @@
       </div>
       <div class="ops-branch-grid">${cards.join('')}</div>`;
   }
+  function appIcon(name, className){
+    const icons={
+      height:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>',
+      vehicle:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h3l4 3v4h-7z"/><path d="M6 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM18 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM3 10h11"/></svg>',
+      maintenance:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-5.8 5.8L3 18l3 3 5.9-5.9a4.5 4.5 0 0 0 5.8-5.8l-3.1 3.1-2.4-2.4 2.5-3.7Z"/></svg>',
+      admin:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.2A3.2 3.2 0 1 0 12 8.8a3.2 3.2 0 0 0 0 6.4Z"/><path d="m19.4 13.5 1.4 1-1.8 3.1-1.7-.7a7.6 7.6 0 0 1-1.8 1l-.3 1.8h-3.6l-.3-1.8a7.6 7.6 0 0 1-1.8-1l-1.7.7-1.8-3.1 1.4-1a7.4 7.4 0 0 1 0-2.1l-1.4-1 1.8-3.1 1.7.7a7.6 7.6 0 0 1 1.8-1l.3-1.8h3.6l.3 1.8a7.6 7.6 0 0 1 1.8 1l1.7-.7 1.8 3.1-1.4 1a7.4 7.4 0 0 1 0 2.1Z"/></svg>',
+      task:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5h6v3H9zM9 12h6M9 16h4"/></svg>',
+      schedule:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h5"/></svg>'
+    };
+    return `<span class="${className||'ops-card-icon'}">${icons[name]||icons.task}</span>`;
+  }
   function moduleCard(title, body, action){
     const cls = /Height/i.test(title) ? 'ops-home-height' : /Vehicle/i.test(title) ? 'ops-home-vehicle' : /Maintenance/i.test(title) ? 'ops-home-management' : 'ops-home-admin';
-    return `<button type="button" class="ops-branch-card ${cls}" onclick="${action}"><strong>${esc(title)}</strong>${body?`<span class="ops-subtle">${esc(body)}</span>`:''}</button>`;
+    const icon = /Height/i.test(title) ? 'height' : /Vehicle/i.test(title) ? 'vehicle' : /Maintenance/i.test(title) ? 'maintenance' : 'admin';
+    return `<button type="button" class="ops-branch-card ${cls}" onclick="${action}">${appIcon(icon)}<span><strong>${esc(title)}</strong>${body?`<span class="ops-subtle">${esc(body)}</span>`:''}</span></button>`;
   }
 
   function showOperations(view){
@@ -922,7 +938,7 @@
         <div class="ops-card"><h3>Open tasks</h3>${taskMiniListHtml(open.slice(0,8))}</div>
       </div>`;
   }
-  function statCard(title, value, note, variant, shortcut){ const attr = shortcut ? ` role="button" tabindex="0" data-ops-shortcut="${esc(shortcut)}"` : ''; return `<div class="ops-card ops-dashboard-stat ${variant || 'ops-stat-total'}"${attr}><div><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div></div><div class="ops-subtle">${esc(note)}</div></div>`; }
+  function statCard(title, value, note, variant, shortcut){ const attr = shortcut ? ` role="button" tabindex="0" data-ops-shortcut="${esc(shortcut)}"` : ''; const icon=/Machinery|Vehicle/.test(title)?'vehicle':/Preventive/.test(title)?'schedule':/task/i.test(title)?'task':'maintenance'; return `<div class="ops-card ops-dashboard-stat ${variant || 'ops-stat-total'}"${attr}><div style="display:flex;justify-content:space-between;gap:.7rem;align-items:flex-start"><div><div class="ops-subtle">${esc(title)}</div><div class="ops-stat">${esc(value)}</div></div>${appIcon(icon,'ops-stat-icon')}</div><div class="ops-subtle">${esc(note)}</div></div>`; }
   function dueListHtml(){
     const rows = [];
     state.vehicles.filter(v=>v.status==='Active' && assetNeedsAttention('vehicle',v)).forEach(v => rows.push({type:'Vehicle', name:v.rego || v.name, reason:'Open task'}));
@@ -3125,7 +3141,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3412,7 +3428,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
@@ -3427,7 +3443,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3678,7 +3694,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3699,7 +3715,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4061,7 +4077,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     installAccountBehaviourV419();
   }
   function install(){
@@ -4090,7 +4106,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4224,7 +4240,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -4239,7 +4255,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4600,7 +4616,7 @@
 
   function refreshAll(){
     injectCss(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4616,7 +4632,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4746,7 +4762,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4754,11 +4770,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function stabiliseOnce(){
@@ -4769,7 +4785,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4789,9 +4805,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.59"] .notifyBtn,
-      html[data-sw-version="4.0.59"] #notifyBadge,
-      html[data-sw-version="4.0.59"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.60"] .notifyBtn,
+      html[data-sw-version="4.0.60"] #notifyBadge,
+      html[data-sw-version="4.0.60"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4802,7 +4818,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4971,14 +4987,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.59'
+    version: '4.0.60'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.59';
+  const VERSION='4.0.60';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -4999,7 +5015,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -5013,7 +5029,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.59';
+  const VERSION='4.0.60';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -5046,7 +5062,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.59';
+  const VERSION = '4.0.60';
   const BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const api = () => window.SWOperationsV4 || {};
@@ -5348,7 +5364,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.59 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
