@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.63
+/* Spray & Wash Operations App V4.0.64
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -137,7 +137,7 @@
   function canUseManagement(){ return hasAny(['Equipment Manager','Office / Reports','Viewer']); }
   function canUseHeight(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer','Certificate Approver']); }
   function canUseVehicleChecks(){ return hasAny(['Inspector','Equipment Manager']); }
-  function isManagementView(view){ return ['management-dashboard','assets','history','tasks','schedules','guides'].includes(view) || ['vehicles','washing','maintenance'].includes(view); }
+  function isManagementView(view){ return ['management-dashboard','assets','history','tasks','schedules'].includes(view) || ['vehicles','washing','maintenance'].includes(view); }
   function isAdminView(view){ return ['admin-users','admin-app-settings','admin-settings'].includes(view); }
   function displayStatusLabel(value){
     const v = String(value || '—');
@@ -722,6 +722,7 @@
     state.currentView = view || state.currentView || 'vehicle-checks';
     if(state.currentView === 'vehicles' || state.currentView === 'washing') state.currentView = 'assets';
     if(state.currentView === 'maintenance') state.currentView = 'tasks';
+    if(state.currentView === 'guides') state.currentView = 'schedules';
     if(isAdminView(state.currentView) && !isAdmin()) state.currentView = 'vehicle-checks';
     if(isManagementView(state.currentView) && !canUseManagement()) state.currentView = 'vehicle-checks';
     setTopTabsMode('none');
@@ -856,8 +857,7 @@
         ${navButton('assets','Assets')}
         ${navButton('history','Maintenance Log')}
         ${navButton('tasks','Tasks')}
-        ${navButton('schedules','Preventive Maintenance')}
-        ${navButton('guides','Guides')}` : '';
+        ${navButton('schedules','Preventive Maintenance')}` : '';
     const adminNav = isAdminModule ? `
         ${navButton('admin-users','Users & Permissions')}
         ${navButton('admin-app-settings','App Settings')}
@@ -893,7 +893,6 @@
     if(state.currentView === 'history') return historyHtml();
     if(state.currentView === 'tasks') return tasksHtml();
     if(state.currentView === 'schedules') return schedulesHtml();
-    if(state.currentView === 'guides') return guidesHtml();
     return dashboardHtml();
   }
 
@@ -1711,15 +1710,16 @@
       const existingOpen = state.tasks.some(t => t.schedule_id === s.id && !['Completed','Deferred'].includes(t.status));
       if(existingOpen) continue;
       const w = state.washEquipment.find(x=>x.id===s.washing_equipment_id);
+      const vehicle = state.vehicles.find(x=>x.id===s.vehicle_id);
       const p = state.procedures.find(x=>x.id===s.procedure_id);
       const row = {
         source_type: 'Scheduled',
-        target_type: 'washing_equipment',
-        washing_equipment_id: s.washing_equipment_id,
-        vehicle_id: w?.assigned_vehicle_id || null,
+        target_type: w ? 'washing_equipment' : 'vehicle',
+        washing_equipment_id: w ? s.washing_equipment_id : null,
+        vehicle_id: w?.assigned_vehicle_id || s.vehicle_id || vehicle?.id || null,
         procedure_id: s.procedure_id,
         schedule_id: s.id,
-        title: `${p?.name || 'Scheduled maintenance'} - ${w ? machineryIdentifier(w) : 'Machinery'}`,
+        title: `${String(p?.category||p?.name||'Scheduled maintenance').replace(/^Planned:\s*/, '')} - ${w ? machineryIdentifier(w) : (vehicle?.rego||vehicle?.name||'Vehicle')}`,
         description: p?.description || 'Scheduled preventive maintenance.',
         status: 'Open',
         priority: 'Medium',
@@ -2599,20 +2599,38 @@
     }finally{if(submit)submit.disabled=false;}
   }
 
-  function scheduleSubnav(){
-    const current = state.pmView || 'due';
-    const tab = (id,label) => `<button type="button" class="${current===id?'active':''}" data-ops-pm-view="${id}">${label}</button>`;
-    return `<div class="ops-nav ops-subnav">${tab('due','Due Now')}${tab('service','Record Service')}${tab('items','Service Items')}${tab('completed','Completed Services')}</div>`;
+  const PREVENTIVE_MAINTENANCE_ITEMS = [
+    { machineryType:'Engine', name:'Oil changed' },
+    { machineryType:'Engine', name:'Spark plug changed' },
+    { machineryType:'Engine', name:'Air filter changed' },
+    { machineryType:'Gearbox', name:'Oil changed' },
+    { machineryType:'Pump', name:'Oil changed' },
+    { machineryType:'Pump', name:'Valves changed' },
+    { machineryType:'Pump', name:'Seals replaced' }
+  ];
+  function preventiveMaintenanceProcedureName(item){ return `PM - ${item.machineryType} - ${item.name}`; }
+  function preventiveMaintenanceProcedure(item){ return state.procedures.find(p=>p.name===preventiveMaintenanceProcedureName(item)); }
+  function plannedMaintenanceTargetOptions(vehicleId){
+    const standalone=vehicleId==='standalone';
+    const machinery=state.washEquipment.filter(w=>String(w.assigned_vehicle_id||'')===(standalone?'':String(vehicleId)) && w.status!=='Retired');
+    if(!vehicleId) return '<option value="">Select a vehicle or standalone machinery first</option>';
+    const vehicleOption=!standalone ? `<option value="vehicle:${esc(vehicleId)}">Vehicle itself</option>` : '';
+    return `<option value="">Select asset</option>${vehicleOption}${machinery.map(w=>`<option value="machinery:${esc(w.id)}">${esc(machineryTypeLabel(w))} · ${esc(machineryIdentifier(w))}</option>`).join('')}`;
   }
+  function plannedMaintenanceTargetName(schedule){
+    if(schedule.washing_equipment_id){ const machinery=state.washEquipment.find(w=>String(w.id)===String(schedule.washing_equipment_id)); return machinery?machineryIdentifier(machinery):'Unknown machinery'; }
+    const vehicle=state.vehicles.find(v=>String(v.id)===String(schedule.vehicle_id)); return vehicle?(vehicle.rego||vehicle.name||'Vehicle'):'Unknown vehicle';
+  }
+  function plannedMaintenanceSchedules(){ return state.schedules.filter(s=>String(state.procedures.find(p=>String(p.id)===String(s.procedure_id))?.name||'').startsWith('PM planned ')); }
   function schedulesHtml(){
-    const current = state.pmView || 'due';
-    return `<div class="ops-card"><div class="ops-section-title"><div><h3>Preventive maintenance</h3><p class="ops-subtle">Use Due Now to see upcoming work, Record Service when you actually service machinery, and Service Items to define the routine work list.</p></div></div>${scheduleSubnav()}${preventiveBodyHtml(current)}</div>`;
-  }
-  function preventiveBodyHtml(view){
-    if(view === 'service') return serviceRunHtml();
-    if(view === 'items') return serviceItemsHtml();
-    if(view === 'completed') return completedServicesHtml();
-    return dueNowPreventiveHtml();
+    const rows=PREVENTIVE_MAINTENANCE_ITEMS.map((item,index)=>{
+      const procedure=preventiveMaintenanceProcedure(item);
+      return `<tr><td>${esc(item.machineryType)}</td><td><strong>${esc(item.name)}</strong></td><td><input id="opsPmFrequency${index}" type="number" min="1" step="1" required value="${esc(procedure?.frequency_days||'')}" placeholder="Days"></td></tr>`;
+    }).join('');
+    const planned=plannedMaintenanceSchedules();
+    return `<div class="ops-card"><form id="opsPreventiveMaintenanceForm"><p class="ops-subtle">Set how often each routine item should be completed. Repairs and other maintenance remain available when recording maintenance, but are not scheduled routine work.</p><div class="ops-table-wrap"><table class="ops-table"><tr><th>Machinery</th><th>Maintenance item</th><th>Frequency (days)</th></tr>${rows}</table></div>${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" type="submit">Save service intervals</button></div>':''}</form></div>
+      ${canMaintain()?`<div class="ops-card"><details><summary><strong>Add planned maintenance item</strong></summary><form id="opsPlannedMaintenanceForm" class="ops-form" style="margin-top:.8rem"><label>Vehicle or standalone machinery<select id="opsPlannedMaintenanceVehicle" required><option value="">Select asset group</option>${state.vehicles.filter(v=>v.status!=='Retired').map(v=>`<option value="${esc(v.id)}">${esc(v.rego||v.name||'Vehicle')}</option>`).join('')}<option value="standalone">Standalone machinery</option></select></label><label>Asset or sub-asset<select id="opsPlannedMaintenanceTarget" required disabled>${plannedMaintenanceTargetOptions('')}</select></label><label>Maintenance item<input id="opsPlannedMaintenanceName" required placeholder="e.g. Replace pressure hose"></label><label>Frequency days<input id="opsPlannedMaintenanceFrequency" type="number" min="1" required placeholder="e.g. 180"></label><label class="ops-span-2">Notes<textarea id="opsPlannedMaintenanceNotes" placeholder="Optional information about this planned work"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Add planned item</button></div></form></details></div>`:''}
+      ${planned.length?`<div class="ops-card"><div class="ops-table-wrap"><table class="ops-table"><tr><th>Assigned asset</th><th>Maintenance item</th><th>Frequency</th><th>Next due</th></tr>${planned.map(schedule=>{const procedure=state.procedures.find(p=>String(p.id)===String(schedule.procedure_id));return `<tr><td>${esc(plannedMaintenanceTargetName(schedule))}</td><td><strong>${esc(String(procedure?.category||'').replace(/^Planned:\s*/, '')||'Planned maintenance')}</strong>${procedure?.description?`<br><span class="ops-subtle">${esc(procedure.description)}</span>`:''}</td><td>${esc(schedule.frequency_days||procedure?.frequency_days||'—')} days</td><td>${nzDate(schedule.next_due_at)}</td></tr>`;}).join('')}</table></div></div>`:''}`;
   }
   function dueNowPreventiveHtml(){
     const due = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
@@ -2657,6 +2675,50 @@
   function completedServicesHtml(){
     const rows = state.tasks.filter(t => t.status === 'Completed').sort((a,b)=>String(b.completed_at||b.updated_at||b.created_at||'').localeCompare(String(a.completed_at||a.updated_at||a.created_at||'')));
     return `<h3>Completed services</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Asset</th><th>Service item</th><th>Notes</th></tr>${rows.map(t=>`<tr><td>${nzDate(t.completed_at || t.updated_at || t.created_at)}</td><td>${esc(targetName(t))}</td><td>${esc(t.title)}</td><td>${esc(t.completion_notes || t.description || '')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No completed service records yet.</p>'}`;
+  }
+  async function savePreventiveMaintenanceIntervals(e){
+    e.preventDefault();
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can change service intervals.');
+    const intervals=PREVENTIVE_MAINTENANCE_ITEMS.map((item,index)=>({item,frequency:Number(byId(`opsPmFrequency${index}`)?.value||0)}));
+    if(intervals.some(row=>!Number.isFinite(row.frequency)||row.frequency<1)) return alert('Enter a service interval in days for every maintenance item.');
+    for(const {item,frequency} of intervals){
+      const existing=preventiveMaintenanceProcedure(item);
+      const row={name:preventiveMaintenanceProcedureName(item),category:item.machineryType,target_type:'washing_equipment',description:item.name,frequency_days:frequency,skill_level:'Basic',requires_signoff:false,is_active:true,created_by:state.user.id};
+      const result=existing
+        ? await state.sb.from('operations_maintenance_procedures').update(row).eq('id',existing.id)
+        : await state.sb.from('operations_maintenance_procedures').insert(row);
+      if(result.error) return alert(result.error.message);
+    }
+    alert('Service intervals saved.');
+    await loadAll();
+  }
+  function updatePlannedMaintenanceTargetOptions(){
+    const vehicleId=byId('opsPlannedMaintenanceVehicle')?.value||'';
+    const target=byId('opsPlannedMaintenanceTarget');
+    if(!target)return;
+    target.disabled=!vehicleId;
+    target.innerHTML=plannedMaintenanceTargetOptions(vehicleId);
+  }
+  async function savePlannedMaintenanceItem(e){
+    e.preventDefault();
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can add planned maintenance.');
+    const target=byId('opsPlannedMaintenanceTarget')?.value||'';
+    const title=String(byId('opsPlannedMaintenanceName')?.value||'').trim();
+    const frequency=Number(byId('opsPlannedMaintenanceFrequency')?.value||0);
+    const notes=String(byId('opsPlannedMaintenanceNotes')?.value||'').trim();
+    if(!target||!title||!Number.isFinite(frequency)||frequency<1) return alert('Choose an asset, enter the planned item and set its frequency in days.');
+    const isMachinery=target.startsWith('machinery:');
+    const targetId=target.slice(target.indexOf(':')+1);
+    const procedure={name:`PM planned ${Date.now()} ${target}`,category:`Planned: ${title}`,target_type:isMachinery?'washing_equipment':'vehicle',description:notes||null,frequency_days:frequency,skill_level:'Basic',requires_signoff:false,is_active:true,created_by:state.user.id};
+    const inserted=await state.sb.from('operations_maintenance_procedures').insert(procedure).select().single();
+    if(inserted.error) return alert(inserted.error.message);
+    const schedule={procedure_id:inserted.data.id,frequency_days:frequency,next_due_at:addDays(today(),frequency),is_active:true,created_by:state.user.id};
+    if(isMachinery) schedule.washing_equipment_id=targetId;
+    else schedule.vehicle_id=targetId;
+    const saved=await state.sb.from('operations_equipment_maintenance_schedules').insert(schedule);
+    if(saved.error) return alert(saved.error.message);
+    alert('Planned maintenance item added.');
+    await loadAll();
   }
   async function saveServiceItem(e){
     e.preventDefault();
@@ -2756,6 +2818,9 @@
     byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
+    byId('opsPreventiveMaintenanceForm')?.addEventListener('submit', savePreventiveMaintenanceIntervals);
+    byId('opsPlannedMaintenanceForm')?.addEventListener('submit', savePlannedMaintenanceItem);
+    byId('opsPlannedMaintenanceVehicle')?.addEventListener('change', updatePlannedMaintenanceTargetOptions);
     byId('opsServiceItemForm')?.addEventListener('submit', saveServiceItem);
     byId('opsServiceRunForm')?.addEventListener('submit', saveServiceRun);
     byId('opsServiceRunAsset')?.addEventListener('change', e => { state.serviceRunAssetId = e.target.value; state.pmView='service'; render(); });
@@ -3142,7 +3207,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3429,7 +3494,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
@@ -3444,7 +3509,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3695,7 +3760,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3716,7 +3781,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4078,7 +4143,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     installAccountBehaviourV419();
   }
   function install(){
@@ -4107,7 +4172,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4241,7 +4306,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -4256,7 +4321,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4617,7 +4682,7 @@
 
   function refreshAll(){
     injectCss(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4633,7 +4698,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4763,7 +4828,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4771,11 +4836,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function stabiliseOnce(){
@@ -4786,7 +4851,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4806,9 +4871,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.63"] .notifyBtn,
-      html[data-sw-version="4.0.63"] #notifyBadge,
-      html[data-sw-version="4.0.63"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.64"] .notifyBtn,
+      html[data-sw-version="4.0.64"] #notifyBadge,
+      html[data-sw-version="4.0.64"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4819,7 +4884,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -4988,14 +5053,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.63'
+    version: '4.0.64'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.63';
+  const VERSION='4.0.64';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -5016,7 +5081,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -5030,7 +5095,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.63';
+  const VERSION='4.0.64';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -5063,7 +5128,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.63';
+  const VERSION = '4.0.64';
   const BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const api = () => window.SWOperationsV4 || {};
@@ -5365,7 +5430,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.63 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.64 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
