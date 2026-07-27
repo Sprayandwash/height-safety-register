@@ -9,15 +9,15 @@
   <title>Spray &amp; Wash Operations</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <meta name="theme-color" content="#302d7e">
+  <meta name="theme-color" content="#2d2f7c">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="S&amp;W Operations">
   <style>
     :root{
-      --ink:#28266f;--muted:#61729b;--line:#d9e2f0;--bg:#f5f7fc;--card:#ffffff;
-      --brand:#302d7e;--brand2:#24215f;--brand-light:#eaf5fc;--brand-pale:#f6f9fe;--accent:#369bd5;--green:#009b42;--amber:#f39b08;--red:#df1717;--blue:#369bd5;--purple:#302d7e;
-      --shadow:0 10px 30px rgba(48,45,126,.10);--radius:18px;
+      --ink:#2d2f7c;--muted:#61729b;--line:#d9e2f0;--bg:#f5f7fc;--card:#ffffff;
+      --brand:#2d2f7c;--brand2:#2d2f7c;--brand-light:#eaf5fc;--brand-pale:#f6f9fe;--accent:#349bd6;--green:#148f54;--amber:#f39b08;--red:#df1717;--blue:#349bd6;--purple:#2d2f7c;
+      --shadow:0 10px 30px rgba(45,47,124,.10);--radius:18px;
     }
     *{box-sizing:border-box}
     body{margin:0;background:radial-gradient(circle at top left,#edf5fc 0,#f5f7fc 42%,#fff 100%);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
@@ -30,7 +30,7 @@
     button,.buttonLike{border:1px solid #c2dcef;border-radius:12px;padding:11px 14px;font-weight:800;background:#edf6fc;color:var(--brand);cursor:pointer;min-height:42px}button:hover,.buttonLike:hover{filter:brightness(.98);box-shadow:0 5px 13px rgba(48,45,126,.12)}button.active,.primary{border-color:var(--brand);background:var(--brand);color:white}.danger{background:var(--red)!important;border-color:var(--red)!important;color:white!important}.ghost{background:white;color:var(--blue);border-color:#a9d2ed}.warn{background:#fff3dc;border-color:#f6c467;color:#905500}
     label{display:block;font-size:13px;font-weight:800;margin:9px 0 4px}input,select,textarea{width:100%;border:1px solid #c5d8ee;border-radius:12px;padding:12px;font-size:16px;background:white;color:var(--ink)}input:focus,select:focus,textarea:focus{outline:3px solid rgba(7,137,237,.20);border-color:var(--blue)}textarea{min-height:90px}.hidden{display:none!important}.muted{color:var(--muted);font-size:13px}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
     .pill{border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900;display:inline-block}.pass{background:#dcfce7;color:#166534}.fail{background:#fee2e2;color:#991b1b}.due{background:#fef3c7;color:#92400e}.retired{background:#e5e7eb;color:#374151}.info{background:#dbeafe;color:#1e40af}
-    .stat{color:white;min-height:126px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;position:relative;overflow:hidden}.stat::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:999px;background:rgba(255,255,255,.16)}.stat b{font-size:38px;display:block;letter-spacing:-.05em}.stat span{font-weight:800}.stat small{opacity:.9}.stat.total{background:linear-gradient(135deg,#302d7e,#369bd5)}.stat.service{background:linear-gradient(135deg,#00813a,#00a848)}.stat.dueCard{background:linear-gradient(135deg,#d97e00,#f7ad22)}.stat.failed{background:linear-gradient(135deg,#b60909,#eb2929)}.stat.archived{background:linear-gradient(135deg,#53668a,#7890ad)}.statIcon{position:absolute;top:15px;right:15px;display:grid;place-items:center;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.16)}.statIcon svg{width:29px;height:29px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+    .stat{color:white;min-height:126px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;position:relative;overflow:hidden}.stat::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:999px;background:rgba(255,255,255,.16)}.stat b{font-size:38px;display:block;letter-spacing:-.05em}.stat span{font-weight:800}.stat small{opacity:.9}.stat.total{background:#2d2f7c}.stat.service{background:#148f54}.stat.dueCard{background:#f39b08}.stat.failed{background:#df1717}.stat.archived{background:#61729b}.statIcon{position:absolute;top:15px;right:15px;display:grid;place-items:center;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.16)}.statIcon svg{width:29px;height:29px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 
     #dashRecent{height:340px;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;contain:layout paint;background:#fff;border-radius:12px}
     #dashRecent .lineItem{min-height:47px}
@@ -56,7 +56,7 @@
 .equipmentResultsCore{overflow-anchor:none;min-height:120px}
 #equipment .legacyEquipmentFilter,#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter:not(#equipmentFilterCore){display:none!important}
 
-    /* V4.0.60 Spray & Wash logo colour and icon update. */
+    /* V4.0.61 Exact Spray & Wash logo colour update. */
     #certificates > .card.sw421-cert-card,
     #certificates > .card,
     #certificates > .sw424-cert,
@@ -78,7 +78,7 @@
 <body>
 <header>
   <img class="logo" src="assets/logo.png" onerror="this.src='assets/icon.svg'" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.60 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.61 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -115,7 +115,7 @@
 <div id="cropModal" class="modal hidden"><div class="modalBox"><h2>Crop photo</h2><p class="muted">The photo starts full-size. Crop each side only if needed, then save. For multiple photos, they will open one after another.</p><div id="cropQueueInfo" class="cropQueue hidden"></div><canvas id="cropCanvas" class="cropCanvas" width="1200" height="900"></canvas><div class="cropControls"><label>Crop left<input id="cropLeft" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('left',this.value)"></label><label>Crop right<input id="cropRight" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('right',this.value)"></label><label>Crop top<input id="cropTop" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('top',this.value)"></label><label>Crop bottom<input id="cropBottom" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('bottom',this.value)"></label></div><div class="row"><button onclick="rotateCrop()">Rotate</button><button onclick="resetCrop()">Reset crop</button><button class="primary" onclick="saveCrop()">Save photo</button><button onclick="cancelCrop()">Cancel</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=4.0.60"></script>
-<script src="./operations-v4.js?v=4.0.60"></script>
+<script src="app.js?v=4.0.61"></script>
+<script src="./operations-v4.js?v=4.0.61"></script>
 </body>
 </html>
