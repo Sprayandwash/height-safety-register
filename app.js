@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.69
+// Spray & Wash Operations App V4.0.70
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -30,7 +30,7 @@ let pendingInspectionPhotos=[];
 let cropState=null;
 let photoQueue=[];
 let busyDepth=0;
-const PACKAGED_LOGO_PATH="assets/spray-wash-logo-v4.0.69.png";
+const PACKAGED_LOGO_PATH=window.__sprayWashPackagedLogo||"assets/spray-wash-logo-v4.0.69.png";
 let companyLogoDataUrl="",companyLogoPath="";
 try{companyLogoDataUrl=localStorage.getItem("swCompanyLogoDataUrlV469")||"";companyLogoPath=localStorage.getItem("swCompanyLogoPathV469")||"";}catch(_){/* local cache is optional */}
 function setBusy(on,msg="Working..."){

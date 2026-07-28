@@ -56,7 +56,7 @@
 .equipmentResultsCore{overflow-anchor:none;min-height:120px}
 #equipment .legacyEquipmentFilter,#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter:not(#equipmentFilterCore){display:none!important}
 
-    /* V4.0.69 Dashboard, Admin and immediate-logo update. */
+    /* V4.0.70 Dashboard, Admin and immediate-logo update. */
     #dashboard>.grid.five{grid-template-columns:repeat(3,minmax(0,1fr))}
     #dashboard .stat.total,#dashboard .stat.archived{display:none}
     #dashboard .stat{color:#003b73;background:#fff!important;border:1px solid #d9e2f0;box-shadow:0 5px 18px rgba(0,59,115,.10);min-height:126px}
@@ -70,6 +70,8 @@
     .reportWorkspace>.reportPanel:first-child{background:var(--brand-pale);border:1px solid #bdd6f0;border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
     .reportWorkspace>.reportPanel:first-child h3{margin:0 0 10px;font-size:18px;line-height:1.3;font-weight:800}
     .reportWorkspace>.reportPanel:first-child .row{margin:0;gap:8px}
+    .reportWorkspace>.reportPanel:first-child button{background:#edf6fc!important;border-color:#c2dcef!important;color:#003b73!important;box-shadow:none}
+    .reportWorkspace>.reportPanel:first-child button.primary{background:#003b73!important;border-color:#003b73!important;color:white!important}
     #certificates > .card.sw421-cert-card,
     #certificates > .card,
     #certificates > .sw424-cert,
@@ -89,9 +91,10 @@
 </style>
 </head>
 <body>
+<script>window.__sprayWashPackagedLogo="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTAwIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEwMCIgcng9IjgiIGZpbGw9IndoaXRlIi8+PHRleHQgeD0iNyIgeT0iMzEiIGZpbGw9IiMwMDNCNzMiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjI1IiBmb250LXdlaWdodD0iOTAwIj5TUFJBWTwvdGV4dD48Y2lyY2xlIGN4PSIxMDEiIGN5PSIyMyIgcj0iMTIiIGZpbGw9IiMwRDk2NDkiLz48dGV4dCB4PSI3IiB5PSI2MSIgZmlsbD0iIzAwM0I3MyIgZm9udC1mYW1pbHk9IkFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjUiIGZvbnQtd2VpZ2h0PSI5MDAiPiZhbXA7IFdBU0g8L3RleHQ+PHRleHQgeD0iNyIgeT0iODUiIGZpbGw9IiM0RjlCRDAiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjE4IiBmb250LXdlaWdodD0iOTAwIj5TT0xVVElPTlM8L3RleHQ+PC9zdmc+";</script>
 <header>
-  <img class="logo" src="assets/spray-wash-logo-v4.0.69.png" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.69 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <img class="logo" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}"><script>document.currentScript.previousElementSibling.src=window.__sprayWashPackagedLogo;</script>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.70 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -128,7 +131,7 @@
 <div id="cropModal" class="modal hidden"><div class="modalBox"><h2>Crop photo</h2><p class="muted">The photo starts full-size. Crop each side only if needed, then save. For multiple photos, they will open one after another.</p><div id="cropQueueInfo" class="cropQueue hidden"></div><canvas id="cropCanvas" class="cropCanvas" width="1200" height="900"></canvas><div class="cropControls"><label>Crop left<input id="cropLeft" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('left',this.value)"></label><label>Crop right<input id="cropRight" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('right',this.value)"></label><label>Crop top<input id="cropTop" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('top',this.value)"></label><label>Crop bottom<input id="cropBottom" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('bottom',this.value)"></label></div><div class="row"><button onclick="rotateCrop()">Rotate</button><button onclick="resetCrop()">Reset crop</button><button class="primary" onclick="saveCrop()">Save photo</button><button onclick="cancelCrop()">Cancel</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=4.0.69"></script>
-<script src="./operations-v4.js?v=4.0.69"></script>
+<script src="app.js?v=4.0.70"></script>
+<script src="./operations-v4.js?v=4.0.70"></script>
 </body>
 </html>
