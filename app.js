@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.68
+// Spray & Wash Operations App V4.0.69
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -30,8 +30,9 @@ let pendingInspectionPhotos=[];
 let cropState=null;
 let photoQueue=[];
 let busyDepth=0;
+const PACKAGED_LOGO_PATH="assets/spray-wash-logo-v4.0.69.png";
 let companyLogoDataUrl="",companyLogoPath="";
-try{companyLogoDataUrl=localStorage.getItem("swCompanyLogoDataUrl")||"";companyLogoPath=localStorage.getItem("swCompanyLogoPath")||"";}catch(_){/* local cache is optional */}
+try{companyLogoDataUrl=localStorage.getItem("swCompanyLogoDataUrlV469")||"";companyLogoPath=localStorage.getItem("swCompanyLogoPathV469")||"";}catch(_){/* local cache is optional */}
 function setBusy(on,msg="Working..."){
   const overlay=document.getElementById("busyOverlay");
   const text=document.getElementById("busyText");
@@ -137,15 +138,15 @@ function companyLogoMarkup(className="certificateLogo"){
 }
 function applyCompanyLogo(){
   const banner=document.querySelector("header .logo");
-  if(banner) banner.src=companyLogoDataUrl||"assets/logo.png";
+  if(banner) banner.src=companyLogoDataUrl||PACKAGED_LOGO_PATH;
   const preview=document.getElementById("opsCompanyLogoPreview");
-  if(preview){preview.src=companyLogoDataUrl||"assets/logo.png";preview.classList.remove("hidden");}
+  if(preview){preview.src=companyLogoDataUrl||PACKAGED_LOGO_PATH;preview.classList.remove("hidden");}
   const status=document.getElementById("opsCompanyLogoStatus");
   if(status) status.textContent=companyLogoDataUrl?`Current logo: ${appSettingValue("company_logo_file_name","Uploaded company logo")}`:"Using the packaged Spray & Wash logo.";
 }
 async function loadCompanyLogo(force=false){
   const path=String(appSettingValue("company_logo_path","")||"");
-  if(!path){companyLogoDataUrl="";companyLogoPath="";try{localStorage.removeItem("swCompanyLogoDataUrl");localStorage.removeItem("swCompanyLogoPath");}catch(_){}applyCompanyLogo();return;}
+  if(!path){companyLogoDataUrl="";companyLogoPath="";try{localStorage.removeItem("swCompanyLogoDataUrlV469");localStorage.removeItem("swCompanyLogoPathV469");}catch(_){}applyCompanyLogo();return;}
   if(!force&&path===companyLogoPath&&companyLogoDataUrl){applyCompanyLogo();return;}
   try{
     const downloaded=await sb.storage.from("inspection-photos").download(path);
@@ -154,12 +155,12 @@ async function loadCompanyLogo(force=false){
     const dataUrl=await blobToDataUrl(downloaded.data);
     if(!dataUrl.startsWith("data:image/"))throw new Error("The saved logo is not a readable image.");
     companyLogoDataUrl=dataUrl;companyLogoPath=path;
-    try{localStorage.setItem("swCompanyLogoDataUrl",dataUrl);localStorage.setItem("swCompanyLogoPath",path);}catch(_){}
+    try{localStorage.setItem("swCompanyLogoDataUrlV469",dataUrl);localStorage.setItem("swCompanyLogoPathV469",path);}catch(_){}
   }catch(err){
     console.warn("Company logo not loaded",err);
     if(path!==companyLogoPath){
       companyLogoDataUrl="";companyLogoPath="";
-      try{localStorage.removeItem("swCompanyLogoDataUrl");localStorage.removeItem("swCompanyLogoPath");}catch(_){}
+      try{localStorage.removeItem("swCompanyLogoDataUrlV469");localStorage.removeItem("swCompanyLogoPathV469");}catch(_){}
     }
   }
   applyCompanyLogo();
@@ -242,7 +243,7 @@ async function uploadCompanyLogo(file){
     if(saved.error){await sb.storage.from("inspection-photos").remove([path]);alert("The logo setting was not saved: "+saved.error.message);return false;}
     appSettings.company_logo_path=path;appSettings.company_logo_file_name=file.name||"company-logo";
     companyLogoPath=path;companyLogoDataUrl=dataUrl;
-    try{localStorage.setItem("swCompanyLogoDataUrl",dataUrl);localStorage.setItem("swCompanyLogoPath",path);}catch(_){}
+    try{localStorage.setItem("swCompanyLogoDataUrlV469",dataUrl);localStorage.setItem("swCompanyLogoPathV469",path);}catch(_){}
     applyCompanyLogo();
     if(oldPath&&oldPath!==path)await sb.storage.from("inspection-photos").remove([oldPath]);
     await logAudit("company_logo_updated","settings",null,"Company logo updated",{file_name:file.name||"company-logo",storage_path:path});
@@ -370,8 +371,8 @@ function bindRecentInspectionLimit(){
   selector.addEventListener("change",renderRecentInspectionHistory);
 }
 function renderDashboard(){
-  const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const archived=equipment.filter(isArchived);
-  dashTotal.textContent=equipment.length; dashInService.textContent=active.filter(e=>e.status==="In Service").length; dashDue.textContent=due.length; dashFailed.textContent=failed.length; dashArchived.textContent=archived.length;
+  const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed);
+  document.getElementById("dashInService").textContent=active.filter(e=>e.status==="In Service").length; document.getElementById("dashDue").textContent=due.length; document.getElementById("dashFailed").textContent=failed.length;
   dashNextDue.innerHTML=due.slice(0,7).map(e=>`<div class="lineItem" onclick="openItem('${e.id}')"><b>${esc(e.serial)}</b><span class="hideMobile">${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No active equipment due.</p>`;
   bindRecentInspectionLimit();
   renderRecentInspectionHistory();
