@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.70
+// Spray & Wash Operations App V4.0.71
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -30,7 +30,7 @@ let pendingInspectionPhotos=[];
 let cropState=null;
 let photoQueue=[];
 let busyDepth=0;
-const PACKAGED_LOGO_PATH=window.__sprayWashPackagedLogo||"assets/spray-wash-logo-v4.0.69.png";
+const PACKAGED_LOGO_PATH="spray-wash-logo-v4.0.69.png";
 let companyLogoDataUrl="",companyLogoPath="";
 try{companyLogoDataUrl=localStorage.getItem("swCompanyLogoDataUrlV469")||"";companyLogoPath=localStorage.getItem("swCompanyLogoPathV469")||"";}catch(_){/* local cache is optional */}
 function setBusy(on,msg="Working..."){
@@ -373,7 +373,7 @@ function bindRecentInspectionLimit(){
 function renderDashboard(){
   const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed);
   document.getElementById("dashInService").textContent=active.filter(e=>e.status==="In Service").length; document.getElementById("dashDue").textContent=due.length; document.getElementById("dashFailed").textContent=failed.length;
-  dashNextDue.innerHTML=due.slice(0,7).map(e=>`<div class="lineItem" onclick="openItem('${e.id}')"><b>${esc(e.serial)}</b><span class="hideMobile">${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No active equipment due.</p>`;
+  const nextDue=document.getElementById("dashNextDue"); if(nextDue) nextDue.innerHTML=due.slice(0,7).map(e=>`<div class="lineItem" onclick="openItem('${e.id}')"><b>${esc(e.serial)}</b><span class="hideMobile">${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No active equipment due.</p>`;
   bindRecentInspectionLimit();
   renderRecentInspectionHistory();
   let counts={};EQUIPMENT_TYPES.forEach(t=>counts[t]=0);active.forEach(e=>counts[e.type||"Other"]=(counts[e.type||"Other"]||0)+1);
