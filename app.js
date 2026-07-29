@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.73
+// Spray & Wash Operations App V4.0.74
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -21,7 +21,7 @@ const CHECKLISTS={
 
 let sb,currentUser=null,equipment=[],inspections=[],photos=[],inspectionPhotos=[],certificates=[],auditLogs=[],appSettings={};
 let currentRoles=[],userProfiles=[],roleAssignments=[];
-const ROLE_DEFS=["Admin","Inspector","Equipment Manager","Certificate Approver","Office / Reports","Viewer"];
+const ROLE_DEFS=["Admin","Height equipment manager","Height equipment user","Maintenance manager","Vehicle inspector"];
 let activeFilter={mode:"active",value:"active"};
 let equipmentFilterState={type:"",status:"",result:"",due:"",q:""};
 let equipmentFiltersBound=false;
@@ -117,12 +117,12 @@ function hasAdmin(){return currentRoles.includes("Admin");}
 function hasRole(role){return hasAdmin()||currentRoles.includes(role);}
 function hasAnyRoles(roles){return hasAdmin()||roles.some(r=>currentRoles.includes(r));}
 function canManageUsers(){return hasAdmin();}
-function canEditEquipment(){return hasAnyRoles(["Equipment Manager"]);}
-function canInspect(){return hasAnyRoles(["Inspector"]);}
-function canAddPhotos(){return hasAnyRoles(["Equipment Manager","Inspector"]);}
-function canArchive(){return hasAnyRoles(["Equipment Manager"]);}
-function canExport(){return hasAnyRoles(["Office / Reports","Certificate Approver"]);}
-function canCertificates(){return hasAnyRoles(["Office / Reports","Certificate Approver"]);}
+function canEditEquipment(){return hasAnyRoles(["Height equipment manager"]);}
+function canInspect(){return hasAnyRoles(["Height equipment manager"]);}
+function canAddPhotos(){return hasAnyRoles(["Height equipment manager"]);}
+function canArchive(){return hasAnyRoles(["Height equipment manager"]);}
+function canExport(){return hasAnyRoles(["Height equipment manager"]);}
+function canCertificates(){return hasAnyRoles(["Height equipment manager"]);}
 function canAdminControls(){return hasAdmin();}
 function currentRoleText(){return currentRoles.length?currentRoles.join(", "):"Viewer / no roles assigned";}
 function requirePerm(ok,msg){if(!ok){alert(msg||"Your account does not have permission for this action.");return false;}return true;}
@@ -304,6 +304,8 @@ function applyPermissions(){
   if(byId("exportTabButton")) byId("exportTabButton").classList.toggle("hidden",!canExport());
   if(byId("certificateTabButton")) byId("certificateTabButton").classList.toggle("hidden",!canCertificates());
   if(byId("addItemButton")) byId("addItemButton").classList.toggle("hidden",!canEditEquipment());
+  const heightReadOnly=hasRole("Height equipment user")&&!hasRole("Height equipment manager");
+  document.querySelector('.tab[data-tab="dashboard"]')?.classList.toggle("hidden",heightReadOnly);
 }
 async function loadUsers(){
   if(!requirePerm(canManageUsers(),"Only Admin users can manage accounts and roles."))return;

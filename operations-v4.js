@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.73
+/* Spray & Wash Operations App V4.0.74
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,21 +6,14 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
   const MACHINERY_TYPE_CODES = { Engine:'ENG', Gearbox:'GBX', Pump:'PMP' };
   const MACHINERY_TYPE_LABELS = { Engine:'Engine', Gearbox:'Reduction gearbox', Pump:'Pump' };
   const MACHINERY_SIDE_CODES = { Driver:'DS', Passenger:'PS' };
-  const ROLE_DEFS = ['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer'];
-  const ROLE_PRESETS = {
-    'Field Staff': ['Inspector'],
-    'Ops Manager': ['Inspector','Equipment Manager','Office / Reports','Certificate Approver'],
-    'Office / Reports': ['Office / Reports','Certificate Approver','Viewer'],
-    'Viewer': ['Viewer'],
-    'Admin': ['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer']
-  };
+  const ROLE_DEFS = ['Admin','Height equipment manager','Height equipment user','Maintenance manager','Vehicle inspector'];
   const state = {
     sb: null,
     user: null,
@@ -116,10 +109,10 @@
   function isAdmin(){ return state.roles.includes('Admin'); }
   function hasRole(role){ return isAdmin() || state.roles.includes(role); }
   function hasAny(roles){ return isAdmin() || roles.some(r => state.roles.includes(r)); }
-  function canView(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer']); }
-  function canSubmit(){ return hasAny(['Inspector','Equipment Manager']); }
-  function canManage(){ return hasAny(['Equipment Manager']); }
-  function canMaintain(){ return hasAny(['Equipment Manager']); }
+  function canView(){ return hasAny(['Maintenance manager','Vehicle inspector']); }
+  function canSubmit(){ return hasAny(['Vehicle inspector']); }
+  function canManage(){ return hasAny(['Maintenance manager']); }
+  function canMaintain(){ return hasAny(['Maintenance manager']); }
   function targetName(taskOrInspection){
     const v = state.vehicles.find(x => x.id === taskOrInspection.vehicle_id);
     const w = state.washEquipment.find(x => x.id === taskOrInspection.washing_equipment_id);
@@ -140,9 +133,10 @@
     return rows[0] || null;
   }
   function openTasks(){ return state.tasks.filter(t => !['Completed','Deferred'].includes(t.status)); }
-  function canUseManagement(){ return hasAny(['Equipment Manager','Office / Reports','Viewer']); }
-  function canUseHeight(){ return hasAny(['Inspector','Equipment Manager','Office / Reports','Viewer','Certificate Approver']); }
-  function canUseVehicleChecks(){ return hasAny(['Inspector','Equipment Manager']); }
+  function canUseManagement(){ return hasAny(['Maintenance manager']); }
+  function canUseHeight(){ return hasAny(['Height equipment manager','Height equipment user']); }
+  function canUseVehicleChecks(){ return hasAny(['Vehicle inspector']); }
+  function isHeightReadOnly(){ return hasRole('Height equipment user')&&!hasRole('Height equipment manager'); }
   function isManagementView(view){ return ['management-dashboard','assets','history','tasks','schedules'].includes(view) || ['vehicles','washing','maintenance'].includes(view); }
   function isAdminView(view){ return ['admin-users','admin-app-settings','admin-settings'].includes(view); }
   function displayStatusLabel(value){
@@ -592,7 +586,7 @@
   }
 
   async function generateQualificationCertificate(){
-    if(!hasAny(['Admin','Office / Reports','Certificate Approver','Equipment Manager'])) return alert('You do not have permission to generate qualification certificates.');
+    if(!hasAny(['Height equipment manager'])) return alert('You do not have permission to generate qualification certificates.');
     const id = byId('qualCertSelect')?.value || '';
     if(!id) return alert('Select an inspector qualification first.');
     const q = (state.qualifications || []).find(x => String(x.id) === String(id));
@@ -649,9 +643,10 @@
     if(mode === 'height'){
       ensureHeightHomeButton();
       ensureHeightQualificationTab();
+      const allowedTabs=isHeightReadOnly()?['equipment']:['dashboard','equipment','export','certificates','heightQualifications'];
       tabs.querySelectorAll('.tab').forEach(btn => {
         const tab = btn.dataset.tab || '';
-        btn.style.display = ['dashboard','equipment','export','certificates','heightQualifications'].includes(tab) ? '' : 'none';
+        btn.style.display = allowedTabs.includes(tab) ? '' : 'none';
       });
     } else {
       if(heightHeader) heightHeader.style.display = 'none';
@@ -676,8 +671,9 @@
     if(!canUseHeight()) return alert('Your account does not have Height Safety access.');
     state.currentModule = 'height';
     setTopTabsMode('height');
-    if(originalShowTab) originalShowTab('dashboard');
-    setTimeout(()=>postHeightEnhancementsV415('dashboard'), 120);
+    const initialTab=isHeightReadOnly()?'equipment':'dashboard';
+    if(originalShowTab) originalShowTab(initialTab);
+    setTimeout(()=>postHeightEnhancementsV415(initialTab), 120);
   }
 
   function openVehicleChecksModule(){
@@ -690,7 +686,7 @@
 
   function openOpsManagementModule(){
     if(!state.user) return alert('Sign in first.');
-    if(!canUseManagement()) return alert('Maintenance requires Admin, Equipment Manager, Office / Reports, or Viewer access.');
+    if(!canUseManagement()) return alert('Maintenance requires Admin or Maintenance manager access.');
     state.currentModule = 'ops-management';
     setTopTabsMode('none');
     showOperations('management-dashboard');
@@ -910,7 +906,7 @@
 
   function bodyHtml(){
     if(!state.user) return `<div class="ops-card"><h3>Sign in required</h3><p>Use the existing sign-in area first, then open Vehicle Checks or Maintenance.</p></div>`;
-    if(!canView()) return `<div class="ops-card"><h3>No Operations access yet</h3><p>Your account needs one of these existing roles: Admin, Inspector, Equipment Manager, Office / Reports, or Viewer.</p></div>`;
+    if(!canView()) return `<div class="ops-card"><h3>No Operations access yet</h3><p>Your account needs Vehicle inspector, Maintenance manager or Admin access.</p></div>`;
     if(state.currentView === 'vehicle-checks') return periodicVehicleChecksHtml();
     if(isAdminView(state.currentView)){
       if(!isAdmin()) return `<div class="ops-card"><h3>Admin access required</h3><p>This module is only available to Admin users.</p></div>`;
@@ -918,7 +914,7 @@
       if(state.currentView === 'admin-settings') return adminSettingsHtml();
       return usersHtml();
     }
-    if(isManagementView(state.currentView) && !canUseManagement()) return `<div class="ops-card"><h3>Maintenance access required</h3><p>Use Vehicle Checks for staff vehicle checks. Maintenance views require Admin, Equipment Manager, Office / Reports, or Viewer access.</p></div>`;
+    if(isManagementView(state.currentView) && !canUseManagement()) return `<div class="ops-card"><h3>Maintenance access required</h3><p>Maintenance views require Admin or Maintenance manager access.</p></div>`;
     if(state.currentView === 'assets') return assetsHtml();
     if(state.currentView === 'history') return historyHtml();
     if(state.currentView === 'tasks') return tasksHtml();
@@ -1333,11 +1329,10 @@
   function roleHelpText(role){
     return {
       'Admin':'Full app administration and user management.',
-      'Inspector':'Run inspections and complete vehicle checks.',
-      'Equipment Manager':'Manage equipment, assets, tasks and schedules.',
-      'Certificate Approver':'Generate and manage certificates.',
-      'Office / Reports':'View and export reports.',
-      'Viewer':'Read-only access.'
+      'Height equipment manager':'Full access to the Height Equipment module.',
+      'Height equipment user':'Read-only access to the Height Equipment register.',
+      'Maintenance manager':'Full access to the Maintenance module.',
+      'Vehicle inspector':'Full access to Vehicle Checks.'
     }[role] || '';
   }
 
@@ -1411,7 +1406,7 @@
   function usersHtml(){
     if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
-    const defaultRoles = ['Inspector'];
+    const defaultRoles = ['Vehicle inspector'];
     return `<div class="ops-card">
       <h3>Users & permissions</h3>
       <p class="ops-subtle">One clean permissions list is used across the app. Tick the roles each user needs, then save.</p>
@@ -2081,7 +2076,7 @@
       ${names.length ? '' : '<p class="muted">No qualifications saved yet. Add qualifications under Height Equipment - Inspector Qualifications first.</p>'}`;
   }
   async function generateQualificationCertificate(){
-    if(!hasAny(['Admin','Office / Reports','Certificate Approver','Equipment Manager'])) return alert('You do not have permission to generate qualification certificates.');
+    if(!hasAny(['Height equipment manager'])) return alert('You do not have permission to generate qualification certificates.');
     const name = byId('qualCertSelect')?.value || '';
     if(!name) return alert('Select an inspector first.');
     const q = latestQualificationForInspector(name);
@@ -2653,14 +2648,15 @@
   }
   function maintenanceItemMatches(row){
     const asset=String(state.preventiveMaintenanceAsset||'');
-    const search=String(state.preventiveMaintenanceSearch||'').trim().toLowerCase();
+    const search=String(state.preventiveMaintenanceSearch||'');
     const frequency=String(state.preventiveMaintenanceFrequency||'');
-    return (!asset||row.asset===asset) && (!search||`${row.asset} ${row.name}`.toLowerCase().includes(search)) && (!frequency||String(row.frequency)===frequency);
+    return (!asset||row.asset===asset) && (!search||row.name===search) && (!frequency||String(row.frequency)===frequency);
   }
   function preventiveMaintenanceFilterHtml(rows){
     const assets=[...new Set(rows.map(row=>row.asset).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const items=[...new Set(rows.map(row=>row.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
     const frequencies=[...new Set(rows.map(row=>String(row.frequency)).filter(Boolean))].sort((a,b)=>Number(a)-Number(b));
-    return `<div class="registerFilterPanel"><div class="registerFilterHeader"><h3>Search Maintenance Items</h3>${canMaintain()?'<button type="button" class="primary" data-ops-action="addMaintenanceItem">+ Add Maintenance Item</button>':''}</div><div class="registerFilterGrid"><label>Asset<select id="opsPreventiveMaintenanceAsset"><option value="">All assets</option>${assets.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceAsset===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label><label>Maintenance item<input id="opsPreventiveMaintenanceSearch" type="search" value="${esc(state.preventiveMaintenanceSearch||'')}" placeholder="Search maintenance item"></label><label>Frequency<select id="opsPreventiveMaintenanceFrequency"><option value="">All frequencies</option>${frequencies.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceFrequency===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label></div><div class="registerFilterActions"><button type="button" data-ops-action="clearPreventiveMaintenanceSearch">Clear filters</button></div></div>`;
+    return `<div class="registerFilterPanel"><div class="registerFilterHeader"><h3>Search Maintenance Items</h3>${canMaintain()?'<button type="button" class="primary" data-ops-action="addMaintenanceItem">+ Add Maintenance Item</button>':''}</div><div class="registerFilterGrid"><label>Asset<select id="opsPreventiveMaintenanceAsset"><option value="">All assets</option>${assets.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceAsset===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label><label>Maintenance item<select id="opsPreventiveMaintenanceSearch"><option value="">All maintenance items</option>${items.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceSearch===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label><label>Frequency<select id="opsPreventiveMaintenanceFrequency"><option value="">All frequencies</option>${frequencies.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceFrequency===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label></div><div class="registerFilterActions"><button type="button" data-ops-action="clearPreventiveMaintenanceSearch">Clear filters</button></div></div>`;
   }
   function plannedMaintenanceTargetOptions(vehicleId){
     const standalone=vehicleId==='standalone';
@@ -2889,7 +2885,7 @@
           <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
           <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
           <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
-          <div class="ops-span-2"><strong>Permissions</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(['Inspector'])}</div></div>
+          <div class="ops-span-2"><strong>Permissions</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(['Vehicle inspector'])}</div></div>
           <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
           <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save pre-loaded user</button></div>
         </form>
@@ -2914,7 +2910,7 @@
     byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
-    byId('opsPreventiveMaintenanceSearch')?.addEventListener('input', e => { const cursor=e.target.selectionStart; state.preventiveMaintenanceSearch=e.target.value; render(); requestAnimationFrame(()=>{const input=byId('opsPreventiveMaintenanceSearch');input?.focus();input?.setSelectionRange(cursor,cursor);}); });
+    byId('opsPreventiveMaintenanceSearch')?.addEventListener('change', e => { state.preventiveMaintenanceSearch=e.target.value;render(); });
     byId('opsPreventiveMaintenanceAsset')?.addEventListener('change', e => { state.preventiveMaintenanceAsset=e.target.value;render(); });
     byId('opsPreventiveMaintenanceFrequency')?.addEventListener('change', e => { state.preventiveMaintenanceFrequency=e.target.value;render(); });
     byId('opsPlannedMaintenanceForm')?.addEventListener('submit', savePlannedMaintenanceItem);
@@ -3179,7 +3175,7 @@
   }
 
   async function generateQualificationCertificate(){
-    if(!hasAny(['Admin','Office / Reports','Certificate Approver','Equipment Manager'])) return alert('You do not have permission to generate inspector details.');
+    if(!hasAny(['Height equipment manager'])) return alert('You do not have permission to generate inspector details.');
     const name = byId('qualCertSelect')?.value || '';
     if(!name) return alert('Select an inspector first.');
     const q = latestQualificationForInspector(name);
@@ -3313,7 +3309,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3600,7 +3596,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
@@ -3615,7 +3611,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3866,7 +3862,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3887,7 +3883,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4249,7 +4245,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     installAccountBehaviourV419();
   }
   function install(){
@@ -4278,7 +4274,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4412,7 +4408,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -4427,7 +4423,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4788,7 +4784,7 @@
 
   function refreshAll(){
     injectCss(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4804,7 +4800,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4934,7 +4930,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4942,11 +4938,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function stabiliseOnce(){
@@ -4957,7 +4953,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4977,9 +4973,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.73"] .notifyBtn,
-      html[data-sw-version="4.0.73"] #notifyBadge,
-      html[data-sw-version="4.0.73"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.74"] .notifyBtn,
+      html[data-sw-version="4.0.74"] #notifyBadge,
+      html[data-sw-version="4.0.74"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4990,7 +4986,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -5159,14 +5155,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.73'
+    version: '4.0.74'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.73';
+  const VERSION='4.0.74';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -5187,7 +5183,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -5201,7 +5197,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.73';
+  const VERSION='4.0.74';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -5234,7 +5230,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.73';
+  const VERSION = '4.0.74';
   const BUCKET = 'inspection-photos';
   let editingQualificationId = '';
   const $ = id => document.getElementById(id);
@@ -5548,7 +5544,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.74 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
