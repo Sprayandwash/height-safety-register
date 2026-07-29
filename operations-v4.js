@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.72
+/* Spray & Wash Operations App V4.0.73
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -73,6 +73,10 @@
     openTaskId: '',
     manualTaskEditorOpen: false,
     preventiveMaintenanceSearch: '',
+    preventiveMaintenanceAsset: '',
+    preventiveMaintenanceFrequency: '',
+    editingMaintenanceItemKey: '',
+    addingMaintenanceItem: false,
     lastError: ''
   };
 
@@ -324,6 +328,7 @@
       .ops-card,.ops-user-row,.ops-vehicle-asset,.ops-table-wrap,.ops-log-entry{border-color:#d9e2f0!important;box-shadow:0 5px 18px rgba(48,45,126,.08)}
       .ops-card,.ops-user-row,.ops-vehicle-asset,.ops-table-wrap,.ops-log-entry,.ops-machinery-card{background:#fff!important}
       .ops-maintenance-dashboard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+      .ops-clickable-row{cursor:pointer}.ops-clickable-row:hover{background:#f6f9fe}.ops-clickable-row:focus-visible{outline:3px solid rgba(79,155,208,.35);outline-offset:-3px}
       .ops-maintenance-dashboard-action{display:flex;justify-content:flex-start;align-items:center;margin:14px 0 18px}.ops-maintenance-dashboard-action .ops-btn{min-height:50px;padding:13px 22px;font-size:16px}
       .ops-maintenance-summary{display:grid;grid-template-columns:56px minmax(0,1fr);gap:1rem;align-items:center;width:100%;padding:1.15rem!important;text-align:left;cursor:pointer;color:#003b73;border:1px solid #d9e2f0!important;border-radius:1rem;background:#fff!important;box-shadow:0 5px 18px rgba(0,59,115,.10)!important;font:inherit}
       .ops-maintenance-summary:hover{border-color:#4f9bd0!important;box-shadow:0 8px 24px rgba(0,59,115,.16)!important}
@@ -2641,12 +2646,21 @@
   ];
   function preventiveMaintenanceProcedureName(item){ return `PM - ${item.machineryType} - ${item.name}`; }
   function preventiveMaintenanceProcedure(item){ return state.procedures.find(p=>p.name===preventiveMaintenanceProcedureName(item)); }
-  function preventiveMaintenanceMatches(item){
-    const search=String(state.preventiveMaintenanceSearch||'').trim().toLowerCase();
-    return !search || `${item.machineryType} ${item.name}`.toLowerCase().includes(search);
+  function maintenanceItemCatalog(){
+    const standard=PREVENTIVE_MAINTENANCE_ITEMS.map((item,index)=>{ const procedure=preventiveMaintenanceProcedure(item); return {key:`standard:${index}`,kind:'standard',item,procedure,asset:item.machineryType,name:item.name,frequency:procedure?.frequency_days??''}; });
+    const planned=plannedMaintenanceSchedules().map(schedule=>{ const procedure=state.procedures.find(p=>String(p.id)===String(schedule.procedure_id)); return {key:`planned:${schedule.id}`,kind:'planned',schedule,procedure,asset:plannedMaintenanceTargetName(schedule),name:String(procedure?.category||'').replace(/^Planned:\s*/, '')||'Planned maintenance',frequency:schedule.frequency_days??procedure?.frequency_days??''}; });
+    return standard.concat(planned);
   }
-  function preventiveMaintenanceFilterHtml(){
-    return `<div class="registerFilterPanel"><div class="registerFilterGrid"><label>Search preventive maintenance<input id="opsPreventiveMaintenanceSearch" type="search" value="${esc(state.preventiveMaintenanceSearch||'')}" placeholder="Vehicle, engine, pump, oil, filter"></label></div><div class="registerFilterActions"><button type="button" data-ops-action="clearPreventiveMaintenanceSearch">Clear filters</button></div></div>`;
+  function maintenanceItemMatches(row){
+    const asset=String(state.preventiveMaintenanceAsset||'');
+    const search=String(state.preventiveMaintenanceSearch||'').trim().toLowerCase();
+    const frequency=String(state.preventiveMaintenanceFrequency||'');
+    return (!asset||row.asset===asset) && (!search||`${row.asset} ${row.name}`.toLowerCase().includes(search)) && (!frequency||String(row.frequency)===frequency);
+  }
+  function preventiveMaintenanceFilterHtml(rows){
+    const assets=[...new Set(rows.map(row=>row.asset).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const frequencies=[...new Set(rows.map(row=>String(row.frequency)).filter(Boolean))].sort((a,b)=>Number(a)-Number(b));
+    return `<div class="registerFilterPanel"><div class="registerFilterHeader"><h3>Search Maintenance Items</h3>${canMaintain()?'<button type="button" class="primary" data-ops-action="addMaintenanceItem">+ Add Maintenance Item</button>':''}</div><div class="registerFilterGrid"><label>Asset<select id="opsPreventiveMaintenanceAsset"><option value="">All assets</option>${assets.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceAsset===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label><label>Maintenance item<input id="opsPreventiveMaintenanceSearch" type="search" value="${esc(state.preventiveMaintenanceSearch||'')}" placeholder="Search maintenance item"></label><label>Frequency<select id="opsPreventiveMaintenanceFrequency"><option value="">All frequencies</option>${frequencies.map(value=>`<option value="${esc(value)}" ${state.preventiveMaintenanceFrequency===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label></div><div class="registerFilterActions"><button type="button" data-ops-action="clearPreventiveMaintenanceSearch">Clear filters</button></div></div>`;
   }
   function plannedMaintenanceTargetOptions(vehicleId){
     const standalone=vehicleId==='standalone';
@@ -2676,16 +2690,19 @@
     return `<div class="ops-card ops-maintenance-filter-results"><div class="ops-section-title"><div><h3>${title}</h3><p class="ops-subtle">${note}</p></div><button type="button" class="ops-btn ghost" data-ops-action="clearScheduleFilter">Clear filter</button></div>${rows.length?`<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Maintenance item</th><th>Due</th><th>Status</th></tr>${rows.map(schedule=>{const procedure=state.procedures.find(p=>String(p.id)===String(schedule.procedure_id));const days=daysUntil(schedule.next_due_at);const item=String(procedure?.category||procedure?.name||'Maintenance').replace(/^Planned:\s*/, '');const status=filter==='overdue'?`${Math.abs(days)} day${Math.abs(days)===1?'':'s'} overdue`:days===0?'Due today':`Due in ${days} day${days===1?'':'s'}`;return `<tr><td>${esc(plannedMaintenanceTargetName(schedule))}</td><td><strong>${esc(item)}</strong></td><td>${nzDate(schedule.next_due_at)}</td><td><span class="ops-pill ${filter==='overdue'?'ops-bad':'ops-warn'}">${esc(status)}</span></td></tr>`;}).join('')}</table></div>`:'<p class="ops-subtle">No maintenance items match this filter.</p>'}</div>`;
   }
   function schedulesHtml(){
-    const rows=PREVENTIVE_MAINTENANCE_ITEMS.filter(preventiveMaintenanceMatches).map(item=>{
-      const index=PREVENTIVE_MAINTENANCE_ITEMS.indexOf(item);
-      const procedure=preventiveMaintenanceProcedure(item);
-      return `<tr><td>${esc(item.machineryType)}</td><td><strong>${esc(item.name)}</strong></td><td><input id="opsPmFrequency${index}" type="number" min="1" step="1" value="${esc(procedure?.frequency_days||'')}" placeholder="On demand"></td></tr>`;
-    }).join('');
-    const planned=plannedMaintenanceSchedules();
+    const catalog=maintenanceItemCatalog();
+    const rows=catalog.filter(maintenanceItemMatches);
     const dashboardFilter=['upcoming','overdue'].includes(state.scheduleQuickFilter)?state.scheduleQuickFilter:'';
-    return `${maintenanceDashboardFilterHtml(dashboardFilter)}${preventiveMaintenanceFilterHtml()}<div class="ops-card"><form id="opsPreventiveMaintenanceForm"><p class="ops-subtle">Enter the interval in days for scheduled work. Leave it blank for an on-demand item, such as pump valves or seals.</p><div class="ops-table-wrap"><table class="ops-table"><tr><th>Machinery</th><th>Maintenance item</th><th>Frequency (days)</th></tr>${rows||'<tr><td colspan="3" class="ops-subtle">No maintenance items match this search.</td></tr>'}</table></div>${canMaintain()?'<div class="ops-actions"><button class="ops-btn primary" type="submit">Save service intervals</button></div>':''}</form></div>
-      ${canMaintain()?`<div class="ops-card"><details><summary><strong>Add planned maintenance item</strong></summary><form id="opsPlannedMaintenanceForm" class="ops-form" style="margin-top:.8rem"><label>Vehicle or standalone machinery<select id="opsPlannedMaintenanceVehicle" required><option value="">Select asset group</option>${state.vehicles.filter(v=>v.status!=='Retired').map(v=>`<option value="${esc(v.id)}">${esc(v.rego||v.name||'Vehicle')}</option>`).join('')}<option value="standalone">Standalone machinery</option></select></label><label>Asset or sub-asset<select id="opsPlannedMaintenanceTarget" required disabled>${plannedMaintenanceTargetOptions('')}</select></label><label>Maintenance item<input id="opsPlannedMaintenanceName" required placeholder="e.g. Replace pressure hose"></label><label>Frequency days<input id="opsPlannedMaintenanceFrequency" type="number" min="1" required placeholder="e.g. 180"></label><label class="ops-span-2">Notes<textarea id="opsPlannedMaintenanceNotes" placeholder="Optional information about this planned work"></textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Add planned item</button></div></form></details></div>`:''}
-      ${planned.length?`<div class="ops-card"><div class="ops-table-wrap"><table class="ops-table"><tr><th>Assigned asset</th><th>Maintenance item</th><th>Frequency</th><th>Next due</th></tr>${planned.map(schedule=>{const procedure=state.procedures.find(p=>String(p.id)===String(schedule.procedure_id));return `<tr><td>${esc(plannedMaintenanceTargetName(schedule))}</td><td><strong>${esc(String(procedure?.category||'').replace(/^Planned:\s*/, '')||'Planned maintenance')}</strong>${procedure?.description?`<br><span class="ops-subtle">${esc(procedure.description)}</span>`:''}</td><td>${esc(schedule.frequency_days||procedure?.frequency_days||'—')} days</td><td>${nzDate(schedule.next_due_at)}</td></tr>`;}).join('')}</table></div></div>`:''}`;
+    const selected=catalog.find(row=>row.key===state.editingMaintenanceItemKey)||null;
+    return `${maintenanceDashboardFilterHtml(dashboardFilter)}${preventiveMaintenanceFilterHtml(catalog)}${selected||state.addingMaintenanceItem?maintenanceItemEditorHtml(selected):`<div class="ops-card"><div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Maintenance item</th><th>Frequency</th></tr>${rows.length?rows.map(row=>`<tr class="ops-clickable-row" tabindex="0" role="button" data-ops-maintenance-item="${esc(row.key)}"><td>${esc(row.asset)}</td><td><strong>${esc(row.name)}</strong>${row.kind==='planned'&&row.procedure?.description?`<br><span class="ops-subtle">${esc(row.procedure.description)}</span>`:''}</td><td>${esc(row.frequency)}</td></tr>`).join(''):'<tr><td colspan="3" class="ops-subtle">No maintenance items match these filters.</td></tr>'}</table></div></div>`}`;
+  }
+  function maintenanceItemEditorHtml(row){
+    if(row?.kind==='standard') return `<div class="ops-card"><div class="ops-section-title"><h3>${esc(row.name)}</h3><button class="ops-btn ghost" type="button" data-ops-action="closeMaintenanceItemEditor">Back to list</button></div><form id="opsStandardMaintenanceItemForm" class="ops-form"><label>Asset<input value="${esc(row.asset)}" readonly></label><label>Maintenance item<input value="${esc(row.name)}" readonly></label><label>Frequency<input id="opsStandardMaintenanceFrequency" type="number" min="1" step="1" value="${esc(row.frequency)}" placeholder="Leave blank for on-demand"></label><label class="ops-span-2">Notes<textarea id="opsStandardMaintenanceNotes">${esc(row.procedure?.description||'')}</textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save changes</button></div></form></div>`;
+    const schedule=row?.schedule||null, procedure=row?.procedure||null, editing=Boolean(row);
+    const vehicleId=schedule?.vehicle_id||state.vehicles.find(v=>String(v.id)===String(state.washEquipment.find(w=>String(w.id)===String(schedule?.washing_equipment_id))?.assigned_vehicle_id))?.id||'';
+    const group=editing?(schedule?.washing_equipment_id?(vehicleId||'standalone'):vehicleId):'';
+    const target=editing?(schedule?.washing_equipment_id?`machinery:${schedule.washing_equipment_id}`:`vehicle:${schedule.vehicle_id}`):'';
+    return `<div class="ops-card"><div class="ops-section-title"><h3>${editing?'Edit Maintenance Item':'Add Maintenance Item'}</h3><button class="ops-btn ghost" type="button" data-ops-action="closeMaintenanceItemEditor">Back to list</button></div><form id="opsPlannedMaintenanceForm" class="ops-form" style="margin-top:.8rem"><label>Vehicle or standalone machinery<select id="opsPlannedMaintenanceVehicle" required><option value="">Select asset group</option>${state.vehicles.filter(v=>v.status!=='Retired').map(v=>`<option value="${esc(v.id)}" ${String(group)===String(v.id)?'selected':''}>${esc(v.rego||v.name||'Vehicle')}</option>`).join('')}<option value="standalone" ${group==='standalone'?'selected':''}>Standalone machinery</option></select></label><label>Asset or sub-asset<select id="opsPlannedMaintenanceTarget" required ${group?'':'disabled'}>${target?plannedMaintenanceTargetOptions(group).replace(`value="${esc(target)}"`,`value="${esc(target)}" selected`):plannedMaintenanceTargetOptions(group)}</select></label><label>Maintenance item<input id="opsPlannedMaintenanceName" required value="${esc(row?.name||'')}" placeholder="e.g. Replace pressure hose"></label><label>Frequency<input id="opsPlannedMaintenanceFrequency" type="number" min="1" required value="${esc(row?.frequency??'')}" placeholder="e.g. 180"></label><label class="ops-span-2">Notes<textarea id="opsPlannedMaintenanceNotes" placeholder="Optional information about this planned work">${esc(procedure?.description||'')}</textarea></label><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">${editing?'Save changes':'Add Maintenance Item'}</button></div></form></div>`;
   }
   function dueNowPreventiveHtml(){
     const due = state.schedules.filter(s=>s.is_active !== false && scheduleIsDue(s));
@@ -2767,18 +2784,37 @@
     const frequency=Number(byId('opsPlannedMaintenanceFrequency')?.value||0);
     const notes=String(byId('opsPlannedMaintenanceNotes')?.value||'').trim();
     if(!target||!title||!Number.isFinite(frequency)||frequency<1) return alert('Choose an asset, enter the planned item and set its frequency in days.');
+    const editing=maintenanceItemCatalog().find(row=>row.key===state.editingMaintenanceItemKey&&row.kind==='planned')||null;
     const isMachinery=target.startsWith('machinery:');
     const targetId=target.slice(target.indexOf(':')+1);
-    const procedure={name:`PM planned ${Date.now()} ${target}`,category:`Planned: ${title}`,target_type:isMachinery?'washing_equipment':'vehicle',description:notes||null,frequency_days:frequency,skill_level:'Basic',requires_signoff:false,is_active:true,created_by:state.user.id};
-    const inserted=await state.sb.from('operations_maintenance_procedures').insert(procedure).select().single();
+    const procedure={name:editing?.procedure?.name||`PM planned ${Date.now()} ${target}`,category:`Planned: ${title}`,target_type:isMachinery?'washing_equipment':'vehicle',description:notes||null,frequency_days:frequency,skill_level:'Basic',requires_signoff:false,is_active:true,created_by:state.user.id};
+    const inserted=editing?.procedure
+      ? await state.sb.from('operations_maintenance_procedures').update(procedure).eq('id',editing.procedure.id).select().single()
+      : await state.sb.from('operations_maintenance_procedures').insert(procedure).select().single();
     if(inserted.error) return alert(inserted.error.message);
     const schedule={procedure_id:inserted.data.id,frequency_days:frequency,next_due_at:addDays(today(),frequency),is_active:true,created_by:state.user.id};
     if(isMachinery) schedule.washing_equipment_id=targetId;
     else schedule.vehicle_id=targetId;
-    const saved=await state.sb.from('operations_equipment_maintenance_schedules').insert(schedule);
+    const saved=editing?.schedule
+      ? await state.sb.from('operations_equipment_maintenance_schedules').update(schedule).eq('id',editing.schedule.id)
+      : await state.sb.from('operations_equipment_maintenance_schedules').insert(schedule);
     if(saved.error) return alert(saved.error.message);
-    alert('Planned maintenance item added.');
+    state.editingMaintenanceItemKey='';state.addingMaintenanceItem=false;
+    alert(editing?'Maintenance item updated.':'Maintenance item added.');
     await loadAll();
+  }
+  async function saveStandardMaintenanceItem(e){
+    e.preventDefault();
+    if(!canMaintain()) return alert('Only Admin or Equipment Manager users can change maintenance items.');
+    const row=maintenanceItemCatalog().find(item=>item.key===state.editingMaintenanceItemKey&&item.kind==='standard');
+    if(!row) return;
+    const raw=String(byId('opsStandardMaintenanceFrequency')?.value||'').trim();
+    const frequency=raw?Number(raw):null;
+    if(frequency!==null&&(!Number.isFinite(frequency)||frequency<1)) return alert('Enter a whole number of days, or leave the frequency blank for an on-demand item.');
+    const procedure={name:preventiveMaintenanceProcedureName(row.item),category:row.item.machineryType,target_type:row.item.machineryType==='Vehicle'?'vehicle':'washing_equipment',description:String(byId('opsStandardMaintenanceNotes')?.value||'').trim()||row.item.name,frequency_days:frequency,skill_level:'Basic',requires_signoff:false,is_active:true,created_by:state.user.id};
+    const saved=row.procedure?await state.sb.from('operations_maintenance_procedures').update(procedure).eq('id',row.procedure.id):await state.sb.from('operations_maintenance_procedures').insert(procedure);
+    if(saved.error) return alert(saved.error.message);
+    state.editingMaintenanceItemKey=''; await loadAll(); alert('Maintenance item updated.');
   }
   async function saveServiceItem(e){
     e.preventDefault();
@@ -2878,10 +2914,13 @@
     byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
-    byId('opsPreventiveMaintenanceForm')?.addEventListener('submit', savePreventiveMaintenanceIntervals);
     byId('opsPreventiveMaintenanceSearch')?.addEventListener('input', e => { const cursor=e.target.selectionStart; state.preventiveMaintenanceSearch=e.target.value; render(); requestAnimationFrame(()=>{const input=byId('opsPreventiveMaintenanceSearch');input?.focus();input?.setSelectionRange(cursor,cursor);}); });
+    byId('opsPreventiveMaintenanceAsset')?.addEventListener('change', e => { state.preventiveMaintenanceAsset=e.target.value;render(); });
+    byId('opsPreventiveMaintenanceFrequency')?.addEventListener('change', e => { state.preventiveMaintenanceFrequency=e.target.value;render(); });
     byId('opsPlannedMaintenanceForm')?.addEventListener('submit', savePlannedMaintenanceItem);
+    byId('opsStandardMaintenanceItemForm')?.addEventListener('submit', saveStandardMaintenanceItem);
     byId('opsPlannedMaintenanceVehicle')?.addEventListener('change', updatePlannedMaintenanceTargetOptions);
+    document.querySelectorAll('[data-ops-maintenance-item]').forEach(row=>{ const open=()=>{state.editingMaintenanceItemKey=row.dataset.opsMaintenanceItem;state.addingMaintenanceItem=false;render();}; row.addEventListener('click',open);row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}}); });
     byId('opsServiceItemForm')?.addEventListener('submit', saveServiceItem);
     byId('opsServiceRunForm')?.addEventListener('submit', saveServiceRun);
     byId('opsServiceRunAsset')?.addEventListener('change', e => { state.serviceRunAssetId = e.target.value; state.pmView='service'; render(); });
@@ -2950,7 +2989,9 @@
     if(action === 'legacyUserTools'){ openLegacyUserTools(); }
     if(action === 'uploadCompanyLogo'){ await window.uploadCompanyLogo?.(byId('opsCompanyLogoFile')?.files?.[0]); }
     if(action === 'clearMaintenanceLogFilters'){ state.logAssetId='';state.logMachineryId='';state.logType='';state.logDateFrom='';state.logDateTo='';state.logKeyword='';render(); }
-    if(action === 'clearPreventiveMaintenanceSearch'){ state.preventiveMaintenanceSearch=''; render(); }
+    if(action === 'clearPreventiveMaintenanceSearch'){ state.preventiveMaintenanceSearch='';state.preventiveMaintenanceAsset='';state.preventiveMaintenanceFrequency='';render(); }
+    if(action === 'addMaintenanceItem'){ state.addingMaintenanceItem=true;state.editingMaintenanceItemKey='';render(); }
+    if(action === 'closeMaintenanceItemEditor'){ state.addingMaintenanceItem=false;state.editingMaintenanceItemKey='';render(); }
     if(action === 'clearTaskFilter'){ state.taskQuickFilter=''; render(); }
     if(action === 'clearScheduleFilter'){ state.scheduleQuickFilter=''; render(); }
     if(action === 'pmSchedules'){ state.pmView='items'; render(); }
@@ -3272,7 +3313,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3559,7 +3600,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
@@ -3574,7 +3615,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3825,7 +3866,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3846,7 +3887,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4208,7 +4249,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     installAccountBehaviourV419();
   }
   function install(){
@@ -4237,7 +4278,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4371,7 +4412,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -4386,7 +4427,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4747,7 +4788,7 @@
 
   function refreshAll(){
     injectCss(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4763,7 +4804,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4893,7 +4934,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -4901,11 +4942,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function stabiliseOnce(){
@@ -4916,7 +4957,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -4936,9 +4977,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.72"] .notifyBtn,
-      html[data-sw-version="4.0.72"] #notifyBadge,
-      html[data-sw-version="4.0.72"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.73"] .notifyBtn,
+      html[data-sw-version="4.0.73"] #notifyBadge,
+      html[data-sw-version="4.0.73"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -4949,7 +4990,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -5118,14 +5159,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.72'
+    version: '4.0.73'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.72';
+  const VERSION='4.0.73';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -5146,7 +5187,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -5160,7 +5201,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.72';
+  const VERSION='4.0.73';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -5193,7 +5234,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.72';
+  const VERSION = '4.0.73';
   const BUCKET = 'inspection-photos';
   let editingQualificationId = '';
   const $ = id => document.getElementById(id);
@@ -5507,7 +5548,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.72 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.73 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
