@@ -1,4 +1,4 @@
-// Spray & Wash Operations V4.0.75 service worker
+// Spray & Wash Operations V4.0.76 service worker
 // Stabilisation release: network-first, clears old caches, avoids stale mixed-version UI.
 const CACHE_NAME = "spray-wash-operations-v4-0-75";
 

@@ -1,4 +1,4 @@
-// Spray & Wash Operations App V4.0.75
+// Spray & Wash Operations App V4.0.76
 const EQUIPMENT_TYPES=[
   "Harness","Rope","Roofers Rope Set","Helmet","Carabiner / Connector","Round Sling","Rope Slider / Fall Arrest Device",
   "Straight Lanyard","Shock-Absorbing Lanyard","Temporary Anchor - T-Bar","Temporary Anchor - Parapet Clamp","Other"
@@ -86,6 +86,23 @@ function getNotificationSummary(){
   const low=noEquipmentPhotos.length+noInspectionPhotos.length;
   return {active,overdue,dueSoon,failed,noInspection,noEquipmentPhotos,noInspectionPhotos,high,medium,low,total:high+medium+low,lead:getNotificationLeadDays()};
 }
+function getHeightAttentionSummary(){
+  const active=equipment.filter(e=>!isArchived(e));
+  const retirement=active.map(e=>({equipment:e,days:daysUntilDate(e.retirement_date)})).filter(x=>x.days!==null);
+  const retirementOverdue=retirement.filter(x=>x.days<0);
+  const retirementSoon=retirement.filter(x=>x.days>=0&&x.days<=getNotificationLeadDays());
+  return {...getNotificationSummary(),retirementOverdue,retirementSoon};
+}
+window.SWHeightAttention={
+  getSummary:getHeightAttentionSummary,
+  open(type){
+    if(type==='failed') return setRegisterFilter('failed','failed');
+    if(type==='dueSoon') return setRegisterFilter('dueSoon','dueSoon');
+    if(type==='overdue') return setRegisterFilter('overdue','overdue');
+    if(type==='noInspection') return setRegisterFilter('noInspection','noInspection');
+    return setRegisterFilter('due','due');
+  }
+};
 function notificationRows(){
   const n=getNotificationSummary();
   const rows=[];
@@ -373,8 +390,9 @@ function bindRecentInspectionLimit(){
   selector.addEventListener("change",renderRecentInspectionHistory);
 }
 function renderDashboard(){
-  const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed);
-  document.getElementById("dashInService").textContent=active.filter(e=>e.status==="In Service").length; document.getElementById("dashDue").textContent=due.length; document.getElementById("dashFailed").textContent=failed.length;
+  const active=equipment.filter(e=>!isArchived(e)); const due=active.filter(isDue); const failed=active.filter(isFailed); const attention=getHeightAttentionSummary();
+  document.getElementById("dashInService").textContent=active.filter(e=>e.status==="In Service").length; document.getElementById("dashDue").textContent=attention.overdue.length; document.getElementById("dashFailed").textContent=failed.length;
+  if(document.getElementById("dashDueSoon"))document.getElementById("dashDueSoon").textContent=attention.dueSoon.length;
   const nextDue=document.getElementById("dashNextDue"); if(nextDue) nextDue.innerHTML=due.slice(0,7).map(e=>`<div class="lineItem" onclick="openItem('${e.id}')"><b>${esc(e.serial)}</b><span class="hideMobile">${esc(e.type)}</span><span>${esc(latest(e.serial)?.next_due||"No inspection")}</span></div>`).join("") || `<p class="muted">No active equipment due.</p>`;
   bindRecentInspectionLimit();
   renderRecentInspectionHistory();
