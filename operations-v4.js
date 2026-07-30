@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.77
+/* Spray & Wash Operations App V4.0.78
    Additive module for height-safety-adjacent operations workflows: periodic vehicle checks,
    operations management, inspections, maintenance tasks, preventive schedules, and guides.
    Load after config.js, Supabase JS, and app.js. Do not replace config.js.
@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const TASK_STATUSES = ['Open','In Progress','Waiting on Parts','Waiting on Someone','Completed','Deferred'];
   const PRIORITIES = ['Low','Medium','High','Critical'];
@@ -189,7 +189,7 @@
       .height-module-heading .ops-home-row{margin:0 0 .65rem 0;}
       .height-module-heading h2{margin:.1rem 0 .1rem 0;font-size:20px;}
       .height-module-heading .ops-subtle{font-size:.92rem;}
-      .tabs{position:static!important;top:auto!important;background:transparent!important;margin:.75rem 0 1rem 0!important;display:flex;flex-wrap:wrap;gap:.5rem!important;padding:0 0 .5rem 0!important;}
+      .tabs{position:static!important;top:auto!important;background:transparent!important;margin:.75rem 0 1rem 0!important;display:flex;flex-wrap:wrap;gap:.5rem!important;padding:0!important;}
       .ops-nav button, .ops-btn { border:0; border-radius:12px; padding:11px 14px; background:#e2e8f0; color:#0f172a; font-weight:800; cursor:pointer; min-height:42px; }
       .ops-nav button.active, .ops-btn.primary { background:#0f766e; color:white; }
       .tabs { align-items:center; gap:.5rem !important; padding:6px 0 12px !important; }
@@ -348,7 +348,7 @@
       .ops-maintenance-summary-value{font-size:2.35rem;font-weight:900;line-height:1.05;color:#003b73;margin:.2rem 0}
       .ops-maintenance-summary-note{font-size:.9rem;line-height:1.3;color:#61729b}
       .ops-maintenance-filter-results{margin:1rem 0 0}
-      .ops-attention-list{margin:1rem 0 1.25rem}.ops-attention-item{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:.8rem;align-items:center;width:100%;padding:.85rem 1rem;text-align:left;background:#fff;border:1px solid #d9e2f0;border-radius:.85rem;color:#003b73;font:inherit;cursor:pointer;margin:.55rem 0;box-shadow:0 4px 14px rgba(0,59,115,.07)}.ops-attention-item:hover{border-color:#4f9bd0;box-shadow:0 7px 18px rgba(0,59,115,.13)}.ops-attention-item-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;color:#fff}.ops-attention-item.critical .ops-attention-item-icon{background:#c53b3b}.ops-attention-item.overdue .ops-attention-item-icon{background:#c98219}.ops-attention-item.soon .ops-attention-item-icon{background:#4f9bd0}.ops-attention-item.task .ops-attention-item-icon{background:#003b73}.ops-attention-item-title{font-weight:900}.ops-attention-item-note{font-size:.9rem;color:#61729b;margin-top:.15rem}.ops-attention-date{font-size:.88rem;font-weight:800;color:#61729b;text-align:right}.ops-attention-empty{padding:1rem 0;color:#61729b}.ops-attention-summary.critical .ops-maintenance-summary-icon{background:#c53b3b}.ops-attention-summary.soon .ops-maintenance-summary-icon{background:#4f9bd0}.ops-attention-summary.tasks .ops-maintenance-summary-icon{background:#003b73}
+      .ops-attention-list{margin:1rem 0 1.25rem;border:1px solid #d9e2f0;border-radius:1rem;background:#fff;box-shadow:0 5px 18px rgba(0,59,115,.07);overflow:hidden}.ops-attention-list>summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;cursor:pointer;list-style:none;padding:1rem 1.1rem;color:#003b73;font-weight:900}.ops-attention-list>summary::-webkit-details-marker{display:none}.ops-attention-list>summary::after{content:'⌄';font-size:1.2rem;line-height:1;color:#4f9bd0;transition:transform .16s ease}.ops-attention-list[open]>summary{border-bottom:1px solid #d9e2f0;background:#f6f9fe}.ops-attention-list[open]>summary::after{transform:rotate(180deg)}.ops-attention-list-body{padding:.35rem 1rem .85rem}.ops-attention-list-body .ops-section-title{margin:.25rem 0 .5rem}.ops-attention-count{display:inline-flex;align-items:center;justify-content:center;min-width:1.75rem;height:1.75rem;padding:0 .45rem;border-radius:999px;background:#edf6fc;color:#003b73;font-size:.82rem;margin-left:.45rem}.ops-attention-item{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:.7rem;align-items:center;width:100%;padding:.75rem .85rem;text-align:left;background:#fff;border:1px solid #d9e2f0;border-radius:.75rem;color:#003b73;font:inherit;cursor:pointer;margin:.45rem 0;box-shadow:0 3px 10px rgba(0,59,115,.05)}.ops-attention-item:hover{border-color:#4f9bd0;box-shadow:0 6px 14px rgba(0,59,115,.11)}.ops-attention-item-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;color:#fff}.ops-attention-item-icon svg{width:20px;height:20px;stroke-width:2.1}.ops-attention-item.critical .ops-attention-item-icon{background:#c53b3b}.ops-attention-item.overdue .ops-attention-item-icon{background:#c98219}.ops-attention-item.soon .ops-attention-item-icon{background:#4f9bd0}.ops-attention-item.task .ops-attention-item-icon{background:#003b73}.ops-attention-item-title{font-weight:900}.ops-attention-item-note{font-size:.9rem;color:#61729b;margin-top:.15rem}.ops-attention-date{font-size:.88rem;font-weight:800;color:#61729b;text-align:right}.ops-attention-empty{padding:1rem 0;color:#61729b}.ops-attention-summary.critical .ops-maintenance-summary-icon{background:#c53b3b}.ops-attention-summary.soon .ops-maintenance-summary-icon{background:#4f9bd0}.ops-attention-summary.tasks .ops-maintenance-summary-icon{background:#003b73}
       @media(max-width:760px){.ops-maintenance-dashboard{grid-template-columns:1fr}.ops-maintenance-summary{grid-template-columns:52px minmax(0,1fr)}.ops-maintenance-summary-icon{width:52px;height:52px}}
       .ops-table th,.ops-vehicle-asset-head,.ops-log-entry[open] summary,.ops-maintenance-choice,.ops-repeatable-maintenance,.ops-permission-check,.ops-question,.ops-check-section{background:#f6f9fe!important;border-color:#d9e2f0!important;color:#003b73}
       .ops-form input,.ops-form select,.ops-form textarea,.ops-filter-grid input,.ops-filter-grid select,.ops-log-filter input,.ops-log-filter select{border-color:#c5d8ee!important;color:#003b73}
@@ -784,7 +784,8 @@
     const summary=(title,value,note,group,icon)=>`<button type="button" class="ops-maintenance-summary ops-attention-summary ${group}" onclick="SWOperationsV4.openAppAttention('${group}')">${appIcon(icon,'ops-maintenance-summary-icon')}<span><span class="ops-maintenance-summary-title">${title}</span><span class="ops-maintenance-summary-value">${value}</span><span class="ops-maintenance-summary-note">${note}</span></span></button>`;
     const label={all:'All attention items',critical:'Critical / overdue',soon:'Due soon',tasks:'Open tasks'}[state.homeAttentionFilter]||'Attention items';
     const rows=filtered.slice(0,12).map(item=>`<button type="button" class="ops-attention-item ${item.group}" onclick="SWOperationsV4.openAttentionItem('${esc(item.kind)}','${esc(item.taskId||'')}')">${appIcon(item.group==='critical'?'alert':item.group==='soon'?'schedule':'task','ops-attention-item-icon')}<span><span class="ops-attention-item-title">${esc(item.module)} · ${esc(item.title)}</span><span class="ops-attention-item-note">${esc(item.note||'')}</span></span><span class="ops-attention-date">${item.date?esc(nzDate(item.date)):''}</span></button>`).join('')||'<div class="ops-attention-empty">No current attention items.</div>';
-    return `<div class="ops-maintenance-dashboard">${summary('Critical / overdue',critical,'Action required','critical','alert')}${summary('Due soon',soon,'Due within the alert period','soon','schedule')}${summary('Open tasks',tasks,'Tasks requiring completion','tasks','task')}</div><div class="ops-attention-list"><div class="ops-section-title"><h3>${esc(label)}</h3>${state.homeAttentionFilter!=='all'?'<button type="button" class="ops-btn ghost" onclick="SWOperationsV4.openAppAttention(\'all\')">Clear filter</button>':''}</div>${rows}</div>`;
+    const open=state.homeAttentionFilter!=='all'?'open':'';
+    return `<div class="ops-maintenance-dashboard">${summary('Critical / overdue',critical,'Action required','critical','alert')}${summary('Due soon',soon,'Due within the alert period','soon','schedule')}${summary('Open tasks',tasks,'Tasks requiring completion','tasks','task')}</div><details class="ops-attention-list" ${open}><summary><span>${esc(label)}<span class="ops-attention-count">${filtered.length}</span></span></summary><div class="ops-attention-list-body">${state.homeAttentionFilter!=='all'?`<div class="ops-section-title"><span></span><button type="button" class="ops-btn ghost" onclick="SWOperationsV4.openAppAttention('all')">Clear filter</button></div>`:''}${rows}</div></details>`;
   }
   function openAppAttention(group){ state.homeAttentionFilter=group||'all'; showModuleHome(); }
   function openAttentionItem(kind,taskId){
@@ -1045,8 +1046,8 @@
     const overdue = maintenanceSchedulesForDashboard('overdue');
     return `
       <div class="ops-maintenance-dashboard">
-        ${maintenanceSummaryCard('Upcoming maintenance',upcoming.length,'Due today or within the next 14 days','schedule','upcoming','maintenance-upcoming')}
         ${maintenanceSummaryCard('Overdue maintenance',overdue.length,'Past its scheduled due date','alert','overdue','maintenance-overdue')}
+        ${maintenanceSummaryCard('Upcoming maintenance',upcoming.length,'Due today or within the next 14 days','schedule','upcoming','maintenance-upcoming')}
         ${maintenanceSummaryCard('Open tasks',open.length,'Reactive, scheduled and manual work','task','tasks','tasks-open')}
       </div>${canMaintain()?'<div class="ops-maintenance-dashboard-action"><button type="button" class="ops-btn primary" data-ops-action="openMaintenanceRecord">Record Maintenance</button></div>':''}`;
   }
@@ -3134,6 +3135,15 @@
     const dueCard=dash.querySelector('.stat.dueCard');
     const soonCard=dash.querySelector('.stat.service');
     const failedCard=dash.querySelector('.stat.failed');
+    [failedCard,dueCard,soonCard].filter(Boolean).forEach(card=>{
+      const heading=card.querySelector('div');
+      const note=heading?.querySelector('small');
+      if(note && note.parentElement===heading) card.appendChild(note);
+    });
+    const dashboardGrid=dash.querySelector('.grid.five');
+    if(dashboardGrid){
+      [failedCard,dueCard,soonCard].filter(Boolean).forEach(card=>dashboardGrid.appendChild(card));
+    }
     if(dueCard){
       dueCard.onclick=()=>window.SWHeightAttention?.open('overdue');
       const label=dueCard.querySelector('span:not(.statIcon)'); if(label) label.textContent='Overdue inspections';
@@ -3420,7 +3430,7 @@
 
 /* V4.0.30 corrective UI and certificate patch */
 (function(){
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3707,7 +3717,7 @@
 
   function install(){
     injectCss();
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent = 'Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     installRecentHistory();
     /* equipment register is owned by app.js in V4.0.30 */
     const old = api();
@@ -3722,7 +3732,7 @@
 
 /* V4.0.30 corrective UI/certificate/equipment/inspection patch */
 (function(){
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -3973,7 +3983,7 @@
     if(typeof window.SWOperationsV4?.renderRecentHistoryV417 === 'function') window.SWOperationsV4.renderRecentHistoryV417();
   }
   function cleanStaticUi(){
-    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance');
+    document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance');
     const reports=$('exportTabButton'), cert=$('certificateTabButton'); if(reports && cert && cert.nextSibling !== reports){ reports.parentElement.appendChild(reports); }
     const typeCard=$('dashTypes')?.closest('.card'); if(typeCard) typeCard.remove();
     const filterLabel=$('filterLabel'); if(filterLabel) filterLabel.remove();
@@ -3994,7 +4004,7 @@
 /* V4.0.30 - height history, certificate photos, equipment scroll, qualifications and account cleanup */
 (function(){
   'use strict';
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4356,7 +4366,7 @@
     }
   }
   function cleanStaticV419(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     installAccountBehaviourV419();
   }
   function install(){
@@ -4385,7 +4395,7 @@
 /* V4.0.30 - stabilisation patch: stop flicker and make certificate/qualification output deterministic */
 (function(){
   'use strict';
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4519,7 +4529,7 @@
     catch(e){ alert('Could not open file: ' + (e.message || e)); }
   }
   function bindStableHandlers(){
-    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline = document.querySelector('.tagline'); if(tagline) tagline.textContent = 'Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const b1 = $('certGenerateBtn'); if(b1){ b1.onclick = generateSeparateV420; b1.disabled = selectedCertificateIds().length === 0; }
     const b2 = $('certGenerateCombinedBtn'); if(b2){ b2.onclick = generateCombinedV420; b2.disabled = selectedCertificateIds().length === 0; }
     const apiObj = api();
@@ -4534,7 +4544,7 @@
 
 /* V4.0.30 - dashboard, equipment, certificate, qualification and reports cleanup */
 (function(){
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -4895,7 +4905,7 @@
 
   function refreshAll(){
     injectCss(); installPhotoButtons(); installRecentHistory421(); /* equipment filter stabiliser retired; app.js owns filter */ installReportsPatch();
-    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const tagline=document.querySelector('.tagline'); if(tagline) tagline.textContent='Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     const apiObj=api();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,1700)); else setTimeout(refreshAll,1700);
@@ -4911,7 +4921,7 @@
 /* V4.0.30 - stabilisation and completion patch */
 (function(){
   'use strict';
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const PHOTO_BUCKET = 'inspection-photos';
   const EQUIP_BUCKET = 'equipment-photos';
   const $ = id => document.getElementById(id);
@@ -5041,7 +5051,7 @@
   function installReports(){ const panel=document.querySelector('#export .reportPanel'); if(panel){ panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{panel.querySelectorAll('button').forEach(x=>x.classList.remove('primary','sw422-report-active')); b.classList.add('primary','sw422-report-active');})); } const clear=$('sw421ReportClearFilters'); if(clear) clear.textContent='Clear filters'; }
   function closeAccountOutside(e){ const tray=$('signedIn'), panel=$('accountPanel'); if(panel && !panel.classList.contains('hidden') && tray && !tray.contains(e.target)) panel.classList.add('hidden'); }
   function installArchiveGuard(){ /* retained from previous version; no-op if already installed */ }
-  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
+  function init(){ injectCss(); document.querySelector('.tagline') && (document.querySelector('.tagline').textContent='Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance'); installRecent(); /* equipment register is owned by app.js */ installReports(); document.removeEventListener('click',closeAccountOutside); document.addEventListener('click',closeAccountOutside); window.SWOperationsV4=Object.assign(api(),{renderRecentHistoryV422:renderRecent,renderEquipmentFilteredListV422:renderEqList}); /* app.js owns window.renderEquipment */ }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,1200)); else setTimeout(init,1200);
   document.addEventListener('click',e=>{ const tab=e.target?.closest?.('[data-tab]'); if(tab){ const name=tab.dataset.tab; setTimeout(()=>{ if(name==='dashboard') installRecent(); /* equipment tab handled by app.js */ if(name==='export') installReports(); },250); } });
   document.addEventListener('change',e=>{ if(e.target?.id==='heightRecentLimitLegacy') setTimeout(renderRecent,20); });
@@ -5049,11 +5059,11 @@
 
 /* V4.0.30 - app structure stabilisation marker and duplicate render guard */
 (function(){
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   window.SW_OPERATIONS_BUILD = VERSION;
   function setVersion(){
     const tagline = document.querySelector('.tagline');
-    if(tagline) tagline.textContent = 'Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if(tagline) tagline.textContent = 'Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     document.documentElement.setAttribute('data-sw-version', VERSION);
   }
   function stabiliseOnce(){
@@ -5064,7 +5074,7 @@
 
 /* V4.0.30 - Height UI Stabilisation, Qualifications, Admin Backup Cleanup */
 (function(){
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = v => String(v || '').trim().toLowerCase();
@@ -5084,9 +5094,9 @@
   function installCss(){
     if($('sw424Styles')) return;
     const st=document.createElement('style'); st.id='sw424Styles'; st.textContent = `
-      html[data-sw-version="4.0.77"] .notifyBtn,
-      html[data-sw-version="4.0.77"] #notifyBadge,
-      html[data-sw-version="4.0.77"] #notificationPanel{display:none!important}
+      html[data-sw-version="4.0.78"] .notifyBtn,
+      html[data-sw-version="4.0.78"] #notifyBadge,
+      html[data-sw-version="4.0.78"] #notificationPanel{display:none!important}
       .sw424-recent-box{max-height:370px;min-height:370px;overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:white;contain:layout paint;scrollbar-gutter:stable}
       .sw424-table{width:100%;border-collapse:collapse;font-size:13px}.sw424-table th,.sw424-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.sw424-table tr[data-id],.sw424-table tr[data-eqid]{cursor:pointer}.sw424-table tr:hover{background:#f8fafc}
       .sw424-filter{background:#ecfdf5;border:1px solid #14b8a6;border-radius:16px;padding:14px;margin:12px 0}.sw424-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.sw424-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.sw424-muted{color:#64748b;font-size:13px}.sw424-results{border:1px solid #e2e8f0;border-radius:14px;overflow:auto;background:white}.sw424-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:12px}.sw424-pill.ok{background:#dcfce7;color:#166534}.sw424-pill.bad{background:#fee2e2;color:#991b1b}.sw424-pill.warn{background:#fef3c7;color:#92400e}
@@ -5097,7 +5107,7 @@
   }
   function setVersion(){
     document.documentElement.setAttribute('data-sw-version', VERSION);
-    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t) t.textContent='Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
   }
   async function loadHeight(){
     const sb=client(); if(!sb) throw new Error('Supabase client not available.');
@@ -5266,14 +5276,14 @@
   const existing = window.SWOperationsV4 || {};
   window.SWOperationsV4 = Object.assign(existing, {
     recentInspectionRendererOwner: 'app.js',
-    version: '4.0.77'
+    version: '4.0.78'
   });
 })();
 
 
 /* V4.0.30 - Equipment filter is owned exclusively by app.js. */
 (() => {
-  const VERSION='4.0.77';
+  const VERSION='4.0.78';
   function cleanLegacyEquipmentFilters(){
     const pane=document.getElementById('equipment');
     if(!pane)return;
@@ -5294,7 +5304,7 @@
       observer.observe(pane,{childList:true,subtree:false});
       pane.__sw427Observer=observer;
     }
-    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    const t=document.querySelector('.tagline'); if(t)t.textContent='Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     window.SW_OPERATIONS_BUILD=VERSION;
     window.SWOperationsV4=Object.assign(window.SWOperationsV4||{},{version:VERSION,equipmentRendererOwner:'app.js'});
   }
@@ -5308,7 +5318,7 @@
  * the redundant large white parent panel regardless of which legacy renderer ran.
  */
 (() => {
-  const VERSION='4.0.77';
+  const VERSION='4.0.78';
   function installCertificateLayoutCss(){
     let style=document.getElementById('sw-v428-cert-layout-css');
     if(!style){
@@ -5341,7 +5351,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '4.0.77';
+  const VERSION = '4.0.78';
   const BUCKET = 'inspection-photos';
   let editingQualificationId = '';
   const $ = id => document.getElementById(id);
@@ -5653,7 +5663,7 @@
 
   function install() {
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.77 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline) tagline.textContent = 'Version 4.0.78 • Height Safety • Vehicle Checks • Equipment • Maintenance';
     removeDuplicateInspectorPanels();
     if ($('heightQualifications') && !$('heightQualifications').classList.contains('hidden')) refreshAndRenderQualifications();
     window.SW_OPERATIONS_BUILD = VERSION;
