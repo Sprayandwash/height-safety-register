@@ -11,6 +11,10 @@ on:
         description: Supabase region code
         required: true
         default: ap-southeast-2
+      organization_id:
+        description: Optional organization ID; leave blank when the account has one organization
+        required: false
+        default: ''
       confirmation:
         description: Type CREATE STAGING to confirm project creation
         required: true
@@ -29,10 +33,10 @@ jobs:
     timeout-minutes: 30
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_ORG_ID: ${{ secrets.SUPABASE_ORG_ID }}
       SUPABASE_STAGING_DB_PASSWORD: ${{ secrets.SUPABASE_STAGING_DB_PASSWORD }}
       PROJECT_NAME: ${{ inputs.project_name }}
       REGION: ${{ inputs.region }}
+      REQUESTED_ORG_ID: ${{ inputs.organization_id }}
 
     steps:
       - name: Validate confirmation and secrets
@@ -49,10 +53,6 @@ jobs:
             echo "Missing repository secret: SUPABASE_ACCESS_TOKEN" >&2
             exit 1
           fi
-          if [ -z "${SUPABASE_ORG_ID:-}" ]; then
-            echo "Missing repository secret: SUPABASE_ORG_ID" >&2
-            exit 1
-          fi
           if [ "${#SUPABASE_STAGING_DB_PASSWORD}" -lt 16 ]; then
             echo "SUPABASE_STAGING_DB_PASSWORD must contain at least 16 characters." >&2
             exit 1
@@ -62,6 +62,43 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
+
+      - name: Resolve Supabase organization
+        id: organization
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase orgs list --output json > organizations.json
+
+          if [ -n "${REQUESTED_ORG_ID:-}" ]; then
+            org_id="$REQUESTED_ORG_ID"
+            if ! jq -e --arg id "$org_id" '
+              (if type == "array" then . else (.organizations // []) end)
+              | any(.[]; (.id // .slug) == $id)
+            ' organizations.json >/dev/null; then
+              echo "The supplied organization ID was not found in this Supabase account." >&2
+              exit 1
+            fi
+          else
+            count="$(jq -r '(if type == "array" then . else (.organizations // []) end) | length' organizations.json)"
+            if [ "$count" -eq 0 ]; then
+              echo "No Supabase organizations were available to this access token." >&2
+              exit 1
+            fi
+            if [ "$count" -gt 1 ]; then
+              echo "This account belongs to more than one Supabase organization." >&2
+              echo "Re-run the workflow and enter one of these organization IDs:" >&2
+              jq -r '(if type == "array" then . else (.organizations // []) end)[] | "- \(.name // "Unnamed"): \(.id // .slug)"' organizations.json >&2
+              exit 1
+            fi
+            org_id="$(jq -r '(if type == "array" then . else (.organizations // []) end)[0] | .id // .slug // empty' organizations.json)"
+          fi
+
+          if [ -z "$org_id" ]; then
+            echo "The Supabase organization ID could not be resolved." >&2
+            exit 1
+          fi
+          echo "org_id=$org_id" >> "$GITHUB_OUTPUT"
 
       - name: Confirm staging project does not already exist
         shell: bash
@@ -79,6 +116,8 @@ jobs:
       - name: Create staging project
         id: create
         shell: bash
+        env:
+          SUPABASE_ORG_ID: ${{ steps.organization.outputs.org_id }}
         run: |
           set -euo pipefail
           supabase projects create "$PROJECT_NAME" \
@@ -130,12 +169,14 @@ jobs:
         shell: bash
         env:
           PROJECT_REF: ${{ steps.create.outputs.project_ref }}
+          SUPABASE_ORG_ID: ${{ steps.organization.outputs.org_id }}
         run: |
           set -euo pipefail
           cat > staging-project-metadata.txt <<METADATA
           Spray & Wash Supabase staging project
           Project name: ${PROJECT_NAME}
           Project ref: ${PROJECT_REF}
+          Organization ID: ${SUPABASE_ORG_ID}
           Region: ${REGION}
           Created UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Production data restored: no
