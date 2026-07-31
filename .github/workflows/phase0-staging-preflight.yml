@@ -1,0 +1,153 @@
+name: Phase 0 staging preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type CHECK STAGING to run read-only checks
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase0-staging-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Run read-only Phase 0 checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate confirmation and staging target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "CHECK STAGING" ]; then
+            echo "Confirmation did not match CHECK STAGING." >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_STAGING_DB_URL:-}" ]; then
+            echo "Missing repository secret: SUPABASE_STAGING_DB_URL" >&2
+            exit 1
+          fi
+          case "$SUPABASE_STAGING_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "SUPABASE_STAGING_DB_URL is not a PostgreSQL connection string." >&2; exit 1 ;;
+          esac
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo "SAFETY STOP: the target URL contains the production project reference." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Confirm database identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --command "select current_database() || '|' || current_user || '|' || current_setting('server_version');" \
+            | tee phase0-staging-identity.txt
+          test -s phase0-staging-identity.txt
+
+      - name: Run Phase 0 preflight SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --file supabase/phase0/sql/00-check.sql \
+            | tee phase0-staging-preflight.txt
+          test -s phase0-staging-preflight.txt
+
+      - name: Capture additional read-only evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            <<'SQL' | tee phase0-staging-evidence.txt
+          select 'public_tables=' || count(*)
+          from information_schema.tables
+          where table_schema='public' and table_type='BASE TABLE';
+
+          select 'public_policies=' || count(*)
+          from pg_policies
+          where schemaname='public';
+
+          select 'storage_object_policies=' || count(*)
+          from pg_policies
+          where schemaname='storage' and tablename='objects';
+
+          select 'legacy_policy_mentions=' || count(*)
+          from pg_policies
+          where schemaname in ('public','storage')
+            and concat_ws(' ',qual,with_check) ~ '(Inspector|Equipment Manager|Certificate Approver|Office / Reports|Viewer)';
+
+          select 'role_constraint=' || pg_get_constraintdef(oid)
+          from pg_constraint
+          where conrelid='public.user_roles'::regclass
+            and conname='user_roles_role_check';
+
+          select 'task_status_constraint=' || pg_get_constraintdef(oid)
+          from pg_constraint
+          where conrelid='public.operations_maintenance_tasks'::regclass
+            and conname='operations_maintenance_tasks_status_check';
+          SQL
+          test -s phase0-staging-evidence.txt
+
+      - name: Upload preflight report
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-phase0-staging-preflight
+          path: |
+            phase0-staging-identity.txt
+            phase0-staging-preflight.txt
+            phase0-staging-evidence.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write run summary
+        shell: bash
+        run: |
+          {
+            echo '## Phase 0 staging preflight passed'
+            echo
+            echo '- Target safety check confirmed the connection did not contain the production project reference.'
+            echo '- The SQL was read-only; no repair was applied.'
+            echo '- Required tables, current five-role values, Admin access and required function signatures passed their gates.'
+            echo
+            echo '### Preflight result'
+            echo '```text'
+            cat phase0-staging-preflight.txt
+            echo '```'
+            echo
+            echo '### Additional evidence'
+            echo '```text'
+            cat phase0-staging-evidence.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
