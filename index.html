@@ -7,11 +7,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Spray &amp; Wash Operations</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.0.82">
-  <link rel="shortcut icon" href="favicon.ico?v=4.0.82">
-  <link rel="icon" href="favicon.ico?v=4.0.82" sizes="any">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/spray-wash-app-icon-192.png?v=4.0.82">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/spray-wash-app-icon-192.png?v=4.0.82">
+  <link rel="manifest" href="manifest.webmanifest?v=4.0.83">
+  <link rel="shortcut icon" href="favicon.ico?v=4.0.83">
+  <link rel="icon" href="favicon.ico?v=4.0.83" sizes="any">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/spray-wash-app-icon-192.png?v=4.0.83">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/spray-wash-app-icon-192.png?v=4.0.83">
   <meta name="theme-color" content="#003b73">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,7 +59,7 @@
 .equipmentResultsCore{overflow-anchor:none;min-height:120px}
 #equipment .legacyEquipmentFilter,#equipment #heightEquipmentFilterPanel,#equipment #eqFilterPanel,#equipment #sw422EqFilter,#equipment #sw424EqFilter,#equipment .sw417-filter-panel,#equipment .sw422-filter,#equipment .sw424-filter:not(#equipmentFilterCore){display:none!important}
 
-    /* V4.0.82 Dashboard, Admin and immediate-logo update. */
+    /* V4.0.83 Dashboard, Admin and backup update. */
     #dashboard>.grid.five{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:-12px}
     #dashboard>.grid.five>.stat{margin:0}
     #dashboard .stat.total,#dashboard .stat.archived{display:none}
@@ -100,7 +100,7 @@
 <body>
 <header>
   <img class="logo" src="spray-wash-logo-v4.0.69.png" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.82 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <div><h1>Spray &amp; Wash Operations</h1><div class="tagline">Version 4.0.83 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
@@ -137,7 +137,8 @@
 <div id="cropModal" class="modal hidden"><div class="modalBox"><h2>Crop photo</h2><p class="muted">The photo starts full-size. Crop each side only if needed, then save. For multiple photos, they will open one after another.</p><div id="cropQueueInfo" class="cropQueue hidden"></div><canvas id="cropCanvas" class="cropCanvas" width="1200" height="900"></canvas><div class="cropControls"><label>Crop left<input id="cropLeft" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('left',this.value)"></label><label>Crop right<input id="cropRight" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('right',this.value)"></label><label>Crop top<input id="cropTop" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('top',this.value)"></label><label>Crop bottom<input id="cropBottom" type="range" min="0" max="80" step="1" value="0" oninput="setCropEdge('bottom',this.value)"></label></div><div class="row"><button onclick="rotateCrop()">Rotate</button><button onclick="resetCrop()">Reset crop</button><button class="primary" onclick="saveCrop()">Save photo</button><button onclick="cancelCrop()">Cancel</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=4.0.82"></script>
-<script src="./operations-v4.js?v=4.0.82"></script>
+<script src="app.js?v=4.0.83"></script>
+<script src="./operations-v4.js?v=4.0.83"></script>
+<script src="./backup-v4.js?v=4.0.83"></script>
 </body>
 </html>
