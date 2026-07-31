@@ -1,4 +1,4 @@
-/* Spray & Wash Operations App V4.0.83 - Admin backup module
+/* Spray & Wash Operations App V4.0.83 - Admin backup module hotfix
    Client-side Admin backup for application data and Supabase Storage files.
    No service-role key is used or exposed.
 */
@@ -9,60 +9,29 @@
   const PAGE_SIZE = 1000;
   const STORAGE_BUCKETS = ['equipment-photos', 'inspection-photos'];
   const TABLES = [
-    'app_settings',
-    'audit_logs',
-    'certificates',
-    'equipment',
-    'equipment_photos',
-    'height_inspector_qualifications',
-    'inspection_photos',
-    'inspections',
-    'operations_checklist_items',
-    'operations_checklist_templates',
-    'operations_equipment_maintenance_schedules',
-    'operations_inspection_answers',
-    'operations_inspection_photos',
-    'operations_inspections',
-    'operations_maintenance_log',
-    'operations_maintenance_log_items',
-    'operations_maintenance_parts_used',
-    'operations_maintenance_procedure_steps',
-    'operations_maintenance_procedures',
-    'operations_maintenance_readings',
-    'operations_maintenance_task_steps',
-    'operations_maintenance_tasks',
-    'operations_preloaded_users',
-    'operations_vehicles',
-    'operations_washing_equipment',
-    'profiles',
-    'user_roles'
+    'app_settings', 'audit_logs', 'certificates', 'equipment', 'equipment_photos',
+    'height_inspector_qualifications', 'inspection_photos', 'inspections',
+    'operations_checklist_items', 'operations_checklist_templates',
+    'operations_equipment_maintenance_schedules', 'operations_inspection_answers',
+    'operations_inspection_photos', 'operations_inspections', 'operations_maintenance_log',
+    'operations_maintenance_log_items', 'operations_maintenance_parts_used',
+    'operations_maintenance_procedure_steps', 'operations_maintenance_procedures',
+    'operations_maintenance_readings', 'operations_maintenance_task_steps',
+    'operations_maintenance_tasks', 'operations_preloaded_users', 'operations_vehicles',
+    'operations_washing_equipment', 'profiles', 'user_roles'
   ];
 
   let busy = false;
-  let observer = null;
+  let mountTimer = 0;
 
-  function state() {
-    return window.SWOperationsV4?.state || null;
-  }
-
-  function client() {
-    return state()?.sb || null;
-  }
-
-  function isAdmin() {
-    return Array.isArray(state()?.roles) && state().roles.includes('Admin');
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, char => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[char]));
-  }
-
-  function backupTimestamp(date = new Date()) {
-    const pad = value => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
-  }
+  const state = () => window.SWOperationsV4?.state || null;
+  const client = () => state()?.sb || null;
+  const isAdmin = () => Array.isArray(state()?.roles) && state().roles.includes('Admin');
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  const pad = value => String(value).padStart(2, '0');
+  const stamp = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
 
   function setStatus(message, type = 'info') {
     const el = document.getElementById('swBackupStatus');
@@ -72,59 +41,28 @@
   }
 
   function setProgress(current, total, message) {
+    const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
     const bar = document.getElementById('swBackupProgressBar');
     const label = document.getElementById('swBackupProgressLabel');
-    const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
     if (bar) bar.style.width = `${pct}%`;
     if (label) label.textContent = `${message || 'Working'}${total ? ` (${pct}%)` : ''}`;
   }
 
-  function setBusy(on) {
-    busy = on;
-    document.querySelectorAll('[data-sw-backup-action]').forEach(button => {
-      button.disabled = on;
-    });
+  function setBusy(value) {
+    busy = value;
+    document.querySelectorAll('[data-sw-backup-action]').forEach(button => { button.disabled = value; });
     const input = document.getElementById('swBackupVerifyFile');
-    if (input) input.disabled = on;
+    if (input) input.disabled = value;
   }
 
-  function backupUiHtml() {
-    const last = readLastBackup();
-    return `
-      <section id="swBackupModule" class="sw-backup-module" aria-labelledby="swBackupTitle">
-        <div class="ops-card">
-          <h3 id="swBackupTitle">App Backups</h3>
-          <p class="ops-subtle">Create a recoverable copy of Spray &amp; Wash application data, photos and qualification documents. Keep this browser tab open until the download finishes.</p>
-          <div class="sw-backup-warning"><strong>Before starting:</strong> ask staff not to enter inspections, maintenance records, tasks or user changes until the backup has downloaded.</div>
-          <div class="sw-backup-actions">
-            <button type="button" class="ops-btn primary" data-sw-backup-action="complete">Create Complete Backup</button>
-            <button type="button" class="ops-btn" data-sw-backup-action="data">Create Data-Only Backup</button>
-            <button type="button" class="ops-btn" data-sw-backup-action="files">Create Files-Only Backup</button>
-          </div>
-          <div class="sw-backup-progress" aria-hidden="true"><span id="swBackupProgressBar"></span></div>
-          <div id="swBackupProgressLabel" class="ops-subtle">Ready.</div>
-          <div id="swBackupStatus" class="sw-backup-status info" role="status" aria-live="polite">No backup is running.</div>
-        </div>
+  function lastBackup() {
+    try { return JSON.parse(localStorage.getItem('swLastBackupV4083') || 'null'); }
+    catch (_) { return null; }
+  }
 
-        <div class="ops-card">
-          <h3>Verify a Backup</h3>
-          <p class="ops-subtle">Choose a backup ZIP created by this screen. Verification checks the manifest, expected files, row counts and SHA-256 checksums.</p>
-          <label class="sw-backup-file-label">Backup ZIP<input id="swBackupVerifyFile" type="file" accept=".zip,application/zip"></label>
-          <div class="sw-backup-actions"><button type="button" class="ops-btn" data-sw-backup-action="verify">Verify Selected Backup</button></div>
-          <div id="swBackupVerifyResult" class="sw-backup-verify-result"></div>
-        </div>
-
-        <div class="ops-card">
-          <h3>What is included</h3>
-          <div class="sw-backup-grid">
-            <div><strong>Application data</strong><p class="ops-subtle">Height equipment, inspections, certificates, qualifications, vehicles, machinery, maintenance, tasks, settings, profiles and role assignments.</p></div>
-            <div><strong>Stored files</strong><p class="ops-subtle">All objects in the equipment-photos and inspection-photos buckets, including qualification documents, inspection evidence and asset photos.</p></div>
-            <div><strong>Recovery evidence</strong><p class="ops-subtle">Manifest, row counts, object paths, file sizes, checksums and restore guidance.</p></div>
-          </div>
-          <div class="sw-backup-limit"><strong>Not included:</strong> Supabase Auth passwords, active login sessions or a full PostgreSQL server dump. Users may need password resets after a complete project rebuild.</div>
-          ${last ? `<p class="ops-subtle"><strong>Last backup created on this device:</strong> ${escapeHtml(last.createdAt)} - ${escapeHtml(last.kind)} - ${escapeHtml(last.fileName)}</p>` : ''}
-        </div>
-      </section>`;
+  function saveLastBackup(value) {
+    try { localStorage.setItem('swLastBackupV4083', JSON.stringify(value)); }
+    catch (_) { /* optional device history only */ }
   }
 
   function injectStyles() {
@@ -152,42 +90,70 @@
     document.head.appendChild(style);
   }
 
-  function ensureUi() {
-    const shell = document.getElementById('opsShell');
-    const nav = shell?.querySelector('#opsNav');
-    const backupButton = nav?.querySelector('[data-ops-view="admin-settings"]');
-    if (!shell || !nav || !backupButton?.classList.contains('active')) return;
-
-    if (!isAdmin()) return;
-    injectStyles();
-
-    let module = document.getElementById('swBackupModule');
-    if (!module) {
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = backupUiHtml().trim();
-      module = wrapper.firstElementChild;
-      nav.insertAdjacentElement('afterend', module);
-      bindUi();
-    }
-
-    Array.from(shell.children).forEach(child => {
-      if (child === module || child === nav || child.classList.contains('ops-header') || child.classList.contains('ops-error')) return;
-      child.style.display = 'none';
-      child.dataset.swBackupHidden = '1';
-    });
-
-    const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.83 • Height Safety • Vehicle Checks • Equipment • Maintenance';
-    window.SW_OPERATIONS_BUILD = VERSION;
+  function uiHtml() {
+    const last = lastBackup();
+    return `<section id="swBackupModule" class="sw-backup-module" aria-labelledby="swBackupTitle">
+      <div class="ops-card">
+        <h3 id="swBackupTitle">App Backups</h3>
+        <p class="ops-subtle">Create a recoverable copy of Spray &amp; Wash application data, photos and qualification documents. Keep this tab open until the download finishes.</p>
+        <div class="sw-backup-warning"><strong>Before starting:</strong> ask staff not to enter inspections, maintenance records, tasks or user changes until the backup has downloaded.</div>
+        <div class="sw-backup-actions">
+          <button type="button" class="ops-btn primary" data-sw-backup-action="complete">Create Complete Backup</button>
+          <button type="button" class="ops-btn" data-sw-backup-action="data">Create Data-Only Backup</button>
+          <button type="button" class="ops-btn" data-sw-backup-action="files">Create Files-Only Backup</button>
+        </div>
+        <div class="sw-backup-progress" aria-hidden="true"><span id="swBackupProgressBar"></span></div>
+        <div id="swBackupProgressLabel" class="ops-subtle">Ready.</div>
+        <div id="swBackupStatus" class="sw-backup-status info" role="status" aria-live="polite">No backup is running.</div>
+      </div>
+      <div class="ops-card">
+        <h3>Verify a Backup</h3>
+        <p class="ops-subtle">Choose a backup ZIP created by this screen. Verification checks the manifest, expected files, row counts and SHA-256 checksums.</p>
+        <label class="sw-backup-file-label">Backup ZIP<input id="swBackupVerifyFile" type="file" accept=".zip,application/zip"></label>
+        <div class="sw-backup-actions"><button type="button" class="ops-btn" data-sw-backup-action="verify">Verify Selected Backup</button></div>
+        <div id="swBackupVerifyResult" class="sw-backup-verify-result"></div>
+      </div>
+      <div class="ops-card">
+        <h3>What is included</h3>
+        <div class="sw-backup-grid">
+          <div><strong>Application data</strong><p class="ops-subtle">Height equipment, inspections, certificates, qualifications, vehicles, machinery, maintenance, tasks, settings, profiles and role assignments.</p></div>
+          <div><strong>Stored files</strong><p class="ops-subtle">All objects in the equipment-photos and inspection-photos buckets, including qualification documents, inspection evidence and asset photos.</p></div>
+          <div><strong>Recovery evidence</strong><p class="ops-subtle">Manifest, row counts, object paths, file sizes, checksums and restore guidance.</p></div>
+        </div>
+        <div class="sw-backup-limit"><strong>Not included:</strong> Supabase Auth passwords, active login sessions or a full PostgreSQL server dump. Users may need password resets after a complete project rebuild.</div>
+        ${last ? `<p class="ops-subtle"><strong>Last backup created on this device:</strong> ${esc(last.createdAt)} - ${esc(last.kind)} - ${esc(last.fileName)}</p>` : ''}
+      </div>
+    </section>`;
   }
 
-  function restoreHiddenContentWhenLeaving() {
-    const active = document.querySelector('#opsNav [data-ops-view="admin-settings"].active');
-    if (active) return;
-    document.querySelectorAll('[data-sw-backup-hidden="1"]').forEach(el => {
-      el.style.display = '';
-      delete el.dataset.swBackupHidden;
-    });
+  function mount() {
+    const shell = document.getElementById('opsShell');
+    const nav = shell?.querySelector('#opsNav');
+    const button = nav?.querySelector('[data-ops-view="admin-settings"]');
+    if (!shell || !nav || !button?.classList.contains('active') || !isAdmin()) return false;
+
+    injectStyles();
+    let node = nav.nextSibling;
+    while (node) {
+      const next = node.nextSibling;
+      node.remove();
+      node = next;
+    }
+    nav.insertAdjacentHTML('afterend', uiHtml());
+    bindUi();
+
+    const tagline = document.querySelector('.tagline');
+    const versionText = 'Version 4.0.83 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    if (tagline && tagline.textContent !== versionText) tagline.textContent = versionText;
+    window.SW_OPERATIONS_BUILD = VERSION;
+    return true;
+  }
+
+  function scheduleMount(attempt = 0) {
+    clearTimeout(mountTimer);
+    if (mount()) return;
+    if (attempt >= 20) return;
+    mountTimer = window.setTimeout(() => scheduleMount(attempt + 1), 50);
   }
 
   function bindUi() {
@@ -200,21 +166,21 @@
 
   async function handleAction(action) {
     if (busy) return;
+    setBusy(true);
     try {
       if (!isAdmin()) throw new Error('Only Admin users can create or verify backups.');
       if (action === 'verify') {
         const file = document.getElementById('swBackupVerifyFile')?.files?.[0];
         if (!file) throw new Error('Choose a backup ZIP first.');
         await verifyBackup(file);
-        return;
+      } else if (['complete', 'data', 'files'].includes(action)) {
+        await createBackup(action);
       }
-      if (!['complete', 'data', 'files'].includes(action)) return;
-      await createBackup(action);
     } catch (error) {
       console.error('Backup error:', error);
       setStatus(error.message || String(error), 'error');
       const result = document.getElementById('swBackupVerifyResult');
-      if (action === 'verify' && result) result.innerHTML = `<div class="sw-backup-status error">${escapeHtml(error.message || error)}</div>`;
+      if (action === 'verify' && result) result.innerHTML = `<div class="sw-backup-status error">${esc(error.message || error)}</div>`;
     } finally {
       setBusy(false);
     }
@@ -224,15 +190,8 @@
     if (window.JSZip) return window.JSZip;
     setStatus('Loading backup library...', 'info');
     await new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[data-sw-jszip]');
-      if (existing) {
-        existing.addEventListener('load', resolve, { once: true });
-        existing.addEventListener('error', () => reject(new Error('Could not load the ZIP library. Check the internet connection.')), { once: true });
-        return;
-      }
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-      script.dataset.swJszip = '1';
       script.onload = resolve;
       script.onerror = () => reject(new Error('Could not load the ZIP library. Check the internet connection.'));
       document.head.appendChild(script);
@@ -245,33 +204,30 @@
     const sb = client();
     if (!sb) throw new Error('Supabase is not ready. Refresh the app and try again.');
     const rows = [];
-    let from = 0;
-    while (true) {
+    for (let from = 0; ; from += PAGE_SIZE) {
       const response = await sb.from(table).select('*').range(from, from + PAGE_SIZE - 1);
       if (response.error) throw new Error(`${table}: ${response.error.message}`);
       const page = response.data || [];
       rows.push(...page);
       if (page.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
     }
     return rows;
   }
 
   async function captureDatabase(zip, manifest) {
-    const allData = {};
+    const all = {};
     for (let index = 0; index < TABLES.length; index += 1) {
       const table = TABLES[index];
       setProgress(index, TABLES.length, `Exporting ${table}`);
       const rows = await fetchTableRows(table);
-      allData[table] = rows;
-      manifest.database.tables.push({ name: table, rows: rows.length, file: `database/tables/${table}.json` });
-      zip.file(`database/tables/${table}.json`, JSON.stringify(rows, null, 2));
+      all[table] = rows;
+      const file = `database/tables/${table}.json`;
+      manifest.database.tables.push({ name: table, rows: rows.length, file });
+      zip.file(file, JSON.stringify(rows, null, 2));
     }
     zip.file('database/all-app-data.json', JSON.stringify({
-      format: 'spray-wash-app-data-v1',
-      created_at: manifest.created_at,
-      app_version: VERSION,
-      tables: allData
+      format: 'spray-wash-app-data-v1', created_at: manifest.created_at,
+      app_version: VERSION, tables: all
     }, null, 2));
     zip.file('database/restore-order.json', JSON.stringify(TABLES, null, 2));
     setProgress(TABLES.length, TABLES.length, 'Application data exported');
@@ -285,23 +241,19 @@
     async function walk(prefix) {
       if (visited.has(prefix)) return;
       visited.add(prefix);
-      let offset = 0;
-      while (true) {
+      for (let offset = 0; ; offset += PAGE_SIZE) {
         const response = await sb.storage.from(bucket).list(prefix, {
-          limit: PAGE_SIZE,
-          offset,
-          sortBy: { column: 'name', order: 'asc' }
+          limit: PAGE_SIZE, offset, sortBy: { column: 'name', order: 'asc' }
         });
         if (response.error) throw new Error(`${bucket}/${prefix || ''}: ${response.error.message}`);
         const items = response.data || [];
         for (const item of items) {
           const path = prefix ? `${prefix}/${item.name}` : item.name;
-          const looksLikeFolder = item.id == null && (!item.metadata || Object.keys(item.metadata).length === 0);
-          if (looksLikeFolder) await walk(path);
+          const folder = item.id == null && (!item.metadata || Object.keys(item.metadata).length === 0);
+          if (folder) await walk(path);
           else files.push({ bucket, path, item });
         }
         if (items.length < PAGE_SIZE) break;
-        offset += PAGE_SIZE;
       }
     }
 
@@ -309,8 +261,7 @@
     return files;
   }
 
-  async function sha256Hex(data) {
-    const buffer = data instanceof ArrayBuffer ? data : await data.arrayBuffer();
+  async function sha256Hex(buffer) {
     const digest = await crypto.subtle.digest('SHA-256', buffer);
     return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
   }
@@ -320,63 +271,55 @@
     const listed = [];
     for (const bucket of STORAGE_BUCKETS) {
       setStatus(`Listing files in ${bucket}...`, 'info');
-      const files = await listBucketFiles(bucket);
-      listed.push(...files);
+      listed.push(...await listBucketFiles(bucket));
     }
 
-    const checksums = [];
+    const checksumLines = [];
     for (let index = 0; index < listed.length; index += 1) {
       const file = listed[index];
-      setProgress(index, listed.length, `Downloading ${file.bucket}/${file.path}`);
+      setProgress(index, listed.length || 1, `Downloading ${file.bucket}/${file.path}`);
       const response = await sb.storage.from(file.bucket).download(file.path);
       if (response.error) throw new Error(`${file.bucket}/${file.path}: ${response.error.message}`);
       const blob = response.data;
-      if (!blob) throw new Error(`${file.bucket}/${file.path}: no file data was returned.`);
-      const arrayBuffer = await blob.arrayBuffer();
-      const checksum = await sha256Hex(arrayBuffer);
+      if (!blob) throw new Error(`${file.bucket}/${file.path}: no file data returned.`);
+      const buffer = await blob.arrayBuffer();
+      const checksum = await sha256Hex(buffer);
       const zipPath = `storage/${file.bucket}/${file.path}`;
-      zip.file(zipPath, arrayBuffer);
-      const size = arrayBuffer.byteLength;
+      zip.file(zipPath, buffer);
       manifest.storage.files.push({
-        bucket: file.bucket,
-        path: file.path,
-        zip_path: zipPath,
-        size,
+        bucket: file.bucket, path: file.path, zip_path: zipPath,
+        size: buffer.byteLength,
         content_type: blob.type || file.item?.metadata?.mimetype || null,
         sha256: checksum,
         created_at: file.item?.created_at || null,
         updated_at: file.item?.updated_at || null
       });
-      checksums.push(`${checksum}  ${zipPath}`);
+      checksumLines.push(`${checksum}  ${zipPath}`);
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
     manifest.storage.total_files = manifest.storage.files.length;
     manifest.storage.total_bytes = manifest.storage.files.reduce((sum, file) => sum + file.size, 0);
-    zip.file('checksums/sha256-storage-files.txt', checksums.join('\n') + (checksums.length ? '\n' : ''));
-    setProgress(listed.length, listed.length || 1, 'Stored files exported');
+    zip.file('checksums/sha256-storage-files.txt', checksumLines.join('\n') + (checksumLines.length ? '\n' : ''));
+    setProgress(listed.length || 1, listed.length || 1, 'Stored files exported');
   }
 
-  function recoveryInstructions(manifest) {
-    return `SPRAY & WASH OPERATIONS BACKUP\n\nCreated: ${manifest.created_at}\nApp version: ${manifest.app_version}\nBackup type: ${manifest.backup_type}\n\nCONTENTS\n- database/tables/*.json: one JSON file per application table\n- database/all-app-data.json: combined application data\n- storage/: exact Supabase bucket paths and file bytes\n- manifest.json: row counts, object paths, sizes and checksums\n- checksums/: SHA-256 checksums for stored files\n\nIMPORTANT LIMITATIONS\n- This is an application recovery backup, not a full PostgreSQL server dump.\n- Supabase Auth passwords and active sessions are not included.\n- A complete project rebuild may require users to be recreated and passwords reset.\n- Restore the database schema and security policies first, then table data, then Storage objects at their exact original paths.\n\nDO NOT EDIT THE BACKUP ZIP. Keep at least two copies in separate locations.\n`;
+  function recoveryText(manifest) {
+    return `SPRAY & WASH OPERATIONS BACKUP\n\nCreated: ${manifest.created_at}\nApp version: ${manifest.app_version}\nBackup type: ${manifest.backup_type}\n\nCONTENTS\n- database/tables/*.json: one JSON file per application table\n- database/all-app-data.json: combined application data\n- storage/: exact Supabase bucket paths and file bytes\n- manifest.json: row counts, object paths, sizes and checksums\n- checksums/: SHA-256 checksums for stored files\n\nIMPORTANT LIMITATIONS\n- This is an application recovery backup, not a full PostgreSQL server dump.\n- Supabase Auth passwords and active sessions are not included.\n- Restore the database schema and security policies first, then table data, then Storage objects at their exact original paths.\n\nDO NOT EDIT THE BACKUP ZIP. Keep at least two copies in separate locations.\n`;
   }
 
   async function createBackup(kind) {
     const JSZip = await loadJsZip();
-    setBusy(true);
     setProgress(0, 1, 'Starting backup');
     setStatus('Preparing backup...', 'info');
 
     const now = new Date();
-    const stamp = backupTimestamp(now);
     const label = kind === 'complete' ? 'Complete' : kind === 'data' ? 'Data-Only' : 'Files-Only';
-    const fileName = `Spray-and-Wash-${label}-Backup-${stamp}.zip`;
+    const fileName = `Spray-and-Wash-${label}-Backup-${stamp(now)}.zip`;
     const zip = new JSZip();
     const manifest = {
-      format: 'spray-wash-backup-v1',
-      app_version: VERSION,
-      created_at: now.toISOString(),
-      created_by: state()?.user?.email || state()?.user?.id || 'Admin',
-      backup_type: kind,
-      database: { tables: [] },
+      format: 'spray-wash-backup-v1', app_version: VERSION,
+      created_at: now.toISOString(), created_by: state()?.user?.email || state()?.user?.id || 'Admin',
+      backup_type: kind, database: { tables: [] },
       storage: { buckets: STORAGE_BUCKETS.slice(), files: [], total_files: 0, total_bytes: 0 },
       limitations: [
         'Supabase Auth passwords and active login sessions are not included.',
@@ -385,26 +328,23 @@
       ]
     };
 
-    if (kind === 'complete' || kind === 'data') {
+    if (kind !== 'files') {
       setStatus('Exporting application data...', 'info');
       await captureDatabase(zip, manifest);
     }
-    if (kind === 'complete' || kind === 'files') {
+    if (kind !== 'data') {
       setStatus('Exporting photos and qualification documents...', 'info');
       await captureStorage(zip, manifest);
     }
 
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
-    zip.file('RESTORE-INSTRUCTIONS.txt', recoveryInstructions(manifest));
+    zip.file('RESTORE-INSTRUCTIONS.txt', recoveryText(manifest));
     zip.file('VERSION.txt', `${VERSION}\n`);
 
     setStatus('Compressing backup. Keep this tab open...', 'info');
     const blob = await zip.generateAsync({
-      type: 'blob',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 },
-      platform: 'DOS'
-    }, metadata => setProgress(metadata.percent, 100, `Compressing ${metadata.currentFile || ''}`));
+      type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 }, platform: 'DOS'
+    }, info => setProgress(info.percent, 100, `Compressing ${info.currentFile || ''}`));
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -415,34 +355,33 @@
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
 
-    const tableRows = manifest.database.tables.reduce((sum, table) => sum + table.rows, 0);
+    const rowCount = manifest.database.tables.reduce((sum, table) => sum + table.rows, 0);
     setProgress(100, 100, 'Backup complete');
-    setStatus(`Backup downloaded: ${fileName}. ${manifest.database.tables.length} tables, ${tableRows} database rows and ${manifest.storage.total_files} stored files.`, 'success');
+    setStatus(`Backup downloaded: ${fileName}. ${manifest.database.tables.length} tables, ${rowCount} database rows and ${manifest.storage.total_files} stored files.`, 'success');
     saveLastBackup({ createdAt: now.toLocaleString('en-NZ'), kind: label, fileName, size: blob.size });
   }
 
   async function verifyBackup(file) {
     const JSZip = await loadJsZip();
-    setBusy(true);
-    setProgress(0, 1, 'Opening backup');
     setStatus('Verifying backup...', 'info');
+    setProgress(0, 1, 'Opening backup');
     const result = document.getElementById('swBackupVerifyResult');
     if (result) result.innerHTML = '';
 
     const zip = await JSZip.loadAsync(file, { checkCRC32: true });
-    const manifestEntry = zip.file('manifest.json');
-    if (!manifestEntry) throw new Error('manifest.json is missing. This is not a recognised Spray & Wash backup.');
-    const manifest = JSON.parse(await manifestEntry.async('string'));
+    const manifestFile = zip.file('manifest.json');
+    if (!manifestFile) throw new Error('manifest.json is missing. This is not a recognised Spray & Wash backup.');
+    const manifest = JSON.parse(await manifestFile.async('string'));
     if (manifest.format !== 'spray-wash-backup-v1') throw new Error(`Unsupported backup format: ${manifest.format || 'unknown'}.`);
 
     const errors = [];
+    const tables = manifest.database?.tables || [];
+    const storedFiles = manifest.storage?.files || [];
+    const total = tables.length + storedFiles.length || 1;
     let checked = 0;
-    const databaseTables = manifest.database?.tables || [];
-    const storageFiles = manifest.storage?.files || [];
-    const total = databaseTables.length + storageFiles.length;
 
-    for (const table of databaseTables) {
-      setProgress(checked, total || 1, `Checking ${table.name}`);
+    for (const table of tables) {
+      setProgress(checked, total, `Checking ${table.name}`);
       const entry = zip.file(table.file);
       if (!entry) errors.push(`Missing database file: ${table.file}`);
       else {
@@ -450,61 +389,47 @@
           const rows = JSON.parse(await entry.async('string'));
           if (!Array.isArray(rows)) errors.push(`${table.file} is not a JSON array.`);
           else if (rows.length !== table.rows) errors.push(`${table.name}: expected ${table.rows} rows, found ${rows.length}.`);
-        } catch (error) {
-          errors.push(`${table.file}: invalid JSON (${error.message}).`);
-        }
+        } catch (error) { errors.push(`${table.file}: invalid JSON (${error.message}).`); }
       }
       checked += 1;
     }
 
-    for (const stored of storageFiles) {
-      setProgress(checked, total || 1, `Checking ${stored.bucket}/${stored.path}`);
+    for (const stored of storedFiles) {
+      setProgress(checked, total, `Checking ${stored.bucket}/${stored.path}`);
       const entry = zip.file(stored.zip_path);
       if (!entry) errors.push(`Missing stored file: ${stored.zip_path}`);
       else {
         const buffer = await entry.async('arraybuffer');
         if (buffer.byteLength !== stored.size) errors.push(`${stored.zip_path}: expected ${stored.size} bytes, found ${buffer.byteLength}.`);
-        const checksum = await sha256Hex(buffer);
-        if (checksum !== stored.sha256) errors.push(`${stored.zip_path}: checksum does not match.`);
+        if (await sha256Hex(buffer) !== stored.sha256) errors.push(`${stored.zip_path}: checksum does not match.`);
       }
       checked += 1;
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    setProgress(total || 1, total || 1, 'Verification complete');
+    setProgress(total, total, 'Verification complete');
     if (errors.length) {
       setStatus(`Backup verification failed with ${errors.length} issue${errors.length === 1 ? '' : 's'}.`, 'error');
-      if (result) result.innerHTML = `<div class="sw-backup-status error"><strong>Verification failed.</strong><ul>${errors.slice(0, 30).map(error => `<li>${escapeHtml(error)}</li>`).join('')}${errors.length > 30 ? `<li>...and ${errors.length - 30} more.</li>` : ''}</ul></div>`;
+      if (result) result.innerHTML = `<div class="sw-backup-status error"><strong>Verification failed.</strong><ul>${errors.slice(0, 30).map(error => `<li>${esc(error)}</li>`).join('')}${errors.length > 30 ? `<li>...and ${errors.length - 30} more.</li>` : ''}</ul></div>`;
       return;
     }
 
-    const rowCount = databaseTables.reduce((sum, table) => sum + Number(table.rows || 0), 0);
+    const rows = tables.reduce((sum, table) => sum + Number(table.rows || 0), 0);
     setStatus('Backup verified successfully.', 'success');
-    if (result) result.innerHTML = `<div class="sw-backup-status success"><strong>Backup verified</strong><br>Created: ${escapeHtml(new Date(manifest.created_at).toLocaleString('en-NZ'))}<br>Tables: ${databaseTables.length}<br>Database rows: ${rowCount}<br>Stored files: ${storageFiles.length}</div>`;
-  }
-
-  function saveLastBackup(value) {
-    try { localStorage.setItem('swLastBackupV4083', JSON.stringify(value)); } catch (_) { /* optional */ }
-  }
-
-  function readLastBackup() {
-    try { return JSON.parse(localStorage.getItem('swLastBackupV4083') || 'null'); } catch (_) { return null; }
+    if (result) result.innerHTML = `<div class="sw-backup-status success"><strong>Backup verified</strong><br>Created: ${esc(new Date(manifest.created_at).toLocaleString('en-NZ'))}<br>Tables: ${tables.length}<br>Database rows: ${rows}<br>Stored files: ${storedFiles.length}</div>`;
   }
 
   function install() {
-    const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Version 4.0.83 • Height Safety • Vehicle Checks • Equipment • Maintenance';
+    injectStyles();
     window.SW_OPERATIONS_BUILD = VERSION;
-    window.SWBackupV4083 = { createBackup, verifyBackup, ensureUi, version: VERSION };
+    window.SWBackupV4083 = { createBackup, verifyBackup, mount, version: VERSION };
 
-    observer = new MutationObserver(() => {
-      ensureUi();
-      restoreHiddenContentWhenLeaving();
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     document.addEventListener('click', event => {
-      if (event.target.closest('[data-ops-view="admin-settings"]')) setTimeout(ensureUi, 40);
+      const viewButton = event.target.closest('[data-ops-view]');
+      if (viewButton?.dataset.opsView === 'admin-settings') scheduleMount();
     }, true);
-    ensureUi();
+
+    scheduleMount();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
