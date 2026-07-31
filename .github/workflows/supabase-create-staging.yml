@@ -1,0 +1,166 @@
+name: Create Supabase staging project
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: Name for the new staging project
+        required: true
+        default: Spray and Wash Staging
+      region:
+        description: Supabase region code
+        required: true
+        default: ap-southeast-2
+      confirmation:
+        description: Type CREATE STAGING to confirm project creation
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: create-supabase-staging-project
+  cancel-in-progress: false
+
+jobs:
+  create-staging:
+    name: Create isolated staging project
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_ORG_ID: ${{ secrets.SUPABASE_ORG_ID }}
+      SUPABASE_STAGING_DB_PASSWORD: ${{ secrets.SUPABASE_STAGING_DB_PASSWORD }}
+      PROJECT_NAME: ${{ inputs.project_name }}
+      REGION: ${{ inputs.region }}
+
+    steps:
+      - name: Validate confirmation and secrets
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "CREATE STAGING" ]; then
+            echo "Confirmation did not match CREATE STAGING." >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "Missing repository secret: SUPABASE_ACCESS_TOKEN" >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_ORG_ID:-}" ]; then
+            echo "Missing repository secret: SUPABASE_ORG_ID" >&2
+            exit 1
+          fi
+          if [ "${#SUPABASE_STAGING_DB_PASSWORD}" -lt 16 ]; then
+            echo "SUPABASE_STAGING_DB_PASSWORD must contain at least 16 characters." >&2
+            exit 1
+          fi
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Confirm staging project does not already exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects-before.json
+          if jq -e --arg name "$PROJECT_NAME" '
+            (if type == "array" then . else (.projects // []) end)
+            | any(.[]; .name == $name)
+          ' projects-before.json >/dev/null; then
+            echo "A Supabase project named '$PROJECT_NAME' already exists. No project was created." >&2
+            exit 1
+          fi
+
+      - name: Create staging project
+        id: create
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects create "$PROJECT_NAME" \
+            --org-id "$SUPABASE_ORG_ID" \
+            --region "$REGION" \
+            --db-password "$SUPABASE_STAGING_DB_PASSWORD" \
+            --output json > staging-project-create.json
+
+          ref="$(jq -r '.ref // .id // .project.ref // empty' staging-project-create.json)"
+          if [ -z "$ref" ]; then
+            supabase projects list --output json > projects-after.json
+            ref="$(jq -r --arg name "$PROJECT_NAME" '
+              (if type == "array" then . else (.projects // []) end)
+              | map(select(.name == $name))
+              | first
+              | .ref // .id // empty
+            ' projects-after.json)"
+          fi
+          if [ -z "$ref" ]; then
+            echo "The project may have been created, but its project ref could not be resolved." >&2
+            exit 1
+          fi
+          echo "project_ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for project health
+        shell: bash
+        env:
+          PROJECT_REF: ${{ steps.create.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            supabase projects list --output json > projects-health.json
+            status="$(jq -r --arg ref "$PROJECT_REF" '
+              (if type == "array" then . else (.projects // []) end)
+              | map(select((.ref // .id) == $ref))
+              | first
+              | .status // .database.status // empty
+            ' projects-health.json)"
+            case "$status" in
+              ACTIVE_HEALTHY|ACTIVE) exit 0 ;;
+              *) echo "Waiting for staging project health (${status:-unknown}), attempt $attempt/60" ;;
+            esac
+            sleep 15
+          done
+          echo "The project was created but did not report healthy within 15 minutes." >&2
+          exit 1
+
+      - name: Create safe staging metadata
+        shell: bash
+        env:
+          PROJECT_REF: ${{ steps.create.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          cat > staging-project-metadata.txt <<METADATA
+          Spray & Wash Supabase staging project
+          Project name: ${PROJECT_NAME}
+          Project ref: ${PROJECT_REF}
+          Region: ${REGION}
+          Created UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Production data restored: no
+          Phase 0 repair applied: no
+          METADATA
+
+      - name: Upload staging metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-project-metadata
+          path: staging-project-metadata.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write run summary
+        shell: bash
+        env:
+          PROJECT_REF: ${{ steps.create.outputs.project_ref }}
+        run: |
+          {
+            echo "## Supabase staging project created"
+            echo
+            echo "- Name: \`${PROJECT_NAME}\`"
+            echo "- Project ref: \`${PROJECT_REF}\`"
+            echo "- Region: \`${REGION}\`"
+            echo "- Production data has not yet been restored."
+            echo "- Copy the staging Session Pooler connection string into a new repository secret named \`SUPABASE_STAGING_DB_URL\` before the restore step."
+          } >> "$GITHUB_STEP_SUMMARY"
