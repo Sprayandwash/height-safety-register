@@ -1,7 +1,8 @@
 // Spray & Wash Operations V4.0.83 service worker
-// Network-first, clears old caches, and adds the standalone Admin backup module.
-const CACHE_NAME = "spray-wash-operations-v4-0-83";
+// Network-first, clears old caches, and ensures V4.0.83 release modules load last.
+const CACHE_NAME = "spray-wash-operations-v4-0-83-final";
 const BACKUP_SCRIPT = '<script src="./backup-v4.js?v=4.0.83"></script>';
+const RELEASE_SCRIPT = '<script src="./release-v4.0.83.js?v=4.0.83"></script>';
 
 self.addEventListener("install", event => {
   self.skipWaiting();
@@ -27,10 +28,13 @@ self.addEventListener("fetch", event => {
         .then(async response => {
           const type = response.headers.get("content-type") || "";
           if (!response.ok || !type.includes("text/html")) return response;
+
           let html = await response.text();
-          if (!html.includes("backup-v4.js")) {
-            html = html.replace("</body>", `${BACKUP_SCRIPT}\n</body>`);
-          }
+          const scripts = [];
+          if (!html.includes("backup-v4.js")) scripts.push(BACKUP_SCRIPT);
+          if (!html.includes("release-v4.0.83.js")) scripts.push(RELEASE_SCRIPT);
+          if (scripts.length) html = html.replace("</body>", `${scripts.join("\n")}\n</body>`);
+
           const headers = new Headers(response.headers);
           headers.delete("content-length");
           headers.set("cache-control", "no-store");
