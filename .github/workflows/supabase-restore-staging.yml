@@ -1,0 +1,237 @@
+name: Restore latest backup to Supabase staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RESTORE TO STAGING to confirm
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: restore-supabase-staging
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    name: Restore encrypted backup into staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      SUPABASE_BACKUP_PASSWORD: ${{ secrets.SUPABASE_BACKUP_PASSWORD }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate confirmation and target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "RESTORE TO STAGING" ]; then
+            echo "Confirmation did not match RESTORE TO STAGING." >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_STAGING_DB_URL:-}" ]; then
+            echo "Missing repository secret: SUPABASE_STAGING_DB_URL" >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_BACKUP_PASSWORD:-}" ]; then
+            echo "Missing repository secret: SUPABASE_BACKUP_PASSWORD" >&2
+            exit 1
+          fi
+          case "$SUPABASE_STAGING_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "SUPABASE_STAGING_DB_URL is not a PostgreSQL connection string." >&2; exit 1 ;;
+          esac
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo "SAFETY STOP: the target URL contains the production project reference." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Find latest successful logical backup run
+        id: backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/supabase-logical-backup.yml/runs?event=workflow_dispatch&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')"
+          if [ -z "$run_id" ]; then
+            echo "No successful Supabase logical backup workflow run was found." >&2
+            exit 1
+          fi
+          artifact_name="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+            --jq '.artifacts[] | select(.expired == false) | .name' \
+            | head -n 1)"
+          if [ -z "$artifact_name" ]; then
+            echo "The latest successful backup run has no unexpired artifact." >&2
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+
+      - name: Download encrypted backup artifact
+        shell: bash
+        env:
+          BACKUP_RUN_ID: ${{ steps.backup.outputs.run_id }}
+          BACKUP_ARTIFACT_NAME: ${{ steps.backup.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p incoming
+          gh run download "$BACKUP_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "$BACKUP_ARTIFACT_NAME" \
+            --dir incoming
+          test -n "$(find incoming -maxdepth 1 -name '*.tar.gz.enc' -print -quit)"
+          test -n "$(find incoming -maxdepth 1 -name '*.tar.gz.enc.sha256' -print -quit)"
+
+      - name: Verify encrypted artifact checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd incoming
+          checksum_file="$(find . -maxdepth 1 -name '*.tar.gz.enc.sha256' -print -quit)"
+          sha256sum -c "$checksum_file"
+
+      - name: Decrypt and extract logical backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          encrypted="$(find incoming -maxdepth 1 -name '*.tar.gz.enc' -print -quit)"
+          mkdir -p restored
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -pass env:SUPABASE_BACKUP_PASSWORD \
+            -in "$encrypted" \
+            -out restored/backup.tar.gz
+          tar -xzf restored/backup.tar.gz -C restored
+          test -s restored/recovery-backup/roles.sql
+          test -s restored/recovery-backup/schema.sql
+          test -s restored/recovery-backup/data.sql
+
+      - name: Prepare known Supabase role compatibility fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          roles_file="restored/recovery-backup/roles.sql"
+          sed -i '/GRANT "postgres" TO "cli_login_postgres"/d' "$roles_file"
+
+      - name: Confirm staging connection before restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --command "select current_database() || '|' || current_user || '|' || current_setting('server_version');" \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            > staging-connection-check.txt
+          test -s staging-connection-check.txt
+
+      - name: Revoke target default table privileges before schema restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --command 'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;' \
+            --dbname "$SUPABASE_STAGING_DB_URL"
+
+      - name: Restore roles, schema and data into staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --single-transaction \
+            --variable ON_ERROR_STOP=1 \
+            --file restored/recovery-backup/roles.sql \
+            --file restored/recovery-backup/schema.sql \
+            --command 'SET session_replication_role = replica' \
+            --file restored/recovery-backup/data.sql \
+            --dbname "$SUPABASE_STAGING_DB_URL"
+
+      - name: Validate restored staging database
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            <<'SQL' > staging-restore-validation.txt
+          select 'public_tables=' || count(*)
+          from information_schema.tables
+          where table_schema = 'public' and table_type = 'BASE TABLE';
+
+          select 'equipment_rows=' || count(*) from public.equipment;
+          select 'operations_inspections_rows=' || count(*) from public.operations_inspections;
+          select 'maintenance_tasks_rows=' || count(*) from public.operations_maintenance_tasks;
+          select 'user_roles_rows=' || count(*) from public.user_roles;
+
+          select 'rls_enabled_tables=' || count(*)
+          from pg_class c
+          join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity;
+          SQL
+          cat staging-restore-validation.txt
+          grep -q '^public_tables=' staging-restore-validation.txt
+          grep -q '^equipment_rows=' staging-restore-validation.txt
+          grep -q '^operations_inspections_rows=' staging-restore-validation.txt
+          grep -q '^maintenance_tasks_rows=' staging-restore-validation.txt
+          grep -q '^user_roles_rows=' staging-restore-validation.txt
+
+      - name: Upload restore validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-restore-validation
+          path: |
+            staging-connection-check.txt
+            staging-restore-validation.txt
+            restored/recovery-backup/manifest.txt
+            restored/recovery-backup/SHA256SUMS
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write run summary
+        shell: bash
+        env:
+          BACKUP_ARTIFACT_NAME: ${{ steps.backup.outputs.artifact_name }}
+        run: |
+          {
+            echo '## Supabase staging restore completed'
+            echo
+            echo "- Source backup artifact: \`${BACKUP_ARTIFACT_NAME}\`"
+            echo '- Target safety check confirmed the URL did not contain the production project reference.'
+            echo '- Roles, schema and data were restored in one transaction.'
+            echo '- Storage object bytes and Supabase Auth passwords were not restored.'
+            echo
+            echo '### Validation'
+            echo '```text'
+            cat staging-restore-validation.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove decrypted working files
+        if: always()
+        shell: bash
+        run: rm -rf incoming restored
