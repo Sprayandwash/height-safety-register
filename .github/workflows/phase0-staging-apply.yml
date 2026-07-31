@@ -95,6 +95,81 @@ jobs:
             | tee phase0-staging-identity.txt
           test -s phase0-staging-identity.txt
 
+      - name: Restore storage-policy baseline omitted by logical dump
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            <<'SQL' | tee phase0-storage-baseline.txt
+          DO $$
+          DECLARE
+            v_count integer;
+            v_missing integer;
+          BEGIN
+            SELECT count(*) INTO v_count
+            FROM pg_policies
+            WHERE schemaname='storage' AND tablename='objects';
+
+            IF v_count = 0 THEN
+              CREATE POLICY "storage equipment photos v34 delete" ON storage.objects
+                AS PERMISSIVE FOR DELETE TO authenticated
+                USING ((bucket_id='equipment-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector','Equipment Manager'])));
+              CREATE POLICY "storage equipment photos v34 insert" ON storage.objects
+                AS PERMISSIVE FOR INSERT TO authenticated
+                WITH CHECK ((bucket_id='equipment-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector','Equipment Manager'])));
+              CREATE POLICY "storage equipment photos v34 select" ON storage.objects
+                AS PERMISSIVE FOR SELECT TO authenticated
+                USING ((bucket_id='equipment-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer'])));
+              CREATE POLICY "storage equipment photos v34 update" ON storage.objects
+                AS PERMISSIVE FOR UPDATE TO authenticated
+                USING ((bucket_id='equipment-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector','Equipment Manager'])))
+                WITH CHECK ((bucket_id='equipment-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector','Equipment Manager'])));
+              CREATE POLICY "storage inspection photos v34 delete" ON storage.objects
+                AS PERMISSIVE FOR DELETE TO authenticated
+                USING ((bucket_id='inspection-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector'])));
+              CREATE POLICY "storage inspection photos v34 insert" ON storage.objects
+                AS PERMISSIVE FOR INSERT TO authenticated
+                WITH CHECK ((bucket_id='inspection-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector'])));
+              CREATE POLICY "storage inspection photos v34 select" ON storage.objects
+                AS PERMISSIVE FOR SELECT TO authenticated
+                USING ((bucket_id='inspection-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector','Equipment Manager','Certificate Approver','Office / Reports','Viewer'])));
+              CREATE POLICY "storage inspection photos v34 update" ON storage.objects
+                AS PERMISSIVE FOR UPDATE TO authenticated
+                USING ((bucket_id='inspection-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector'])))
+                WITH CHECK ((bucket_id='inspection-photos' AND public.has_any_app_role(ARRAY['Admin','Inspector'])));
+            ELSIF v_count <> 8 THEN
+              RAISE EXCEPTION 'Unexpected staging storage.objects policy count: %', v_count;
+            END IF;
+
+            SELECT count(*) INTO v_missing
+            FROM (VALUES
+              ('storage equipment photos v34 delete'),
+              ('storage equipment photos v34 insert'),
+              ('storage equipment photos v34 select'),
+              ('storage equipment photos v34 update'),
+              ('storage inspection photos v34 delete'),
+              ('storage inspection photos v34 insert'),
+              ('storage inspection photos v34 select'),
+              ('storage inspection photos v34 update')
+            ) expected(policyname)
+            LEFT JOIN pg_policies p
+              ON p.schemaname='storage'
+             AND p.tablename='objects'
+             AND p.policyname=expected.policyname
+            WHERE p.policyname IS NULL;
+
+            IF v_missing <> 0 THEN
+              RAISE EXCEPTION 'Staging storage-policy baseline is incomplete: % missing', v_missing;
+            END IF;
+          END $$;
+
+          select 'storage_object_policies=' || count(*)
+          from pg_policies
+          where schemaname='storage' and tablename='objects';
+          SQL
+
       - name: Run reviewed package preflight
         shell: bash
         run: |
@@ -206,6 +281,7 @@ jobs:
           name: phase0-staging-apply-evidence
           path: |
             phase0-staging-identity.txt
+            phase0-storage-baseline.txt
             phase0-package-preflight.txt
             phase0-before-state.txt
             phase0-apply-output.txt
@@ -225,6 +301,7 @@ jobs:
             echo
             echo '- Target safety check rejected the production project reference.'
             echo '- The reviewed package ZIP and every internal file passed SHA-256 verification.'
+            echo '- The eight storage policies omitted by the logical restore were recreated in staging from the reviewed rollback baseline.'
             echo '- Package preflight passed before the repair was applied.'
             echo '- The repair ran using its own transaction and lock timeout.'
             echo '- The reviewed verification report and enforced outcome checks passed.'
