@@ -1,0 +1,168 @@
+name: Supabase logical recovery backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_label:
+        description: Optional label for this backup
+        required: false
+        default: before-phase-0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-logical-recovery-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Create encrypted database backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_PROD_DB_URL: ${{ secrets.SUPABASE_PROD_DB_URL }}
+      SUPABASE_BACKUP_PASSWORD: ${{ secrets.SUPABASE_BACKUP_PASSWORD }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_PROD_DB_URL:-}" ]; then
+            echo "Missing repository secret: SUPABASE_PROD_DB_URL" >&2
+            exit 1
+          fi
+          if [ "${#SUPABASE_BACKUP_PASSWORD}" -lt 16 ]; then
+            echo "SUPABASE_BACKUP_PASSWORD must contain at least 16 characters." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Prepare backup metadata
+        id: metadata
+        shell: bash
+        env:
+          INPUT_LABEL: ${{ inputs.backup_label }}
+        run: |
+          set -euo pipefail
+          stamp="$(date -u +'%Y%m%dT%H%M%SZ')"
+          label="$(printf '%s' "${INPUT_LABEL:-backup}" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//;s/-$//')"
+          [ -n "$label" ] || label="backup"
+          base="spray-wash-supabase-${label}-${stamp}"
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          mkdir -p recovery-backup
+
+      - name: Dump roles
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db dump \
+            --db-url "$SUPABASE_PROD_DB_URL" \
+            --file recovery-backup/roles.sql \
+            --role-only
+
+      - name: Dump schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db dump \
+            --db-url "$SUPABASE_PROD_DB_URL" \
+            --file recovery-backup/schema.sql
+
+      - name: Dump data
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db dump \
+            --db-url "$SUPABASE_PROD_DB_URL" \
+            --file recovery-backup/data.sql \
+            --use-copy \
+            --data-only \
+            --exclude "storage.buckets_vectors" \
+            --exclude "storage.vector_indexes"
+
+      - name: Validate backup files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s recovery-backup/roles.sql
+          test -s recovery-backup/schema.sql
+          test -s recovery-backup/data.sql
+          grep -Eq 'CREATE|ALTER|COMMENT|GRANT|REVOKE' recovery-backup/schema.sql
+          grep -Eq 'COPY|INSERT' recovery-backup/data.sql
+
+      - name: Create manifest and checksums
+        shell: bash
+        env:
+          BACKUP_STAMP: ${{ steps.metadata.outputs.stamp }}
+          BACKUP_LABEL: ${{ inputs.backup_label }}
+        run: |
+          set -euo pipefail
+          cat > recovery-backup/manifest.txt <<MANIFEST
+          Spray & Wash Supabase logical recovery backup
+          Created UTC: ${BACKUP_STAMP}
+          Label: ${BACKUP_LABEL:-before-phase-0}
+          Production project ref: ${PRODUCTION_PROJECT_REF}
+          Repository commit: ${GITHUB_SHA}
+          Contents: roles.sql, schema.sql, data.sql
+          Storage object bytes: not included in this logical database backup
+          Supabase Auth passwords and active sessions: not included
+          MANIFEST
+          (
+            cd recovery-backup
+            sha256sum roles.sql schema.sql data.sql manifest.txt > SHA256SUMS
+          )
+
+      - name: Encrypt backup archive
+        shell: bash
+        env:
+          ARCHIVE_BASE: ${{ steps.metadata.outputs.base }}
+        run: |
+          set -euo pipefail
+          tar -czf - recovery-backup \
+            | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+                -pass env:SUPABASE_BACKUP_PASSWORD \
+                -out "${ARCHIVE_BASE}.tar.gz.enc"
+          test -s "${ARCHIVE_BASE}.tar.gz.enc"
+          sha256sum "${ARCHIVE_BASE}.tar.gz.enc" > "${ARCHIVE_BASE}.tar.gz.enc.sha256"
+
+      - name: Upload encrypted recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.base }}
+          path: |
+            ${{ steps.metadata.outputs.base }}.tar.gz.enc
+            ${{ steps.metadata.outputs.base }}.tar.gz.enc.sha256
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Write run summary
+        shell: bash
+        env:
+          ARCHIVE_BASE: ${{ steps.metadata.outputs.base }}
+        run: |
+          {
+            echo "## Supabase logical backup created"
+            echo
+            echo "- Artifact: \`${ARCHIVE_BASE}\`"
+            echo "- Database roles, schema and data were dumped separately."
+            echo "- The artifact is encrypted with \`SUPABASE_BACKUP_PASSWORD\`."
+            echo "- Download it before the seven-day artifact retention period expires."
+            echo "- The verified in-app Complete Backup remains the separate backup of Storage object bytes."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove plaintext working files
+        if: always()
+        shell: bash
+        run: rm -rf recovery-backup
