@@ -1,17 +1,15 @@
-// Spray & Wash Operations V4.0.83 service worker
-// Network-first, clears old caches, and ensures V4.0.83 release modules load last.
-const CACHE_NAME = "spray-wash-operations-v4-0-83-final";
-const BACKUP_SCRIPT = '<script src="./backup-v4.js?v=4.0.83"></script>';
-const RELEASE_SCRIPT = '<script src="./release-v4.0.83.js?v=4.0.83"></script>';
+// Spray & Wash Operations V4.0.84 service worker
+// Network-first, clears old caches, and forces the V4.0.84 release modules.
+const CACHE_NAME = 'spray-wash-operations-v4-0-84';
+const BACKUP_SCRIPT = '<script src="./backup-v4.js?v=4.0.84"></script>';
+const PHOTO_SCRIPT = '<script src="./photo-storage-v4.0.84.js?v=4.0.84"></script>';
 
-self.addEventListener("install", event => {
+self.addEventListener('install', event => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key))))
-  );
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))));
 });
 
-self.addEventListener("activate", event => {
+self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.map(key => caches.delete(key))))
@@ -19,25 +17,30 @@ self.addEventListener("activate", event => {
   );
 });
 
-self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
 
-  if (event.request.mode === "navigate") {
+  if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request, { cache: "no-store" })
+      fetch(event.request, { cache: 'no-store' })
         .then(async response => {
-          const type = response.headers.get("content-type") || "";
-          if (!response.ok || !type.includes("text/html")) return response;
+          const type = response.headers.get('content-type') || '';
+          if (!response.ok || !type.includes('text/html')) return response;
 
           let html = await response.text();
+          html = html
+            .replaceAll('v=4.0.83', 'v=4.0.84')
+            .replaceAll('Version 4.0.83', 'Version 4.0.84')
+            .replace(/<script[^>]+release-v4\.0\.83\.js[^>]*><\/script>\s*/gi, '');
+
           const scripts = [];
-          if (!html.includes("backup-v4.js")) scripts.push(BACKUP_SCRIPT);
-          if (!html.includes("release-v4.0.83.js")) scripts.push(RELEASE_SCRIPT);
-          if (scripts.length) html = html.replace("</body>", `${scripts.join("\n")}\n</body>`);
+          if (!html.includes('backup-v4.js')) scripts.push(BACKUP_SCRIPT);
+          if (!html.includes('photo-storage-v4.0.84.js')) scripts.push(PHOTO_SCRIPT);
+          if (scripts.length) html = html.replace('</body>', `${scripts.join('\n')}\n</body>`);
 
           const headers = new Headers(response.headers);
-          headers.delete("content-length");
-          headers.set("cache-control", "no-store");
+          headers.delete('content-length');
+          headers.set('cache-control', 'no-store');
           return new Response(html, {
             status: response.status,
             statusText: response.statusText,
@@ -49,7 +52,5 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  event.respondWith(
-    fetch(event.request, { cache: "no-store" }).catch(() => caches.match(event.request))
-  );
+  event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request)));
 });
