@@ -1,0 +1,241 @@
+name: Apply Phase 0 repair to staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY PHASE 0 TO STAGING to confirm
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase0-staging-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply and verify Phase 0 on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      PACKAGE_PATH: supabase/phase0/P0-Repair.zip
+      PACKAGE_SHA256: 910aa6879108dc37e397045408a9faf5e3e3bef3cb8c66e7fbb58c90f96311de
+
+    steps:
+      - name: Validate confirmation and staging target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "APPLY PHASE 0 TO STAGING" ]; then
+            echo "Confirmation did not match APPLY PHASE 0 TO STAGING." >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_STAGING_DB_URL:-}" ]; then
+            echo "Missing repository secret: SUPABASE_STAGING_DB_URL" >&2
+            exit 1
+          fi
+          case "$SUPABASE_STAGING_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "SUPABASE_STAGING_DB_URL is not a PostgreSQL connection string." >&2; exit 1 ;;
+          esac
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo "SAFETY STOP: the target URL contains the production project reference." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client unzip
+
+      - name: Verify exact reviewed repair package
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$PACKAGE_PATH" ]; then
+            echo "Missing $PACKAGE_PATH. Upload the reviewed P0-Repair.zip before running this workflow." >&2
+            exit 1
+          fi
+          actual="$(sha256sum "$PACKAGE_PATH" | awk '{print $1}')"
+          if [ "$actual" != "$PACKAGE_SHA256" ]; then
+            echo "Repair package checksum mismatch." >&2
+            echo "Expected: $PACKAGE_SHA256" >&2
+            echo "Actual:   $actual" >&2
+            exit 1
+          fi
+          rm -rf phase0-work
+          mkdir -p phase0-work
+          unzip -q "$PACKAGE_PATH" -d phase0-work
+          (
+            cd phase0-work/P0
+            sha256sum -c SHA256.txt
+          )
+
+      - name: Confirm staging database identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --command "select current_database() || '|' || current_user || '|' || current_setting('server_version');" \
+            | tee phase0-staging-identity.txt
+          test -s phase0-staging-identity.txt
+
+      - name: Run reviewed package preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --file phase0-work/P0/sql/00-check.sql \
+            | tee phase0-package-preflight.txt
+
+      - name: Capture before-state evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            <<'SQL' | tee phase0-before-state.txt
+          select 'public_policies=' || count(*) from pg_policies where schemaname='public';
+          select 'storage_object_policies=' || count(*) from pg_policies where schemaname='storage' and tablename='objects';
+          select 'legacy_policy_mentions=' || count(*) from pg_policies where schemaname in ('public','storage') and concat_ws(' ',qual,with_check) ~ '(Inspector|Equipment Manager|Certificate Approver|Office / Reports|Viewer)';
+          select 'open_height_tasks=' || count(*) from public.operations_maintenance_tasks where source_module='height_equipment' and status not in ('Completed','Deferred');
+          SQL
+
+      - name: Apply reviewed Phase 0 repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --file phase0-work/P0/sql/01-fix.sql \
+            | tee phase0-apply-output.txt
+
+      - name: Run reviewed verification report
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --file phase0-work/P0/sql/02-verify.sql \
+            | tee phase0-verification-report.txt
+
+      - name: Enforce required Phase 0 outcomes
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            <<'SQL' | tee phase0-enforced-results.txt
+          DO $$
+          DECLARE
+            v_missing integer;
+            v_legacy integer;
+          BEGIN
+            SELECT count(*) INTO v_missing
+            FROM (VALUES
+              ('phase0 app_settings delete admin'),
+              ('phase0 app_settings insert admin'),
+              ('phase0 app_settings select app roles'),
+              ('phase0 app_settings update admin'),
+              ('phase0 user_roles delete admin'),
+              ('phase0 user_roles insert admin'),
+              ('phase0 user_roles select self or admin'),
+              ('phase0 user_roles update admin'),
+              ('phase0 objects select equipment photos'),
+              ('phase0 objects select inspection photos')
+            ) expected(policyname)
+            LEFT JOIN pg_policies p ON p.policyname=expected.policyname
+            WHERE p.policyname IS NULL;
+
+            SELECT count(*) INTO v_legacy
+            FROM pg_policies
+            WHERE schemaname IN ('public','storage')
+              AND concat_ws(' ',qual,with_check) ~ '(Inspector|Equipment Manager|Certificate Approver|Office / Reports|Viewer)';
+
+            IF v_missing <> 0 THEN
+              RAISE EXCEPTION 'Required Phase 0 policies are missing: %', v_missing;
+            END IF;
+            IF v_legacy <> 0 THEN
+              RAISE EXCEPTION 'Legacy role mentions remain in policies: %', v_legacy;
+            END IF;
+            IF NOT has_function_privilege('authenticated','public.operations_sync_automatic_tasks_v4077()','EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated cannot execute operations_sync_automatic_tasks_v4077';
+            END IF;
+            IF has_function_privilege('anon','public.operations_sync_automatic_tasks_v4077()','EXECUTE') THEN
+              RAISE EXCEPTION 'anon can still execute operations_sync_automatic_tasks_v4077';
+            END IF;
+            IF has_function_privilege('authenticated','public.operations_height_failure_task_v4077()','EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated can execute trigger function directly';
+            END IF;
+          END $$;
+
+          select 'public_policies=' || count(*) from pg_policies where schemaname='public';
+          select 'storage_object_policies=' || count(*) from pg_policies where schemaname='storage' and tablename='objects';
+          select 'legacy_policy_mentions=' || count(*) from pg_policies where schemaname in ('public','storage') and concat_ws(' ',qual,with_check) ~ '(Inspector|Equipment Manager|Certificate Approver|Office / Reports|Viewer)';
+          select 'authenticated_can_sync=' || has_function_privilege('authenticated','public.operations_sync_automatic_tasks_v4077()','EXECUTE');
+          select 'anon_can_sync=' || has_function_privilege('anon','public.operations_sync_automatic_tasks_v4077()','EXECUTE');
+          select 'authenticated_can_call_trigger=' || has_function_privilege('authenticated','public.operations_height_failure_task_v4077()','EXECUTE');
+          SQL
+
+      - name: Upload Phase 0 staging evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-staging-apply-evidence
+          path: |
+            phase0-staging-identity.txt
+            phase0-package-preflight.txt
+            phase0-before-state.txt
+            phase0-apply-output.txt
+            phase0-verification-report.txt
+            phase0-enforced-results.txt
+            phase0-work/P0/SHA256.txt
+            phase0-work/P0/RUN.md
+            phase0-work/P0/TESTS.md
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write run summary
+        shell: bash
+        run: |
+          {
+            echo '## Phase 0 staging repair completed'
+            echo
+            echo '- Target safety check rejected the production project reference.'
+            echo '- The reviewed package ZIP and every internal file passed SHA-256 verification.'
+            echo '- Package preflight passed before the repair was applied.'
+            echo '- The repair ran using its own transaction and lock timeout.'
+            echo '- The reviewed verification report and enforced outcome checks passed.'
+            echo
+            echo '### Enforced results'
+            echo '```text'
+            cat phase0-enforced-results.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove extracted package
+        if: always()
+        shell: bash
+        run: rm -rf phase0-work
