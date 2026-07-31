@@ -22,7 +22,7 @@ jobs:
     env:
       SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
       PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
-      PACKAGE_PATH: supabase/phase0/P0-Repair.zip
+      PACKAGE_PATH: supabase/phase0/sql/P0-Repair.zip
       PACKAGE_SHA256: 910aa6879108dc37e397045408a9faf5e3e3bef3cb8c66e7fbb58c90f96311de
 
     steps:
