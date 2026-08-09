@@ -1,0 +1,129 @@
+name: Grant staging Admin role
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Staging account email address
+        required: true
+      confirmation:
+        description: Type GRANT STAGING ADMIN to confirm
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grant-staging-admin
+  cancel-in-progress: false
+
+jobs:
+  grant:
+    name: Link staging account to Admin role
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      PGCONNECT_TIMEOUT: 12
+
+    steps:
+      - name: Validate confirmation and staging target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          TARGET_EMAIL: ${{ inputs.email }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "GRANT STAGING ADMIN" ]; then
+            echo "Confirmation did not match GRANT STAGING ADMIN." >&2
+            exit 1
+          fi
+          if [ -z "${TARGET_EMAIL:-}" ]; then
+            echo "Email is required." >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_STAGING_DB_URL:-}" ]; then
+            echo "Missing repository secret: SUPABASE_STAGING_DB_URL" >&2
+            exit 1
+          fi
+          case "$SUPABASE_STAGING_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "SUPABASE_STAGING_DB_URL is not a PostgreSQL connection string." >&2; exit 1 ;;
+          esac
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo "SAFETY STOP: target URL contains the production project reference." >&2
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Grant Admin role to staging account
+        shell: bash
+        env:
+          TARGET_EMAIL: ${{ inputs.email }}
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            --set=target_email="$TARGET_EMAIL" \
+            <<'SQL' | tee staging-admin-grant.txt
+          DO $$
+          DECLARE
+            v_user_id uuid;
+            v_count integer;
+          BEGIN
+            SELECT count(*), min(id)
+              INTO v_count, v_user_id
+            FROM auth.users
+            WHERE lower(email) = lower(:'target_email');
+
+            IF v_count = 0 THEN
+              RAISE EXCEPTION 'No staging Auth user exists for the supplied email. Create the account in the staging app first.';
+            END IF;
+            IF v_count <> 1 THEN
+              RAISE EXCEPTION 'Expected exactly one staging Auth user for the supplied email, found %', v_count;
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM public.user_roles
+              WHERE user_id = v_user_id AND role = 'Admin'
+            ) THEN
+              INSERT INTO public.user_roles (user_id, role)
+              VALUES (v_user_id, 'Admin');
+            END IF;
+          END $$;
+
+          select 'admin_role_present=' || exists(
+            select 1
+            from public.user_roles ur
+            join auth.users u on u.id=ur.user_id
+            where lower(u.email)=lower(:'target_email') and ur.role='Admin'
+          );
+          SQL
+
+      - name: Upload grant evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-admin-grant-evidence
+          path: staging-admin-grant.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write run summary
+        shell: bash
+        run: |
+          {
+            echo '## Staging Admin role linked'
+            echo
+            echo '- Production project reference safety check passed.'
+            echo '- The supplied account was found in staging Auth.'
+            echo '- The staging account now has the Admin application role.'
+            echo '- No production Auth or application rows were changed.'
+          } >> "$GITHUB_STEP_SUMMARY"
