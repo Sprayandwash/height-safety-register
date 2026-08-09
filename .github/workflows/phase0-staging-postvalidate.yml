@@ -1,0 +1,267 @@
+name: Validate Phase 0 staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type VALIDATE PHASE 0 STAGING to confirm
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase0-staging-postvalidate
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Read-only Phase 0 staging validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      PGCONNECT_TIMEOUT: 12
+
+    steps:
+      - name: Validate confirmation and target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "VALIDATE PHASE 0 STAGING" ]; then
+            echo "Confirmation did not match VALIDATE PHASE 0 STAGING." >&2
+            exit 1
+          fi
+          if [ -z "${SUPABASE_STAGING_DB_URL:-}" ]; then
+            echo "Missing repository secret: SUPABASE_STAGING_DB_URL" >&2
+            exit 1
+          fi
+          case "$SUPABASE_STAGING_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "SUPABASE_STAGING_DB_URL is not a PostgreSQL connection string." >&2; exit 1 ;;
+          esac
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo "SAFETY STOP: target URL contains the production project reference." >&2
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for staging database
+        shell: bash
+        run: |
+          set -euo pipefail
+          connected=0
+          for attempt in $(seq 1 10); do
+            if psql \
+              --variable ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --dbname "$SUPABASE_STAGING_DB_URL" \
+              --command "select current_database() || '|' || current_user || '|' || current_setting('server_version');" \
+              > staging-identity.txt; then
+              connected=1
+              break
+            fi
+            echo "Staging connection attempt $attempt/10 failed; waiting 15 seconds."
+            sleep 15
+          done
+          if [ "$connected" -ne 1 ]; then
+            echo "Could not connect to staging after 10 attempts." >&2
+            exit 1
+          fi
+          cat staging-identity.txt
+
+      - name: Run read-only Phase 0 validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql \
+            --variable ON_ERROR_STOP=1 \
+            --dbname "$SUPABASE_STAGING_DB_URL" \
+            <<'SQL' | tee phase0-postvalidate.txt
+          DO $$
+          DECLARE
+            v_public_tables integer;
+            v_rls_tables integer;
+            v_public_policies integer;
+            v_storage_policies integer;
+            v_legacy integer;
+            v_bad_roles integer;
+            v_bad_preloaded integer;
+            v_missing integer;
+            v_storage_rls boolean;
+            v_role_constraint text;
+            v_status_constraint text;
+          BEGIN
+            SELECT count(*) INTO v_public_tables
+            FROM information_schema.tables
+            WHERE table_schema='public' AND table_type='BASE TABLE';
+            IF v_public_tables <> 27 THEN
+              RAISE EXCEPTION 'Expected 27 public tables, found %', v_public_tables;
+            END IF;
+
+            SELECT count(*) INTO v_rls_tables
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity;
+            IF v_rls_tables <> 27 THEN
+              RAISE EXCEPTION 'Expected RLS on all 27 public tables, found %', v_rls_tables;
+            END IF;
+
+            SELECT count(*) INTO v_public_policies
+            FROM pg_policies WHERE schemaname='public';
+            IF v_public_policies <> 103 THEN
+              RAISE EXCEPTION 'Expected 103 public policies after Phase 0, found %', v_public_policies;
+            END IF;
+
+            SELECT count(*) INTO v_storage_policies
+            FROM pg_policies WHERE schemaname='storage' AND tablename='objects';
+            IF v_storage_policies <> 8 THEN
+              RAISE EXCEPTION 'Expected 8 storage.objects policies, found %', v_storage_policies;
+            END IF;
+
+            SELECT c.relrowsecurity INTO v_storage_rls
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='storage' AND c.relname='objects';
+            IF v_storage_rls IS DISTINCT FROM true THEN
+              RAISE EXCEPTION 'storage.objects RLS is not enabled';
+            END IF;
+
+            SELECT count(*) INTO v_legacy
+            FROM pg_policies
+            WHERE schemaname IN ('public','storage')
+              AND concat_ws(' ',qual,with_check) ~ '(Inspector|Equipment Manager|Certificate Approver|Office / Reports|Viewer)';
+            IF v_legacy <> 0 THEN
+              RAISE EXCEPTION 'Legacy role mentions remain in policies: %', v_legacy;
+            END IF;
+
+            SELECT count(*) INTO v_bad_roles
+            FROM public.user_roles
+            WHERE role <> ALL (ARRAY['Admin','Height equipment manager','Height equipment user','Maintenance manager','Vehicle inspector']);
+            IF v_bad_roles <> 0 THEN
+              RAISE EXCEPTION 'Unsupported user_roles rows remain: %', v_bad_roles;
+            END IF;
+
+            SELECT count(*) INTO v_bad_preloaded
+            FROM public.operations_preloaded_users u
+            CROSS JOIN LATERAL unnest(coalesce(u.roles, ARRAY[]::text[])) r
+            WHERE r <> ALL (ARRAY['Admin','Height equipment manager','Height equipment user','Maintenance manager','Vehicle inspector']);
+            IF v_bad_preloaded <> 0 THEN
+              RAISE EXCEPTION 'Unsupported preloaded-user roles remain: %', v_bad_preloaded;
+            END IF;
+
+            SELECT pg_get_constraintdef(oid) INTO v_role_constraint
+            FROM pg_constraint
+            WHERE conrelid='public.user_roles'::regclass AND contype='c'
+              AND pg_get_constraintdef(oid) ILIKE '%role%'
+            ORDER BY oid LIMIT 1;
+            IF v_role_constraint IS NULL
+               OR v_role_constraint NOT LIKE '%Height equipment manager%'
+               OR v_role_constraint NOT LIKE '%Height equipment user%'
+               OR v_role_constraint NOT LIKE '%Maintenance manager%'
+               OR v_role_constraint NOT LIKE '%Vehicle inspector%'
+               OR v_role_constraint LIKE '%Certificate Approver%'
+               OR v_role_constraint LIKE '%Office / Reports%'
+               OR v_role_constraint LIKE '%Viewer%' THEN
+              RAISE EXCEPTION 'user_roles role constraint is not the Phase 0 five-role constraint: %', v_role_constraint;
+            END IF;
+
+            SELECT pg_get_constraintdef(oid) INTO v_status_constraint
+            FROM pg_constraint
+            WHERE conrelid='public.operations_maintenance_tasks'::regclass AND contype='c'
+              AND pg_get_constraintdef(oid) ILIKE '%status%'
+            ORDER BY oid LIMIT 1;
+            IF v_status_constraint IS NULL OR v_status_constraint NOT LIKE '%Waiting on Someone%' THEN
+              RAISE EXCEPTION 'Task status constraint does not include Waiting on Someone: %', v_status_constraint;
+            END IF;
+
+            SELECT count(*) INTO v_missing
+            FROM (VALUES
+              ('phase0 app_settings delete admin'),
+              ('phase0 app_settings insert admin'),
+              ('phase0 app_settings select app roles'),
+              ('phase0 app_settings update admin'),
+              ('phase0 user_roles delete admin'),
+              ('phase0 user_roles insert admin'),
+              ('phase0 user_roles select self or admin'),
+              ('phase0 user_roles update admin'),
+              ('phase0 objects select equipment photos'),
+              ('phase0 objects select inspection photos')
+            ) expected(policyname)
+            LEFT JOIN pg_policies p ON p.policyname=expected.policyname
+            WHERE p.policyname IS NULL;
+            IF v_missing <> 0 THEN
+              RAISE EXCEPTION 'Required Phase 0 policies missing: %', v_missing;
+            END IF;
+
+            IF NOT has_function_privilege('authenticated','public.operations_sync_automatic_tasks_v4077()','EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated cannot execute operations_sync_automatic_tasks_v4077';
+            END IF;
+            IF has_function_privilege('anon','public.operations_sync_automatic_tasks_v4077()','EXECUTE') THEN
+              RAISE EXCEPTION 'anon can execute operations_sync_automatic_tasks_v4077';
+            END IF;
+            IF has_function_privilege('authenticated','public.operations_height_failure_task_v4077()','EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated can call operations_height_failure_task_v4077 directly';
+            END IF;
+          END $$;
+
+          select 'public_tables=' || count(*)
+          from information_schema.tables
+          where table_schema='public' and table_type='BASE TABLE';
+
+          select 'rls_enabled_public_tables=' || count(*)
+          from pg_class c join pg_namespace n on n.oid=c.relnamespace
+          where n.nspname='public' and c.relkind='r' and c.relrowsecurity;
+
+          select 'public_policies=' || count(*) from pg_policies where schemaname='public';
+          select 'storage_object_policies=' || count(*) from pg_policies where schemaname='storage' and tablename='objects';
+          select 'legacy_policy_mentions=' || count(*) from pg_policies where schemaname in ('public','storage') and concat_ws(' ',qual,with_check) ~ '(Inspector|Equipment Manager|Certificate Approver|Office / Reports|Viewer)';
+          select 'storage_objects_rls=' || c.relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='storage' and c.relname='objects';
+          select 'authenticated_can_sync=' || has_function_privilege('authenticated','public.operations_sync_automatic_tasks_v4077()','EXECUTE');
+          select 'anon_can_sync=' || has_function_privilege('anon','public.operations_sync_automatic_tasks_v4077()','EXECUTE');
+          select 'authenticated_can_call_trigger=' || has_function_privilege('authenticated','public.operations_height_failure_task_v4077()','EXECUTE');
+          select 'user_roles_rows=' || count(*) from public.user_roles;
+          select 'equipment_rows=' || count(*) from public.equipment;
+          select 'operations_inspections_rows=' || count(*) from public.operations_inspections;
+          select 'maintenance_tasks_rows=' || count(*) from public.operations_maintenance_tasks;
+          SQL
+
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-staging-postvalidation
+          path: |
+            staging-identity.txt
+            phase0-postvalidate.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write run summary
+        shell: bash
+        run: |
+          {
+            echo '## Phase 0 staging post-validation passed'
+            echo
+            echo '- Read-only validation only; no database changes were made.'
+            echo '- Production project reference safety check passed.'
+            echo '- 27 public tables and RLS on all 27 were confirmed.'
+            echo '- 103 public policies and 8 storage-object policies were confirmed.'
+            echo '- No legacy role names remain in public/storage policies.'
+            echo '- Five-role and task-status constraints passed.'
+            echo '- Storage RLS and task function permissions passed.'
+            echo
+            echo '### Validation results'
+            echo '```text'
+            cat phase0-postvalidate.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
