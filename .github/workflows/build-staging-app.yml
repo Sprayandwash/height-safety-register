@@ -118,6 +118,44 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+
+          # The production source currently uses UTC-based toISOString() for date-only
+          # calculations. For staging functional testing, replace those exact helpers
+          # with Pacific/Auckland calendar-date helpers. Timestamps such as created_at
+          # remain UTC in Supabase; only date-only logic and user-facing generated times
+          # are localized.
+          app = Path('staging-build/app.js')
+          s = app.read_text(encoding='utf-8')
+          replacements = {
+            'function today(){return new Date().toISOString().slice(0,10);}': '''const APP_TIME_ZONE="Pacific/Auckland";\nfunction dateInTimeZone(value=new Date()){const parts=new Intl.DateTimeFormat("en-NZ",{timeZone:APP_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(value);const get=t=>parts.find(p=>p.type===t)?.value||"";return `${get("year")}-${get("month")}-${get("day")}`;}\nfunction today(){return dateInTimeZone(new Date());}''',
+            'function addMonths(d,m){let x=new Date((d||today())+"T00:00:00");x.setMonth(x.getMonth()+m);return x.toISOString().slice(0,10);}': 'function addMonths(d,m){const [y,mo,da]=(d||today()).split("-").map(Number);const x=new Date(Date.UTC(y,mo-1,da));x.setUTCMonth(x.getUTCMonth()+Number(m||0));return x.toISOString().slice(0,10);}',
+            '  const d=new Date(iso+"T00:00:00");\n  if(Number.isNaN(d.getTime()))return "";\n  d.setFullYear(d.getFullYear()+Number(years));\n  return d.toISOString().slice(0,10);': '  const [y,m,d]=String(iso).split("-").map(Number);\n  const dt=new Date(Date.UTC(y,m-1,d));\n  if(Number.isNaN(dt.getTime()))return "";\n  dt.setUTCFullYear(dt.getUTCFullYear()+Number(years));\n  return dt.toISOString().slice(0,10);',
+            'function certNumber(serial){const clean=String(serial||"ITEM").replace(/[^a-zA-Z0-9]+/g,"").slice(0,12)||"ITEM";const d=new Date();const stamp=d.toISOString().slice(0,10).replaceAll("-","");const suffix=String(Date.now()).slice(-6);return `SW-HSE-${stamp}-${clean}-${suffix}`;}': 'function certNumber(serial){const clean=String(serial||"ITEM").replace(/[^a-zA-Z0-9]+/g,"").slice(0,12)||"ITEM";const stamp=today().replaceAll("-","");const suffix=String(Date.now()).slice(-6);return `SW-HSE-${stamp}-${clean}-${suffix}`;}',
+            '  const generated=new Date().toLocaleString();': '  const generated=new Date().toLocaleString("en-NZ",{timeZone:APP_TIME_ZONE,dateStyle:"short",timeStyle:"medium"});',
+            'function datePlus(days){let d=new Date(today()+"T00:00:00"); d.setDate(d.getDate()+Number(days)); return d.toISOString().slice(0,10);}': 'function datePlus(days){const [y,m,d]=today().split("-").map(Number);const x=new Date(Date.UTC(y,m-1,d));x.setUTCDate(x.getUTCDate()+Number(days||0));return x.toISOString().slice(0,10);}'
+          }
+          for old,new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'app.js NZ-time patch anchor not found: {old[:80]}')
+              s = s.replace(old,new,1)
+          app.write_text(s, encoding='utf-8')
+
+          ops = Path('staging-build/operations-v4.js')
+          s = ops.read_text(encoding='utf-8')
+          replacements = {
+            "  function today(){ return new Date().toISOString().slice(0,10); }": "  const APP_TIME_ZONE = 'Pacific/Auckland';\n  function dateInTimeZone(value = new Date()){ const parts = new Intl.DateTimeFormat('en-NZ',{timeZone:APP_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value); const get=t => parts.find(p=>p.type===t)?.value || ''; return `${get('year')}-${get('month')}-${get('day')}`; }\n  function today(){ return dateInTimeZone(new Date()); }",
+            "  function nzDate(value){ if(!value) return '—'; const d = new Date(String(value).includes('T') ? value : value + 'T00:00:00'); return Number.isNaN(d.getTime()) ? esc(value) : d.toLocaleDateString('en-NZ'); }": "  function nzDate(value){ if(!value) return '—'; const raw=String(value); if(/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)){const [y,m,d]=raw.split('-');return `${d}/${m}/${y}`;} const dt=new Date(raw); return Number.isNaN(dt.getTime()) ? esc(value) : dt.toLocaleDateString('en-NZ',{timeZone:APP_TIME_ZONE}); }",
+            "  function addDays(dateStr, days){ const d = new Date((dateStr || today()) + 'T00:00:00'); d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0,10); }": "  function addDays(dateStr, days){ const [y,m,d]=(dateStr||today()).split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days||0)); return dt.toISOString().slice(0,10); }"
+          }
+          for old,new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'operations-v4.js NZ-time patch anchor not found: {old[:80]}')
+              s = s.replace(old,new,1)
+          ops.write_text(s, encoding='utf-8')
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
           p = Path('staging-build/index.html')
           s = p.read_text(encoding='utf-8')
           marker = '<body>'
@@ -159,6 +197,8 @@ jobs:
           fi
           grep -F "$STAGING_URL" staging-build/config.js >/dev/null
           grep -F 'STAGING — TEST DATA ONLY — NOT PRODUCTION' staging-build/index.html >/dev/null
+          grep -F 'Pacific/Auckland' staging-build/app.js >/dev/null
+          grep -F 'Pacific/Auckland' staging-build/operations-v4.js >/dev/null
 
           cat > staging-build/STAGING-README.txt <<EOF
           Spray & Wash Operations — STAGING TEST BUILD
@@ -169,10 +209,12 @@ jobs:
           Supabase project URL: $STAGING_URL
           Source commit: $GITHUB_SHA
           Built UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Calendar timezone: Pacific/Auckland (NZST/NZDT automatically)
 
           This build is for functional testing only.
           It does not point to the production Supabase project.
           All data entered through this build is staging/test data.
+          Database timestamps remain UTC; date-only logic and displayed/generated local times use Pacific/Auckland.
           EOF
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
@@ -197,6 +239,8 @@ jobs:
             echo '- The staging project was discovered by name, not hard-coded.'
             echo '- The staging publishable key was retrieved at build time and masked in logs.'
             echo '- The app has a permanent STAGING — TEST DATA ONLY banner.'
+            echo '- Staging date-only logic uses `Pacific/Auckland`, including NZST/NZDT daylight-saving changes.'
+            echo '- Database timestamps remain UTC.'
             echo '- Download artifact: `spray-wash-staging-app`.'
           } >> "$GITHUB_STEP_SUMMARY"
 
