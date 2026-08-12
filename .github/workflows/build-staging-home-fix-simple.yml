@@ -121,7 +121,7 @@ jobs:
             echo
             echo '- Production was not changed.'
             echo '- Repaired the malformed Vehicle Checks task-description JavaScript that prevented operations-v4.js from parsing.'
-            echo '- Inspector name now resolves from signed-in profile/user data first, then that same user\'s prior non-generic inspection name before any generic fallback.'
+            echo "- Inspector name now resolves from signed-in profile/user data first, then that same user's prior non-generic inspection name before any generic fallback."
             echo '- node --check is mandatory for both app.js and operations-v4.js before upload.'
             echo '- Home handoff remains present for restored sessions and explicit sign-in.'
             echo '- A fresh staging-only service-worker cache key is used.'
