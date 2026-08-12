@@ -1,0 +1,225 @@
+name: Apply staging top-level router fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY STAGING ROUTER FIX to confirm
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: staging-top-router-fix
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    name: Patch latest repaired staging artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "APPLY STAGING ROUTER FIX" || { echo "Confirmation did not match." >&2; exit 1; }
+
+      - name: Download latest Vehicle Checks staging artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/$REPO/actions/artifacts?name=spray-wash-staging-app-vehicle-fixes&per_page=100" --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$artifact_id" || { echo "No current spray-wash-staging-app-vehicle-fixes artifact was found. Run the Vehicle Checks staging build first." >&2; exit 1; }
+          echo "Using artifact ID $artifact_id"
+          gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > repaired-staging.zip
+          rm -rf staging-build
+          mkdir staging-build
+          unzip -q repaired-staging.zip -d staging-build
+          test -f staging-build/index.html || { echo "Artifact did not contain index.html at its root." >&2; find staging-build -maxdepth 2 -type f | head -40; exit 1; }
+          test -f staging-build/operations-v4.js || { echo "Artifact did not contain operations-v4.js." >&2; exit 1; }
+
+      - name: Install deterministic staging top router
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('staging-build/index.html')
+          s=p.read_text(encoding='utf-8')
+          if 'id="stagingTopRouter"' in s:
+              raise SystemExit('stagingTopRouter already exists in the selected artifact')
+          marker='</body>'
+          if marker not in s:
+              raise SystemExit('Could not locate </body> in staging index.html')
+
+          router=r'''<script id="stagingTopRouter">
+          (()=>{
+            'use strict';
+            if(window.SPRAY_WASH_ENV!=='staging') return;
+
+            let topRoute='home';
+            let applying=false;
+            const wrapped=new Set();
+
+            function setRoute(name){ topRoute=name||'home'; }
+
+            function forceHomeDom(){
+              if(topRoute!=='home'||applying) return;
+              const home=document.getElementById('moduleHome');
+              if(!home) return;
+              applying=true;
+              try{
+                const main=document.getElementById('appMain')||document.querySelector('main');
+                if(main){
+                  main.querySelectorAll('.tabpane').forEach(p=>p.classList.add('hidden'));
+                }else{
+                  document.querySelectorAll('.tabpane').forEach(p=>p.classList.add('hidden'));
+                }
+                home.classList.remove('hidden');
+                const tabs=document.querySelector('.tabs');
+                if(tabs) tabs.style.display='none';
+                const heightHeader=document.getElementById('heightModuleHeader');
+                if(heightHeader) heightHeader.style.display='none';
+                document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+                const state=window.SWOperationsV4?.state;
+                if(state) state.currentModule='home';
+              }finally{
+                applying=false;
+              }
+            }
+
+            function homeNow(){
+              setRoute('home');
+              try{
+                const fn=window.showModuleHome;
+                if(typeof fn==='function'&&!fn.__stagingRouterCalling) fn();
+              }catch(err){ console.warn('Staging Home route helper:',err); }
+              forceHomeDom();
+              queueMicrotask(forceHomeDom);
+              setTimeout(forceHomeDom,0);
+              setTimeout(forceHomeDom,80);
+            }
+
+            function wrapRouteFunction(name,route){
+              const original=window[name];
+              if(typeof original!=='function'||original.__stagingTopRouterWrapped||wrapped.has(name)) return;
+              function routed(...args){
+                setRoute(route);
+                return original.apply(this,args);
+              }
+              routed.__stagingTopRouterWrapped=true;
+              routed.__stagingRouterCalling=false;
+              window[name]=routed;
+              wrapped.add(name);
+            }
+
+            function installWrappers(){
+              wrapRouteFunction('showModuleHome','home');
+              wrapRouteFunction('openHeightModule','height');
+              wrapRouteFunction('openVehicleChecksModule','vehicle-checks');
+              wrapRouteFunction('openOpsManagementModule','maintenance');
+              wrapRouteFunction('openAdminModule','admin');
+            }
+
+            function bindGlobalHomeClicks(){
+              if(document.documentElement.dataset.stagingHomeCapture==='1') return;
+              document.documentElement.dataset.stagingHomeCapture='1';
+              document.addEventListener('click',e=>{
+                const homeTarget=e.target.closest('header .logo,#heightHomeButton,.ops-home-btn');
+                if(homeTarget){
+                  setRoute('home');
+                  setTimeout(forceHomeDom,0);
+                  setTimeout(forceHomeDom,80);
+                }
+              },true);
+              document.addEventListener('keydown',e=>{
+                if(e.key!=='Enter'&&e.key!==' ') return;
+                const homeTarget=e.target.closest?.('header .logo,#heightHomeButton,.ops-home-btn');
+                if(homeTarget){
+                  setRoute('home');
+                  setTimeout(forceHomeDom,0);
+                }
+              },true);
+            }
+
+            function installObserver(){
+              const root=document.getElementById('appMain')||document.body;
+              if(root.dataset.stagingRouteObserved==='1') return;
+              root.dataset.stagingRouteObserved='1';
+              const observer=new MutationObserver(()=>{
+                if(topRoute!=='home'||applying) return;
+                const home=document.getElementById('moduleHome');
+                if(!home) return;
+                const visibleOther=[...root.querySelectorAll('.tabpane')].some(p=>p!==home&&!p.classList.contains('hidden'));
+                if(home.classList.contains('hidden')||visibleOther) forceHomeDom();
+              });
+              observer.observe(root,{subtree:true,attributes:true,attributeFilter:['class','style'],childList:true});
+            }
+
+            function initialise(){
+              installWrappers();
+              bindGlobalHomeClicks();
+              installObserver();
+              homeNow();
+
+              let attempts=0;
+              const timer=setInterval(()=>{
+                installWrappers();
+                if(topRoute==='home') forceHomeDom();
+                attempts++;
+                if(attempts>=40) clearInterval(timer);
+              },125);
+            }
+
+            if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initialise,{once:true});
+            else initialise();
+          })();
+          </script>'''
+
+          s=s.replace(marker,router+'\n'+marker,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          if [ -f staging-build/service-worker.js ]; then
+            sed -i 's/spray-wash-operations-staging-review-fix/spray-wash-operations-staging-router-fix-v1/g' staging-build/service-worker.js
+            sed -i 's/spray-wash-operations-staging-vehicle-fix/spray-wash-operations-staging-router-fix-v1/g' staging-build/service-worker.js
+          fi
+
+          grep -F 'id="stagingTopRouter"' staging-build/index.html >/dev/null
+          grep -F "let topRoute='home'" staging-build/index.html >/dev/null
+          grep -F "wrapRouteFunction('openHeightModule','height')" staging-build/index.html >/dev/null
+          grep -F "MutationObserver" staging-build/index.html >/dev/null
+          grep -F 'Inspection saved and verified.' staging-build/operations-v4.js >/dev/null
+          find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
+
+      - name: Upload staging artifact with deterministic router
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-app-router-fixed
+          path: staging-build/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write summary
+        shell: bash
+        run: |
+          {
+            echo '## Staging top-level router repair created'
+            echo
+            echo '- Production was not modified.'
+            echo '- The latest Vehicle Checks repaired staging artifact was used as the base.'
+            echo '- Home now owns top-level routing until a module is deliberately selected.'
+            echo '- Legacy Height renders are prevented from silently replacing Home.'
+            echo '- Height, Vehicle Checks, Maintenance and Admin explicitly change the route when opened.'
+            echo '- Logo and Home-button clicks return to the main module dashboard.'
+            echo '- Artifact: `spray-wash-staging-app-router-fixed`.'
+          } >> "$GITHUB_STEP_SUMMARY"
