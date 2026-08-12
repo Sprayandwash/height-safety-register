@@ -56,19 +56,20 @@ jobs:
           set -euo pipefail
           python3 tools/fix-staging-inspector-name.py staging-build/operations-v4.js
           node --check staging-build/operations-v4.js
-          grep -F "const prior=(state.inspections||[])" staging-build/operations-v4.js
-          grep -F "submitted_by_email" staging-build/operations-v4.js
+          grep -F "const profile=(state.actualUsers||[]).find(u=>String(userIdOfProfile(u)||'')===currentId) || state.profile;" staging-build/operations-v4.js
+          grep -F "const name=displayNameOfProfile(profile);" staging-build/operations-v4.js
+          grep -F "return emailName||'Inspector';" staging-build/operations-v4.js
           echo 'INSPECTOR_NAME_REPAIR=passed'
 
       - name: Apply source Home handoff
         run: |
           set -euo pipefail
           python3 tools/patch-staging-home.py staging-build/app.js
-          printf '\nwindow.SW_STAGING_HOME_BUILD = "home-name-fix-v4-20260813";\n' >> staging-build/app.js
+          printf '\nwindow.SW_STAGING_HOME_BUILD = "home-name-fix-v5-20260813";\n' >> staging-build/app.js
           node --check staging-build/app.js
           grep -F 'function handoffToOperationsHome()' staging-build/app.js
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
-          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v4-20260813";' staging-build/app.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v5-20260813";' staging-build/app.js
           grep -F 'function showModuleHome(){' staging-build/operations-v4.js
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
 
@@ -82,7 +83,7 @@ jobs:
 
           p = Path('staging-build/service-worker.js')
           s = p.read_text(encoding='utf-8')
-          cache_key = 'spray-wash-operations-staging-home-name-fix-v4-20260813'
+          cache_key = 'spray-wash-operations-staging-home-name-fix-v5-20260813'
           s, count = re.subn(r'spray-wash-operations-[A-Za-z0-9._-]+', cache_key, s)
           if count == 0:
               s = "const SW_STAGING_FORCED_CACHE = '" + cache_key + "';\n" + s
@@ -90,7 +91,7 @@ jobs:
           s += cleanup
           p.write_text(s, encoding='utf-8')
           PY
-            grep -F 'spray-wash-operations-staging-home-name-fix-v4-20260813' staging-build/service-worker.js
+            grep -F 'spray-wash-operations-staging-home-name-fix-v5-20260813' staging-build/service-worker.js
           fi
 
       - name: Verify repaired staging bundle
@@ -98,12 +99,12 @@ jobs:
           set -euo pipefail
           node --check staging-build/app.js
           node --check staging-build/operations-v4.js
-          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v4-20260813";' staging-build/app.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v5-20260813";' staging-build/app.js
           grep -F 'function handoffToOperationsHome()' staging-build/app.js
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
           grep -F "description:`\${source.item.question_text}\\nAnswer: \${source.answer}\${source.notes?'\\nNotes: '+source.notes:''}`" staging-build/operations-v4.js
-          grep -F "const prior=(state.inspections||[])" staging-build/operations-v4.js
+          grep -F "const name=displayNameOfProfile(profile);" staging-build/operations-v4.js
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
       - name: Upload repaired staging app
@@ -117,11 +118,12 @@ jobs:
       - name: Summary
         run: |
           {
-            echo '## Staging Home, Operations syntax and inspector-name repair build'
+            echo '## Staging Home, Operations syntax and canonical inspector-name repair build'
             echo
             echo '- Production was not changed.'
             echo '- Repaired the malformed Vehicle Checks task-description JavaScript that prevented operations-v4.js from parsing.'
-            echo "- Inspector name now resolves from signed-in profile/user data first, then that same user's prior non-generic inspection name before any generic fallback."
+            echo '- Vehicle Checks now uses the same profiles/display-name helpers as Admin Current Users for the signed-in inspector name.'
+            echo '- Inspection-history name guessing has been removed.'
             echo '- node --check is mandatory for both app.js and operations-v4.js before upload.'
             echo '- Home handoff remains present for restored sessions and explicit sign-in.'
             echo '- A fresh staging-only service-worker cache key is used.'
