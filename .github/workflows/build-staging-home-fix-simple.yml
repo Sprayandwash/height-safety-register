@@ -1,0 +1,60 @@
+name: Build staging Home fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type BUILD HOME FIX
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$CONFIRMATION" = "BUILD HOME FIX"
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download latest working staging artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          artifact_id=$(gh api "repos/$REPO/actions/artifacts?name=spray-wash-staging-app-vehicle-fixes&per_page=100" --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].id // empty')
+          test -n "$artifact_id"
+          gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > staging.zip
+          mkdir staging-build
+          unzip -q staging.zip -d staging-build
+          test -f staging-build/app.js
+          test -f staging-build/operations-v4.js
+          test -f staging-build/config.js
+          grep -F 'window.SPRAY_WASH_ENV = "staging"' staging-build/config.js
+
+      - name: Apply source Home handoff
+        run: |
+          python3 tools/patch-staging-home.py staging-build/app.js
+          grep -F 'function showModuleHome(){' staging-build/operations-v4.js
+          grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
+
+      - name: Change staging cache key
+        run: |
+          if [ -f staging-build/service-worker.js ]; then
+            sed -i 's/spray-wash-operations-staging-review-fix/spray-wash-operations-staging-home-simple-v1/g' staging-build/service-worker.js
+          fi
+
+      - name: Upload repaired staging app
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-app-home-fixed
+          path: staging-build/
+          retention-days: 30
+          if-no-files-found: error
