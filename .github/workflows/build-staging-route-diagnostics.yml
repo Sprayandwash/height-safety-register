@@ -37,11 +37,28 @@ jobs:
           rm -rf staging-build
           mkdir staging-build
           unzip -q staging.zip -d staging-build
+          test -f staging-build/index.html
           test -f staging-build/app.js
           test -f staging-build/operations-v4.js
           test -f staging-build/config.js
           grep -F 'window.SPRAY_WASH_ENV = "staging"' staging-build/config.js
           grep -F 'window.SW_STAGING_HOME_BUILD = "home-cache-v2-20260812";' staging-build/app.js
+
+      - name: Validate Operations script before diagnostics
+        run: |
+          set -euo pipefail
+          echo '--- operations-v4.js references in index.html ---'
+          grep -n -C 2 'operations-v4.js' staging-build/index.html || true
+          echo '--- script tags near end of index.html ---'
+          grep -n '<script' staging-build/index.html | tail -20 || true
+          if ! grep -F 'operations-v4.js' staging-build/index.html >/dev/null; then
+            echo 'OPERATIONS_LOAD_PROBLEM=missing_script_reference'
+            exit 21
+          fi
+          echo '--- JavaScript syntax check before diagnostic instrumentation ---'
+          node --check staging-build/app.js
+          node --check staging-build/operations-v4.js
+          echo 'OPERATIONS_LOAD_PREFLIGHT=passed'
 
       - name: Install route diagnostics
         run: |
@@ -52,6 +69,10 @@ jobs:
           grep -F 'operations-v4.js openHeightModule' staging-build/operations-v4.js
           grep -F 'STAGING ROUTE DIAGNOSTICS final snapshots.' staging-build/operations-v4.js
           grep -F "window.swRouteTrace?.('post-load snapshot '+ms+'ms'" staging-build/operations-v4.js
+          echo '--- JavaScript syntax check after diagnostic instrumentation ---'
+          node --check staging-build/app.js
+          node --check staging-build/operations-v4.js
+          echo 'OPERATIONS_DIAGNOSTIC_SYNTAX=passed'
 
       - name: Force diagnostic cache key
         run: |
@@ -62,10 +83,10 @@ jobs:
           import re
           p=Path('staging-build/service-worker.js')
           s=p.read_text(encoding='utf-8')
-          s=re.sub(r'spray-wash-operations-staging-home-cache-v2-20260812','spray-wash-operations-staging-route-diagnostics-v1',s)
+          s=re.sub(r'spray-wash-operations-staging-home-cache-v2-20260812','spray-wash-operations-staging-route-diagnostics-v2',s)
           p.write_text(s,encoding='utf-8')
           PY
-            grep -F 'spray-wash-operations-staging-route-diagnostics-v1' staging-build/service-worker.js
+            grep -F 'spray-wash-operations-staging-route-diagnostics-v2' staging-build/service-worker.js
           fi
 
       - name: Upload diagnostic staging app
@@ -82,7 +103,9 @@ jobs:
             echo '## Staging route diagnostics build'
             echo
             echo '- Diagnostic only; production not changed.'
-            echo '- No routing behavior is intentionally changed.'
+            echo '- Verifies index.html actually references operations-v4.js.'
+            echo '- Verifies app.js and operations-v4.js parse successfully before instrumentation.'
+            echo '- Verifies both scripts still parse successfully after instrumentation.'
             echo '- On-screen trace panel records app.js and operations-v4.js lifecycle/routing calls.'
             echo '- Artifact: `spray-wash-staging-route-diagnostics`.'
           } >> "$GITHUB_STEP_SUMMARY"
