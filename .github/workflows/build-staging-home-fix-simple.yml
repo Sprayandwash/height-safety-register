@@ -37,19 +37,29 @@ jobs:
           rm -rf staging-build
           mkdir staging-build
           unzip -q staging.zip -d staging-build
+          test -f staging-build/index.html
           test -f staging-build/app.js
           test -f staging-build/operations-v4.js
           test -f staging-build/config.js
           grep -F 'window.SPRAY_WASH_ENV = "staging"' staging-build/config.js
+          grep -F 'operations-v4.js' staging-build/index.html
+
+      - name: Repair Operations JavaScript syntax
+        run: |
+          set -euo pipefail
+          python3 tools/fix-staging-operations-syntax.py staging-build/operations-v4.js
+          node --check staging-build/operations-v4.js
+          echo 'OPERATIONS_SYNTAX_REPAIR=passed'
 
       - name: Apply source Home handoff
         run: |
           set -euo pipefail
           python3 tools/patch-staging-home.py staging-build/app.js
-          printf '\nwindow.SW_STAGING_HOME_BUILD = "home-cache-v2-20260812";\n' >> staging-build/app.js
+          printf '\nwindow.SW_STAGING_HOME_BUILD = "home-syntax-fix-v3-20260813";\n' >> staging-build/app.js
+          node --check staging-build/app.js
           grep -F 'function handoffToOperationsHome()' staging-build/app.js
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
-          grep -F 'window.SW_STAGING_HOME_BUILD = "home-cache-v2-20260812";' staging-build/app.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-syntax-fix-v3-20260813";' staging-build/app.js
           grep -F 'function showModuleHome(){' staging-build/operations-v4.js
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
 
@@ -63,29 +73,27 @@ jobs:
 
           p = Path('staging-build/service-worker.js')
           s = p.read_text(encoding='utf-8')
-          cache_key = 'spray-wash-operations-staging-home-cache-v2-20260812'
-
+          cache_key = 'spray-wash-operations-staging-home-syntax-fix-v3-20260813'
           s, count = re.subn(r'spray-wash-operations-[A-Za-z0-9._-]+', cache_key, s)
           if count == 0:
               s = "const SW_STAGING_FORCED_CACHE = '" + cache_key + "';\n" + s
-
-          cleanup = f'''\n\n// STAGING HOME FIX: force this build to take control and remove older app caches.\nself.addEventListener('install', event => {{\n  self.skipWaiting();\n}});\nself.addEventListener('activate', event => {{\n  event.waitUntil(\n    caches.keys()\n      .then(keys => Promise.all(keys.filter(key => key !== '{cache_key}').map(key => caches.delete(key))))\n      .then(() => self.clients.claim())\n  );\n}});\n'''
+          cleanup = f'''\n\n// STAGING HOME/SYNTAX FIX: take control and remove older app caches.\nself.addEventListener('install', event => {{ self.skipWaiting(); }});\nself.addEventListener('activate', event => {{\n  event.waitUntil(\n    caches.keys()\n      .then(keys => Promise.all(keys.filter(key => key !== '{cache_key}').map(key => caches.delete(key))))\n      .then(() => self.clients.claim())\n  );\n}});\n'''
           s += cleanup
           p.write_text(s, encoding='utf-8')
           PY
-            grep -F 'spray-wash-operations-staging-home-cache-v2-20260812' staging-build/service-worker.js
-            grep -F 'STAGING HOME FIX: force this build to take control' staging-build/service-worker.js
-            grep -F 'self.skipWaiting();' staging-build/service-worker.js
-            grep -F 'self.clients.claim()' staging-build/service-worker.js
+            grep -F 'spray-wash-operations-staging-home-syntax-fix-v3-20260813' staging-build/service-worker.js
           fi
 
       - name: Verify repaired staging bundle
         run: |
           set -euo pipefail
-          grep -F 'window.SW_STAGING_HOME_BUILD = "home-cache-v2-20260812";' staging-build/app.js
+          node --check staging-build/app.js
+          node --check staging-build/operations-v4.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-syntax-fix-v3-20260813";' staging-build/app.js
           grep -F 'function handoffToOperationsHome()' staging-build/app.js
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
+          grep -F "description:`\${source.item.question_text}\\nAnswer: \${source.answer}\${source.notes?'\\nNotes: '+source.notes:''}`" staging-build/operations-v4.js
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
       - name: Upload repaired staging app
@@ -99,12 +107,12 @@ jobs:
       - name: Summary
         run: |
           {
-            echo '## Staging Home/cache repair build'
+            echo '## Staging Home and Operations syntax repair build'
             echo
             echo '- Production was not changed.'
-            echo '- Home handoff is present in app.js for restored sessions and explicit sign-in.'
-            echo '- app.js marker: `home-cache-v2-20260812`.'
-            echo '- Service worker uses a new staging-only cache key.'
-            echo '- Service worker calls skipWaiting(), claims clients, and removes older caches on activation.'
+            echo '- Repaired the malformed Vehicle Checks task-description JavaScript that prevented operations-v4.js from parsing.'
+            echo '- node --check is mandatory for both app.js and operations-v4.js before upload.'
+            echo '- Home handoff remains present for restored sessions and explicit sign-in.'
+            echo '- A fresh staging-only service-worker cache key is used.'
             echo '- Artifact: `spray-wash-staging-app-home-fixed`.'
           } >> "$GITHUB_STEP_SUMMARY"
