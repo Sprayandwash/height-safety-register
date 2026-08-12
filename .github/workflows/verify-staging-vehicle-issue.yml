@@ -1,0 +1,119 @@
+name: Verify staging Vehicle Checks DB write
+
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-staging-vehicle-issue.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Resolve staging project and secret key
+        id: staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+          supabase projects api-keys --project-ref "$ref" --output json > keys.json
+          key="$(jq -r '[.[]? | select(((.name // .type // "") == "service_role") or ((.api_key // .key // "") | startswith("sb_secret_"))) | (.api_key // .key // empty)] | first // empty' keys.json)"
+          test -n "$key" || { echo 'Could not resolve a staging service/secret key for read-only verification.' >&2; exit 1; }
+          echo "::add-mask::$key"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          printf '%s' "$key" > service-key.txt
+
+      - name: Verify latest vehicle issue inspection and linked task
+        shell: bash
+        env:
+          REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          KEY="$(cat service-key.txt)"
+          BASE="https://${REF}.supabase.co/rest/v1"
+          H1="apikey: ${KEY}"
+          H2="Authorization: Bearer ${KEY}"
+
+          curl -fsS -G "$BASE/operations_inspections" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=id,inspection_date,overall_result,inspector_name,vehicle_id,notes,created_at" \
+            --data-urlencode "notes=eq.STAGING TEST - VEHICLE ISSUE" \
+            --data-urlencode "order=created_at.desc" \
+            --data-urlencode "limit=1" > inspection.json
+
+          test "$(jq 'length' inspection.json)" -eq 1 || { echo 'Expected exactly one latest matching inspection row.' >&2; cat inspection.json; exit 1; }
+          inspection_id="$(jq -r '.[0].id' inspection.json)"
+
+          curl -fsS -G "$BASE/operations_inspection_answers" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=id,inspection_id,checklist_item_id,question_text,answer_value,is_problem,severity,notes,created_at" \
+            --data-urlencode "inspection_id=eq.${inspection_id}" \
+            --data-urlencode "order=created_at.asc" > answers.json
+
+          curl -fsS -G "$BASE/operations_maintenance_tasks" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=id,status,priority,title,description,source_module,source_record_type,source_inspection_id,source_answer_id,vehicle_id,target_label,due_date,created_at" \
+            --data-urlencode "source_inspection_id=eq.${inspection_id}" \
+            --data-urlencode "order=created_at.asc" > tasks.json
+
+          answer_count="$(jq 'length' answers.json)"
+          problem_count="$(jq '[.[] | select(.is_problem == true)] | length' answers.json)"
+          task_count="$(jq 'length' tasks.json)"
+
+          test "$answer_count" -gt 0 || { echo 'No answer rows found for inspection.' >&2; exit 1; }
+          test "$problem_count" -eq 1 || { echo "Expected 1 problem answer, found $problem_count." >&2; exit 1; }
+          test "$task_count" -eq 1 || { echo "Expected 1 linked task, found $task_count." >&2; exit 1; }
+          test "$(jq -r '.[0].source_module' tasks.json)" = 'vehicle_checks'
+          test "$(jq -r '.[0].source_record_type' tasks.json)" = 'inspection_answer'
+
+          {
+            echo '## Vehicle Checks staging DB verification'
+            echo
+            echo '**Result: PASS**'
+            echo
+            echo "- Inspection ID: \`$inspection_id\`"
+            echo "- Inspection date: $(jq -r '.[0].inspection_date' inspection.json)"
+            echo "- Overall result: $(jq -r '.[0].overall_result' inspection.json)"
+            echo "- Inspector name stored: $(jq -r '.[0].inspector_name' inspection.json)"
+            echo "- Answer rows: $answer_count"
+            echo "- Problem answer rows: $problem_count"
+            echo "- Linked maintenance tasks: $task_count"
+            echo "- Task title: $(jq -r '.[0].title' tasks.json)"
+            echo "- Task status: $(jq -r '.[0].status' tasks.json)"
+            echo "- Task source: $(jq -r '.[0].source_module' tasks.json) / $(jq -r '.[0].source_record_type' tasks.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          jq '{inspection:.[0]}' inspection.json > verification-result.json
+          jq '{answers:., answer_count:length, problem_count:([.[]|select(.is_problem==true)]|length)}' answers.json >> verification-result.json
+          jq '{tasks:., task_count:length}' tasks.json >> verification-result.json
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-vehicle-issue-db-verification
+          path: |
+            inspection.json
+            answers.json
+            tasks.json
+          retention-days: 7
+
+      - name: Cleanup key material
+        if: always()
+        run: rm -f projects.json keys.json service-key.txt
