@@ -56,9 +56,9 @@ jobs:
           set -euo pipefail
           python3 tools/fix-staging-inspector-name.py staging-build/operations-v4.js
           node --check staging-build/operations-v4.js
-          grep -F "const profile=(state.actualUsers||[]).find(u=>String(userIdOfProfile(u)||'')===currentId) || state.profile;" staging-build/operations-v4.js
-          grep -F "const name=displayNameOfProfile(profile);" staging-build/operations-v4.js
-          grep -F "return emailName||'Inspector';" staging-build/operations-v4.js
+          grep -F "const currentProfile=(state.actualUsers||[]).find(u=>String(userIdOfProfile(u)||'')===currentId) || state.profile || null;" staging-build/operations-v4.js
+          grep -F "const profileName=currentProfile ? displayNameOfProfile(currentProfile) : '';" staging-build/operations-v4.js
+          grep -F "return titleCaseName(emailName)||'Inspector';" staging-build/operations-v4.js
           echo 'INSPECTOR_NAME_REPAIR=passed'
 
       - name: Apply source Home handoff
@@ -104,7 +104,7 @@ jobs:
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
           grep -F "description:`\${source.item.question_text}\\nAnswer: \${source.answer}\${source.notes?'\\nNotes: '+source.notes:''}`" staging-build/operations-v4.js
-          grep -F "const name=displayNameOfProfile(profile);" staging-build/operations-v4.js
+          grep -F "const profileName=currentProfile ? displayNameOfProfile(currentProfile) : '';" staging-build/operations-v4.js
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
       - name: Upload repaired staging app
