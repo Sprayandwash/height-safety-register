@@ -114,7 +114,8 @@ jobs:
             "    return `<form id=\"opsInspectionForm\" class=\"ops-form\">": "    return `<form id=\"opsInspectionForm\" class=\"ops-form\" autocomplete=\"off\">",
             "      if(!source || !source.problem || !source.item.creates_task_on_problem) return;": "      if(!source || !source.problem) return;",
             "    refreshTopUserSummary();\n    if(state.currentModule === 'home') renderModuleHome();": "    refreshTopUserSummary();\n    setupLogoHomeClick();\n    if(state.currentModule === 'home') renderModuleHome();",
-            "      await refreshAuthAndData();\n    });": "      await refreshAuthAndData();\n      if(state.user) setTimeout(showModuleHome, 120);\n    });"
+            "      await refreshAuthAndData();\n    });": "      await refreshAuthAndData();\n      if(state.user) showModuleHome();\n    });",
+            "    await refreshAuthAndData();\n  }\n\n  async function refreshAuthAndData(){": "    await refreshAuthAndData();\n    if(state.user) showModuleHome();\n  }\n\n  async function refreshAuthAndData(){"
           }
           for old,new in replacements.items():
               if old not in s: raise SystemExit('operations-v4.js patch anchor missing: '+old[:100])
@@ -156,7 +157,7 @@ jobs:
           grep -F 'STAGING — TEST DATA ONLY — NOT PRODUCTION' staging-build/index.html >/dev/null
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js >/dev/null
           grep -F 'setupLogoHomeClick();' staging-build/operations-v4.js >/dev/null
-          grep -F 'setTimeout(showModuleHome, 120)' staging-build/operations-v4.js >/dev/null
+          test "$(grep -F "if(state.user) showModuleHome();" staging-build/operations-v4.js | wc -l)" -ge 2
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
       - name: Upload repaired staging app
@@ -174,7 +175,7 @@ jobs:
             echo '## Staging review repair build created'
             echo
             echo '- Production configuration was not changed.'
-            echo '- Signed-in users are returned to the main Home/module dashboard.'
+            echo '- Auth-state sign-in and restored existing sessions both route to the main Home/module dashboard.'
             echo '- The header logo is rebound after renders and returns to Home.'
             echo '- Vehicle issue answers generate follow-up tasks.'
             echo '- Inspection and answer rows are verified before success is shown.'
