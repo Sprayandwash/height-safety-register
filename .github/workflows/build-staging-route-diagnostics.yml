@@ -50,7 +50,8 @@ jobs:
           grep -F 'STAGING ROUTE DIAGNOSTICS' staging-build/app.js
           grep -F 'operations-v4.js showModuleHome' staging-build/operations-v4.js
           grep -F 'operations-v4.js openHeightModule' staging-build/operations-v4.js
-          grep -F 'post-load snapshot 1500ms' staging-build/operations-v4.js
+          grep -F 'STAGING ROUTE DIAGNOSTICS final snapshots.' staging-build/operations-v4.js
+          grep -F "window.swRouteTrace?.('post-load snapshot '+ms+'ms'" staging-build/operations-v4.js
 
       - name: Force diagnostic cache key
         run: |
