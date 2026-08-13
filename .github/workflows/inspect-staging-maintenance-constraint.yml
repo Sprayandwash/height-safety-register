@@ -1,0 +1,83 @@
+name: Inspect staging maintenance constraint
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-staging-maintenance-constraint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Resolve staging project
+        id: staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Read maintenance constraint definition
+        shell: bash
+        env:
+          REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          cat > query.json <<'JSON'
+          {
+            "query": "select c.conname, pg_get_constraintdef(c.oid) as definition from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_namespace n on n.oid = t.relnamespace where n.nspname = 'public' and t.relname = 'operations_maintenance_log_items' and c.conname = 'operations_maintenance_log_items_maintenance_done_check'; select maintenance_done, count(*) as row_count from public.operations_maintenance_log_items group by maintenance_done order by maintenance_done;"
+          }
+          JSON
+
+          curl -fsS \
+            -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data @query.json > result.json
+
+          cat result.json
+          test -s result.json
+          if jq -e 'type=="object" and has("error")' result.json >/dev/null 2>&1; then
+            echo 'Supabase database query returned an error.' >&2
+            exit 1
+          fi
+
+          {
+            echo '## Staging maintenance constraint inspection'
+            echo
+            echo 'Read-only PostgreSQL inspection. No data changed.'
+            echo
+            echo '```json'
+            cat result.json
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload inspection evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-maintenance-constraint-inspection
+          path: result.json
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: rm -f projects.json query.json
