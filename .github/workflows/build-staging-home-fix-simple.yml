@@ -66,19 +66,21 @@ jobs:
           set -euo pipefail
           python3 tools/fix-staging-maintenance-save.py staging-build/operations-v4.js
           node --check staging-build/operations-v4.js
-          grep -F "input.value==='Engine oil changed'?'Oil changed':input.value" staging-build/operations-v4.js
-          grep -F "input.value==='Engine oil changed'?'Vehicle engine oil changed':null" staging-build/operations-v4.js
+          grep -F "uiValue==='Engine oil changed'||uiValue==='Oil changed'?'Oil changed'" staging-build/operations-v4.js
+          grep -F "uiValue==='Spark plug changed'?'Spark plug changed':'Other maintenance'" staging-build/operations-v4.js
+          grep -F "maintenance_done:'Other maintenance'" staging-build/operations-v4.js
+          grep -F 'uiType===\x27Repair\x27?`Repair: ${detail}`:detail' staging-build/operations-v4.js || grep -F "uiType==='Repair'?\`Repair: \${detail}\`:detail" staging-build/operations-v4.js
           echo 'MAINTENANCE_SAVE_REPAIR=passed'
 
       - name: Apply source Home handoff
         run: |
           set -euo pipefail
           python3 tools/patch-staging-home.py staging-build/app.js
-          printf '\nwindow.SW_STAGING_HOME_BUILD = "home-maintenance-fix-v6-20260813";\n' >> staging-build/app.js
+          printf '\nwindow.SW_STAGING_HOME_BUILD = "home-maintenance-fix-v7-20260813";\n' >> staging-build/app.js
           node --check staging-build/app.js
           grep -F 'function handoffToOperationsHome()' staging-build/app.js
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
-          grep -F 'window.SW_STAGING_HOME_BUILD = "home-maintenance-fix-v6-20260813";' staging-build/app.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-maintenance-fix-v7-20260813";' staging-build/app.js
           grep -F 'function showModuleHome(){' staging-build/operations-v4.js
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
 
@@ -92,7 +94,7 @@ jobs:
 
           p = Path('staging-build/service-worker.js')
           s = p.read_text(encoding='utf-8')
-          cache_key = 'spray-wash-operations-staging-home-maintenance-fix-v6-20260813'
+          cache_key = 'spray-wash-operations-staging-home-maintenance-fix-v7-20260813'
           s, count = re.subn(r'spray-wash-operations-[A-Za-z0-9._-]+', cache_key, s)
           if count == 0:
               s = "const SW_STAGING_FORCED_CACHE = '" + cache_key + "';\n" + s
@@ -100,7 +102,7 @@ jobs:
           s += cleanup
           p.write_text(s, encoding='utf-8')
           PY
-            grep -F 'spray-wash-operations-staging-home-maintenance-fix-v6-20260813' staging-build/service-worker.js
+            grep -F 'spray-wash-operations-staging-home-maintenance-fix-v7-20260813' staging-build/service-worker.js
           fi
 
       - name: Verify repaired staging bundle
@@ -108,13 +110,14 @@ jobs:
           set -euo pipefail
           node --check staging-build/app.js
           node --check staging-build/operations-v4.js
-          grep -F 'window.SW_STAGING_HOME_BUILD = "home-maintenance-fix-v6-20260813";' staging-build/app.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-maintenance-fix-v7-20260813";' staging-build/app.js
           grep -F 'function handoffToOperationsHome()' staging-build/app.js
           test "$(grep -F 'handoffToOperationsHome();' staging-build/app.js | wc -l)" -eq 2
           grep -F 'Inspection saved and verified.' staging-build/operations-v4.js
           grep -F "description:`\${source.item.question_text}\\nAnswer: \${source.answer}\${source.notes?'\\nNotes: '+source.notes:''}`" staging-build/operations-v4.js
           grep -F "const profileName=currentProfile ? displayNameOfProfile(currentProfile) : '';" staging-build/operations-v4.js
-          grep -F "input.value==='Engine oil changed'?'Oil changed':input.value" staging-build/operations-v4.js
+          grep -F "uiValue==='Spark plug changed'?'Spark plug changed':'Other maintenance'" staging-build/operations-v4.js
+          grep -F "maintenance_done:'Other maintenance'" staging-build/operations-v4.js
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
       - name: Upload repaired staging app
@@ -132,7 +135,9 @@ jobs:
             echo
             echo '- Production was not changed.'
             echo '- Vehicle Checks inspector names still use the canonical signed-in profile display name.'
-            echo '- Maintenance save compatibility maps Vehicle Engine oil changed to the database canonical Oil changed value while preserving a descriptive item note.'
+            echo '- Maintenance UI values are normalized to the staging database canonical maintenance types: Oil changed, Spark plug changed, or Other maintenance.'
+            echo '- The exact UI maintenance description is preserved in the description field whenever normalization is required.'
+            echo '- Repair entries are stored as Other maintenance with a Repair-prefixed description.'
             echo '- node --check is mandatory for both app.js and operations-v4.js before upload.'
             echo '- Home handoff remains present for restored sessions and explicit sign-in.'
             echo '- A fresh staging-only service-worker cache key is used.'
