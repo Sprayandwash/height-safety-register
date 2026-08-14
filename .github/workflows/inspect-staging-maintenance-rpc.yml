@@ -41,32 +41,60 @@ jobs:
           REF: ${{ steps.staging.outputs.ref }}
         run: |
           set -euo pipefail
-          cat > query.json <<'JSON'
-          {
-            "query": "select p.oid::regprocedure::text as signature, p.prosecdef as security_definer, pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='operations_add_maintenance_record_v4053'; select grantee, privilege_type from information_schema.role_table_grants where table_schema='public' and table_name='operations_maintenance_tasks' order by grantee, privilege_type; select policyname, permissive, roles, cmd, qual, with_check from pg_policies where schemaname='public' and tablename='operations_maintenance_tasks' order by policyname;"
+
+          run_query() {
+            local sql="$1"
+            local output="$2"
+            jq -n --arg query "$sql" '{query:$query}' > query.json
+            curl -fsS \
+              -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data @query.json > "$output"
+            test -s "$output"
+            if jq -e 'type=="object" and has("error")' "$output" >/dev/null 2>&1; then
+              echo "Supabase database query returned an error for $output" >&2
+              cat "$output" >&2
+              exit 1
+            fi
           }
-          JSON
 
-          curl -fsS \
-            -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data @query.json > result.json
+          run_query "select p.oid::regprocedure::text as signature, p.prosecdef as security_definer, pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='operations_add_maintenance_record_v4053';" rpc.json
 
-          cat result.json
-          test -s result.json
-          if jq -e 'type=="object" and has("error")' result.json >/dev/null 2>&1; then
-            echo 'Supabase database query returned an error.' >&2
-            exit 1
-          fi
+          run_query "select grantee, privilege_type from information_schema.role_table_grants where table_schema='public' and table_name='operations_maintenance_tasks' order by grantee, privilege_type;" grants.json
+
+          run_query "select policyname, permissive, roles, cmd, qual, with_check from pg_policies where schemaname='public' and tablename='operations_maintenance_tasks' order by policyname;" policies.json
+
+          echo '===== RPC DEFINITION ====='
+          cat rpc.json
+          echo
+          echo '===== TABLE GRANTS ====='
+          cat grants.json
+          echo
+          echo '===== RLS POLICIES ====='
+          cat policies.json
+          echo
 
           {
             echo '## Staging Maintenance RPC inspection'
             echo
             echo 'Read-only inspection. No staging data or schema changed.'
             echo
+            echo '### RPC definition'
             echo '```json'
-            cat result.json
+            cat rpc.json
+            echo
+            echo '```'
+            echo
+            echo '### Table grants'
+            echo '```json'
+            cat grants.json
+            echo
+            echo '```'
+            echo
+            echo '### RLS policies'
+            echo '```json'
+            cat policies.json
             echo
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -75,7 +103,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: staging-maintenance-rpc-inspection
-          path: result.json
+          path: |
+            rpc.json
+            grants.json
+            policies.json
           retention-days: 7
 
       - name: Cleanup
