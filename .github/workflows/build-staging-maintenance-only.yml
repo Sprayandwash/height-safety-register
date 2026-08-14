@@ -1,0 +1,115 @@
+name: Build staging Maintenance-only fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-staging-maintenance-only.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KNOWN_GOOD_HEAD_SHA: 02aa4fa66e80f95779f103c63a23e9500080ff56
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download exact known-good staging artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/artifacts?name=spray-wash-staging-app-home-fixed&per_page=100" > artifacts.json
+          artifact_id="$(jq -r --arg sha "$KNOWN_GOOD_HEAD_SHA" '[.artifacts[] | select(.expired == false and .workflow_run.head_sha == $sha)] | sort_by(.created_at) | reverse | .[0].id // empty' artifacts.json)"
+          test -n "$artifact_id" || { echo "Could not find a non-expired known-good Home artifact for $KNOWN_GOOD_HEAD_SHA" >&2; exit 1; }
+          echo "Using known-good artifact id: $artifact_id"
+          gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > known-good.zip
+          rm -rf staging-build
+          mkdir staging-build
+          unzip -q known-good.zip -d staging-build
+          test -f staging-build/index.html
+          test -f staging-build/app.js
+          test -f staging-build/operations-v4.js
+          test -f staging-build/config.js
+          test -f staging-build/service-worker.js
+          grep -F 'window.SPRAY_WASH_ENV = "staging"' staging-build/config.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v5-20260813";' staging-build/app.js
+
+      - name: Capture protected-file hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            staging-build/app.js \
+            staging-build/index.html \
+            staging-build/config.js \
+            staging-build/service-worker.js \
+            > protected-files.sha256
+          cp staging-build/operations-v4.js operations-v4.before.js
+
+      - name: Apply Maintenance-only compatibility repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/fix-staging-maintenance-save.py staging-build/operations-v4.js
+          node --check staging-build/operations-v4.js
+          grep -F "uiValue==='Engine oil changed'||uiValue==='Oil changed'?'Oil changed'" staging-build/operations-v4.js
+          grep -F "uiValue==='Spark plug changed'?'Spark plug changed':'Other maintenance'" staging-build/operations-v4.js
+          grep -F "maintenance_done:'Other maintenance'" staging-build/operations-v4.js
+          if cmp -s operations-v4.before.js staging-build/operations-v4.js; then
+            echo 'Maintenance patch made no change.' >&2
+            exit 1
+          fi
+
+      - name: Prove auth, Home and service-worker files are untouched
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c protected-files.sha256
+          node --check staging-build/app.js
+          grep -F 'function handoffToOperationsHome()' staging-build/app.js
+          grep -F 'function showModuleHome(){' staging-build/operations-v4.js
+          echo 'Protected files are byte-for-byte identical to the known-good artifact.'
+
+      - name: Write build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "Known-good source head: $KNOWN_GOOD_HEAD_SHA"
+            echo 'Changed file: operations-v4.js only'
+            echo 'Protected files verified unchanged: app.js index.html config.js service-worker.js'
+            echo 'Maintenance DB compatibility: Oil changed / Spark plug changed / Other maintenance'
+          } > staging-build/MAINTENANCE_ONLY_BUILD.txt
+          find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
+
+      - name: Upload isolated staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-app-maintenance-only-fix
+          path: staging-build/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo '## Isolated staging Maintenance-only build'
+            echo
+            echo '- Source artifact is pinned to the known-good Home/Vehicle Checks build at `02aa4fa66e80f95779f103c63a23e9500080ff56`.'
+            echo '- Only `operations-v4.js` is modified.'
+            echo '- `app.js`, `index.html`, `config.js`, and `service-worker.js` are verified byte-for-byte unchanged.'
+            echo '- Production was not changed.'
+            echo '- Artifact: `spray-wash-staging-app-maintenance-only-fix`.'
+            echo '- For cache isolation during testing, serve this artifact from a different localhost port than the known-good baseline, e.g. `localhost:8081`.'
+          } >> "$GITHUB_STEP_SUMMARY"
