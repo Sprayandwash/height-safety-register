@@ -44,46 +44,101 @@ jobs:
           REF: ${{ steps.staging.outputs.ref }}
         run: |
           set -euo pipefail
+
           cat > patch.sql <<'SQL'
-          do $repair$
+          CREATE OR REPLACE FUNCTION public.operations_add_maintenance_record_v4053(
+            p_record_date date,
+            p_vehicle_id uuid,
+            p_machinery_id uuid,
+            p_items jsonb,
+            p_performed_by text,
+            p_odometer numeric,
+            p_parts_used text,
+            p_notes text,
+            p_further_maintenance_required text,
+            p_created_by uuid
+          ) RETURNS jsonb
+          LANGUAGE plpgsql
+          SECURITY DEFINER
+          SET search_path TO 'public'
+          AS $function$
           declare
-            v_oid oid;
-            v_def text;
-            v_new_def text;
-            v_old_fragment text := $old$'Identified while recording ' || v_item_summary || E':\n'
-                || btrim(p_further_maintenance_required)$old$;
-            v_new_fragment text := $new$btrim(p_further_maintenance_required)$new$;
+            v_vehicle_rego text;
+            v_asset_identifier text;
+            v_record_type text;
+            v_log_id uuid := gen_random_uuid();
+            v_task_id uuid;
+            v_item jsonb;
+            v_item_name text;
+            v_item_description text;
+            v_item_count integer;
+            v_item_summary text;
+            v_has_repair boolean := false;
+            v_has_other boolean := false;
+            v_target_category text;
+            v_procedure_id uuid;
+            v_schedule record;
           begin
-            select p.oid
-              into v_oid
-              from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-             where n.nspname = 'public'
-               and p.proname = 'operations_add_maintenance_record_v4053'
-             limit 1;
-
-            if v_oid is null then
-              raise exception 'operations_add_maintenance_record_v4053 was not found';
+            if auth.uid() is null or p_created_by is distinct from auth.uid() then
+              raise exception 'The signed-in user does not match the maintenance record user.';
             end if;
 
-            v_def := pg_get_functiondef(v_oid);
-            v_new_def := replace(v_def, v_old_fragment, v_new_fragment);
-
-            if v_new_def = v_def and position('description,' in v_def) > 0
-               and position('Identified while recording' in v_def) > 0 then
-              raise exception 'Could not locate the verbose follow-up task description expression';
+            if not public.spray_wash_has_role(array['Admin', 'Maintenance manager']) then
+              raise exception 'Only Admin or Maintenance manager users can add maintenance records.';
             end if;
 
-            if v_new_def <> v_def then
-              execute v_new_def;
+            if p_record_date is null then
+              raise exception 'A maintenance date is required.';
             end if;
 
-            alter table public.operations_maintenance_log_items
-              drop constraint if exists operations_maintenance_log_items_maintenance_done_check;
+            if p_vehicle_id is null then
+              raise exception 'A vehicle is required.';
+            end if;
 
-            alter table public.operations_maintenance_log_items
-              add constraint operations_maintenance_log_items_maintenance_done_check
-              check (maintenance_done in (
+            select upper(btrim(rego))
+              into v_vehicle_rego
+              from public.operations_vehicles
+              where id = p_vehicle_id;
+
+            if not found then
+              raise exception 'Vehicle record not found.';
+            end if;
+
+            if p_machinery_id is not null then
+              select asset_identifier, machinery_type
+                into v_asset_identifier, v_target_category
+                from public.operations_washing_equipment
+                where id = p_machinery_id
+                  and assigned_vehicle_id = p_vehicle_id;
+
+              if not found then
+                raise exception 'The selected machinery is not currently installed on this vehicle.';
+              end if;
+            else
+              v_asset_identifier := v_vehicle_rego;
+              v_target_category := 'Vehicle';
+            end if;
+
+            if jsonb_typeof(p_items) is distinct from 'array'
+               or jsonb_array_length(p_items) = 0 then
+              raise exception 'Choose at least one maintenance item.';
+            end if;
+
+            select
+              count(*)::integer,
+              string_agg(item.value ->> 'maintenance_done', ', ' order by item.ordinality)
+            into v_item_count, v_item_summary
+            from jsonb_array_elements(p_items) with ordinality as item(value, ordinality);
+
+            for v_item in
+              select item.value
+              from jsonb_array_elements(p_items) with ordinality as item(value, ordinality)
+              order by item.ordinality
+            loop
+              v_item_name := v_item ->> 'maintenance_done';
+              v_item_description := nullif(btrim(v_item ->> 'description'), '');
+
+              if v_item_name is null or v_item_name not in (
                 'Engine oil changed',
                 'Oil filter changed',
                 'Oil changed',
@@ -97,28 +152,237 @@ jobs:
                 'Seals replaced',
                 'Repair',
                 'Other maintenance'
-              ));
+              ) then
+                raise exception 'Choose a valid maintenance type.';
+              end if;
 
-            update public.operations_maintenance_tasks task
-               set description = btrim(log.further_maintenance_required)
-              from public.operations_maintenance_log log
-             where task.id = log.generated_task_id
-               and task.source_module = 'maintenance'
-               and task.source_record_type = 'maintenance_log'
-               and task.title = 'Further maintenance required'
-               and nullif(btrim(log.further_maintenance_required), '') is not null
-               and task.description is distinct from btrim(log.further_maintenance_required);
+              if v_item_name in ('Repair', 'Other maintenance')
+                 and v_item_description is null then
+                raise exception 'Every repair and other maintenance item requires a description.';
+              end if;
+
+              v_has_repair := v_has_repair or v_item_name = 'Repair';
+              v_has_other := v_has_other or v_item_name = 'Other maintenance';
+            end loop;
+
+            if exists (
+              select 1
+              from jsonb_array_elements(p_items) as item(value)
+              where item.value ->> 'maintenance_done' not in ('Repair', 'Other maintenance')
+              group by item.value ->> 'maintenance_done'
+              having count(*) > 1
+            ) then
+              raise exception 'Routine maintenance types can only be selected once per record.';
+            end if;
+
+            if nullif(btrim(p_performed_by), '') is null then
+              raise exception 'The person or service agent is required.';
+            end if;
+
+            v_record_type := case
+              when v_has_repair then 'Repair'
+              when v_has_other then 'Other work'
+              else 'Service'
+            end;
+
+            if nullif(btrim(p_further_maintenance_required), '') is not null then
+              insert into public.operations_maintenance_tasks (
+                source_type,
+                source_module,
+                source_record_type,
+                source_record_id,
+                target_type,
+                target_record_id,
+                target_label,
+                vehicle_id,
+                washing_equipment_id,
+                title,
+                description,
+                status,
+                priority,
+                due_date,
+                assigned_role,
+                created_by
+              ) values (
+                'Manual',
+                'maintenance',
+                'maintenance_log',
+                v_log_id,
+                case when p_machinery_id is null then 'vehicle' else 'washing_equipment' end,
+                coalesce(p_machinery_id, p_vehicle_id),
+                upper(btrim(v_asset_identifier)),
+                p_vehicle_id,
+                p_machinery_id,
+                'Further maintenance required',
+                btrim(p_further_maintenance_required),
+                'Open',
+                'Medium',
+                current_date,
+                'Maintenance manager',
+                p_created_by
+              )
+              returning id into v_task_id;
+            end if;
+
+            insert into public.operations_maintenance_log (
+              id,
+              record_type,
+              record_date,
+              vehicle_id,
+              washing_equipment_id,
+              title,
+              maintenance_done,
+              description,
+              performed_by,
+              odometer,
+              parts_used,
+              notes,
+              further_maintenance_required,
+              generated_task_id,
+              asset_identifier_snapshot,
+              vehicle_rego_snapshot,
+              created_by
+            ) values (
+              v_log_id,
+              v_record_type,
+              p_record_date,
+              p_vehicle_id,
+              p_machinery_id,
+              case when v_item_count = 1 then v_item_summary else v_item_count || ' maintenance items' end,
+              case when v_item_count = 1 then v_item_summary else null end,
+              null,
+              btrim(p_performed_by),
+              p_odometer,
+              nullif(btrim(p_parts_used), ''),
+              nullif(btrim(p_notes), ''),
+              nullif(btrim(p_further_maintenance_required), ''),
+              v_task_id,
+              upper(btrim(v_asset_identifier)),
+              v_vehicle_rego,
+              p_created_by
+            );
+
+            insert into public.operations_maintenance_log_items (
+              maintenance_log_id,
+              maintenance_done,
+              description,
+              parts_used,
+              sort_order
+            )
+            select
+              v_log_id,
+              item.value ->> 'maintenance_done',
+              nullif(btrim(item.value ->> 'description'), ''),
+              nullif(btrim(item.value ->> 'parts_used'), ''),
+              item.ordinality::integer
+            from jsonb_array_elements(p_items) with ordinality as item(value, ordinality)
+            order by item.ordinality;
+
+            for v_item in
+              select item.value
+              from jsonb_array_elements(p_items) with ordinality as item(value, ordinality)
+              order by item.ordinality
+            loop
+              v_item_name := v_item ->> 'maintenance_done';
+              if v_item_name not in ('Repair', 'Other maintenance') then
+                select procedure.id
+                  into v_procedure_id
+                  from public.operations_maintenance_procedures procedure
+                  where procedure.name = 'PM - ' || v_target_category || ' - ' || v_item_name
+                    and coalesce(procedure.is_active, true)
+                  limit 1;
+
+                if v_procedure_id is not null then
+                  for v_schedule in
+                    select schedule.id,
+                           coalesce(schedule.frequency_days, procedure.frequency_days) as frequency_days
+                    from public.operations_equipment_maintenance_schedules schedule
+                    join public.operations_maintenance_procedures procedure
+                      on procedure.id = schedule.procedure_id
+                    where schedule.procedure_id = v_procedure_id
+                      and (
+                        (p_machinery_id is not null and schedule.washing_equipment_id = p_machinery_id)
+                        or
+                        (p_machinery_id is null and schedule.vehicle_id = p_vehicle_id)
+                      )
+                      and coalesce(schedule.is_active, true)
+                  loop
+                    update public.operations_equipment_maintenance_schedules
+                    set last_completed_at = p_record_date,
+                        next_due_at = case
+                          when v_schedule.frequency_days is null then null
+                          else p_record_date + v_schedule.frequency_days::integer
+                        end
+                    where id = v_schedule.id;
+
+                    update public.operations_maintenance_tasks
+                    set status = 'Completed',
+                        completed_at = p_record_date::timestamptz,
+                        completed_by = p_created_by,
+                        completion_notes = coalesce(
+                          nullif(btrim(p_notes), ''),
+                          'Completed through Record Maintenance.'
+                        )
+                    where schedule_id = v_schedule.id
+                      and status not in ('Completed', 'Deferred');
+                  end loop;
+                end if;
+              end if;
+            end loop;
+
+            return jsonb_build_object(
+              'log_id', v_log_id,
+              'task_id', v_task_id,
+              'item_count', v_item_count
+            );
           end;
-          $repair$;
+          $function$;
+
+          ALTER TABLE public.operations_maintenance_log_items
+            DROP CONSTRAINT IF EXISTS operations_maintenance_log_items_maintenance_done_check;
+
+          ALTER TABLE public.operations_maintenance_log_items
+            ADD CONSTRAINT operations_maintenance_log_items_maintenance_done_check
+            CHECK (maintenance_done IN (
+              'Engine oil changed',
+              'Oil filter changed',
+              'Oil changed',
+              'Spark plug changed',
+              'Air filter changed',
+              'Fuel filter changed',
+              'Coolant replaced',
+              'Brake fluid replaced',
+              'Transmission oil changed',
+              'Valves changed',
+              'Seals replaced',
+              'Repair',
+              'Other maintenance'
+            ));
+
+          UPDATE public.operations_maintenance_tasks AS task
+             SET description = btrim(log.further_maintenance_required)
+            FROM public.operations_maintenance_log AS log
+           WHERE task.id = log.generated_task_id
+             AND task.source_module = 'maintenance'
+             AND task.source_record_type = 'maintenance_log'
+             AND task.title = 'Further maintenance required'
+             AND nullif(btrim(log.further_maintenance_required), '') IS NOT NULL
+             AND task.description IS DISTINCT FROM btrim(log.further_maintenance_required);
           SQL
 
           jq -n --rawfile query patch.sql '{query:$query}' > patch.json
-          curl -fsS \
+          http_code="$(curl -sS \
+            -o patch-result.json \
+            -w '%{http_code}' \
             -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             -H 'Content-Type: application/json' \
-            --data @patch.json > patch-result.json
+            --data @patch.json)"
           cat patch-result.json
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Supabase returned HTTP $http_code while applying the staging Maintenance repair." >&2
+            exit 1
+          fi
           if jq -e 'type=="object" and has("error")' patch-result.json >/dev/null 2>&1; then
             echo 'Staging Maintenance database repair failed.' >&2
             exit 1
@@ -132,40 +396,58 @@ jobs:
           set -euo pipefail
           cat > verify.sql <<'SQL'
           select
-            pg_get_functiondef(p.oid) like '%''Identified while recording ''%' as still_has_verbose_task_prefix,
-            pg_get_functiondef(p.oid) like '%btrim(p_further_maintenance_required)%' as has_direct_followup_text
-          from pg_proc p
-          join pg_namespace n on n.oid = p.pronamespace
-          where n.nspname='public' and p.proname='operations_add_maintenance_record_v4053';
-
-          select pg_get_constraintdef(c.oid) as maintenance_done_constraint
-          from pg_constraint c
-          join pg_class t on t.oid=c.conrelid
-          join pg_namespace n on n.oid=t.relnamespace
-          where n.nspname='public'
-            and t.relname='operations_maintenance_log_items'
-            and c.conname='operations_maintenance_log_items_maintenance_done_check';
-
-          select count(*) as remaining_verbose_followup_tasks
-          from public.operations_maintenance_tasks task
-          where task.source_module='maintenance'
-            and task.source_record_type='maintenance_log'
-            and task.title='Further maintenance required'
-            and task.description like 'Identified while recording%';
+            not exists (
+              select 1
+              from pg_proc p
+              join pg_namespace n on n.oid=p.pronamespace
+              where n.nspname='public'
+                and p.proname='operations_add_maintenance_record_v4053'
+                and pg_get_functiondef(p.oid) like '%Identified while recording%'
+            ) as rpc_has_no_verbose_prefix,
+            exists (
+              select 1
+              from pg_proc p
+              join pg_namespace n on n.oid=p.pronamespace
+              where n.nspname='public'
+                and p.proname='operations_add_maintenance_record_v4053'
+                and pg_get_functiondef(p.oid) like '%btrim(p_further_maintenance_required)%'
+            ) as rpc_uses_followup_text,
+            exists (
+              select 1
+              from pg_constraint c
+              join pg_class t on t.oid=c.conrelid
+              join pg_namespace n on n.oid=t.relnamespace
+              where n.nspname='public'
+                and t.relname='operations_maintenance_log_items'
+                and c.conname='operations_maintenance_log_items_maintenance_done_check'
+                and pg_get_constraintdef(c.oid) like '%Engine oil changed%'
+                and pg_get_constraintdef(c.oid) like '%Oil filter changed%'
+                and pg_get_constraintdef(c.oid) like '%Repair%'
+            ) as constraint_has_full_types,
+            (
+              select count(*)
+              from public.operations_maintenance_tasks task
+              where task.source_module='maintenance'
+                and task.source_record_type='maintenance_log'
+                and task.title='Further maintenance required'
+                and task.description like 'Identified while recording%'
+            ) as remaining_verbose_followup_tasks;
           SQL
 
           jq -n --rawfile query verify.sql '{query:$query}' > verify.json
-          curl -fsS \
+          http_code="$(curl -sS \
+            -o verify-result.json \
+            -w '%{http_code}' \
             -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             -H 'Content-Type: application/json' \
-            --data @verify.json > verify-result.json
+            --data @verify.json)"
           cat verify-result.json
-          if jq -e 'type=="object" and has("error")' verify-result.json >/dev/null 2>&1; then
-            echo 'Staging Maintenance verification failed.' >&2
-            exit 1
-          fi
-          test "$(jq -r '.[0].remaining_verbose_followup_tasks // empty' verify-result.json)" = "0"
+          test "$http_code" = "200"
+          test "$(jq -r '.[0].rpc_has_no_verbose_prefix' verify-result.json)" = "true"
+          test "$(jq -r '.[0].rpc_uses_followup_text' verify-result.json)" = "true"
+          test "$(jq -r '.[0].constraint_has_full_types' verify-result.json)" = "true"
+          test "$(jq -r '.[0].remaining_verbose_followup_tasks' verify-result.json)" = "0"
 
       - name: Repackage exact known-good app without client workaround
         env:
@@ -207,7 +489,7 @@ jobs:
             echo
             echo '- Production was not changed.'
             echo '- The Maintenance RPC now writes only the entered follow-up text into task descriptions.'
-            echo '- The maintenance-log-item check constraint now accepts the full maintenance-type list already validated by the RPC.'
+            echo '- The maintenance-log-item check constraint accepts the full maintenance-type list already validated by the RPC.'
             echo '- Existing staging Maintenance-generated follow-up tasks were cleaned using their saved follow-up text.'
             echo '- No UPDATE grant was added to the browser/authenticated role.'
             echo '- The app artifact is the exact known-good Home/Vehicle Checks bundle with no client-side task rewrite.'
