@@ -1,0 +1,215 @@
+name: Apply staging Maintenance DB fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-staging-maintenance-db-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      KNOWN_GOOD_HEAD_SHA: 02aa4fa66e80f95779f103c63a23e9500080ff56
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Resolve staging project
+        id: staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Apply staging-only Maintenance database repair
+        shell: bash
+        env:
+          REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          cat > patch.sql <<'SQL'
+          do $repair$
+          declare
+            v_oid oid;
+            v_def text;
+            v_new_def text;
+            v_old_fragment text := $old$'Identified while recording ' || v_item_summary || E':\n'
+                || btrim(p_further_maintenance_required)$old$;
+            v_new_fragment text := $new$btrim(p_further_maintenance_required)$new$;
+          begin
+            select p.oid
+              into v_oid
+              from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname = 'operations_add_maintenance_record_v4053'
+             limit 1;
+
+            if v_oid is null then
+              raise exception 'operations_add_maintenance_record_v4053 was not found';
+            end if;
+
+            v_def := pg_get_functiondef(v_oid);
+            v_new_def := replace(v_def, v_old_fragment, v_new_fragment);
+
+            if v_new_def = v_def and position('description,' in v_def) > 0
+               and position('Identified while recording' in v_def) > 0 then
+              raise exception 'Could not locate the verbose follow-up task description expression';
+            end if;
+
+            if v_new_def <> v_def then
+              execute v_new_def;
+            end if;
+
+            alter table public.operations_maintenance_log_items
+              drop constraint if exists operations_maintenance_log_items_maintenance_done_check;
+
+            alter table public.operations_maintenance_log_items
+              add constraint operations_maintenance_log_items_maintenance_done_check
+              check (maintenance_done in (
+                'Engine oil changed',
+                'Oil filter changed',
+                'Oil changed',
+                'Spark plug changed',
+                'Air filter changed',
+                'Fuel filter changed',
+                'Coolant replaced',
+                'Brake fluid replaced',
+                'Transmission oil changed',
+                'Valves changed',
+                'Seals replaced',
+                'Repair',
+                'Other maintenance'
+              ));
+
+            update public.operations_maintenance_tasks task
+               set description = btrim(log.further_maintenance_required)
+              from public.operations_maintenance_log log
+             where task.id = log.generated_task_id
+               and task.source_module = 'maintenance'
+               and task.source_record_type = 'maintenance_log'
+               and task.title = 'Further maintenance required'
+               and nullif(btrim(log.further_maintenance_required), '') is not null
+               and task.description is distinct from btrim(log.further_maintenance_required);
+          end;
+          $repair$;
+          SQL
+
+          jq -n --rawfile query patch.sql '{query:$query}' > patch.json
+          curl -fsS \
+            -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data @patch.json > patch-result.json
+          cat patch-result.json
+          if jq -e 'type=="object" and has("error")' patch-result.json >/dev/null 2>&1; then
+            echo 'Staging Maintenance database repair failed.' >&2
+            exit 1
+          fi
+
+      - name: Verify staging database repair
+        shell: bash
+        env:
+          REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          cat > verify.sql <<'SQL'
+          select
+            pg_get_functiondef(p.oid) like '%''Identified while recording ''%' as still_has_verbose_task_prefix,
+            pg_get_functiondef(p.oid) like '%btrim(p_further_maintenance_required)%' as has_direct_followup_text
+          from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname='public' and p.proname='operations_add_maintenance_record_v4053';
+
+          select pg_get_constraintdef(c.oid) as maintenance_done_constraint
+          from pg_constraint c
+          join pg_class t on t.oid=c.conrelid
+          join pg_namespace n on n.oid=t.relnamespace
+          where n.nspname='public'
+            and t.relname='operations_maintenance_log_items'
+            and c.conname='operations_maintenance_log_items_maintenance_done_check';
+
+          select count(*) as remaining_verbose_followup_tasks
+          from public.operations_maintenance_tasks task
+          where task.source_module='maintenance'
+            and task.source_record_type='maintenance_log'
+            and task.title='Further maintenance required'
+            and task.description like 'Identified while recording%';
+          SQL
+
+          jq -n --rawfile query verify.sql '{query:$query}' > verify.json
+          curl -fsS \
+            -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data @verify.json > verify-result.json
+          cat verify-result.json
+          if jq -e 'type=="object" and has("error")' verify-result.json >/dev/null 2>&1; then
+            echo 'Staging Maintenance verification failed.' >&2
+            exit 1
+          fi
+          test "$(jq -r '.[0].remaining_verbose_followup_tasks // empty' verify-result.json)" = "0"
+
+      - name: Repackage exact known-good app without client workaround
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/artifacts?name=spray-wash-staging-app-home-fixed&per_page=100" > artifacts.json
+          artifact_id="$(jq -r --arg sha "$KNOWN_GOOD_HEAD_SHA" '[.artifacts[] | select(.expired == false and .workflow_run.head_sha == $sha)] | sort_by(.created_at) | reverse | .[0].id // empty' artifacts.json)"
+          test -n "$artifact_id"
+          gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > known-good.zip
+          rm -rf staging-build
+          mkdir staging-build
+          unzip -q known-good.zip -d staging-build
+          grep -F 'window.SPRAY_WASH_ENV = "staging"' staging-build/config.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v5-20260813";' staging-build/app.js
+          node --check staging-build/app.js
+          node --check staging-build/operations-v4.js
+          printf '%s\n' \
+            'Maintenance DB fixed in staging.' \
+            'App bundle is the exact known-good Home/Vehicle Checks artifact; no Maintenance client workaround is included.' \
+            > staging-build/MAINTENANCE_DB_FIX.txt
+          find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
+
+      - name: Upload clean staging app
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-app-maintenance-db-fixed
+          path: staging-build/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo '## Staging Maintenance database repair'
+            echo
+            echo '- Production was not changed.'
+            echo '- The Maintenance RPC now writes only the entered follow-up text into task descriptions.'
+            echo '- The maintenance-log-item check constraint now accepts the full maintenance-type list already validated by the RPC.'
+            echo '- Existing staging Maintenance-generated follow-up tasks were cleaned using their saved follow-up text.'
+            echo '- No UPDATE grant was added to the browser/authenticated role.'
+            echo '- The app artifact is the exact known-good Home/Vehicle Checks bundle with no client-side task rewrite.'
+            echo '- Artifact: `spray-wash-staging-app-maintenance-db-fixed`.'
+          } >> "$GITHUB_STEP_SUMMARY"
