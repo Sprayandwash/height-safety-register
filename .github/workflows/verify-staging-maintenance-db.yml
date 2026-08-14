@@ -76,7 +76,6 @@ jobs:
           test -n "$source_record_id" || { echo 'Completed task is missing source_record_id.' >&2; exit 1; }
           test -n "$completed_at" || { echo 'Completed task is missing completed_at.' >&2; exit 1; }
           test -n "$completed_by" || { echo 'Completed task is missing completed_by.' >&2; exit 1; }
-          test -n "$completion_notes" || { echo 'Completed task is missing completion_notes.' >&2; exit 1; }
 
           curl -fsS -G "$BASE/operations_maintenance_log" \
             -H "$H1" -H "$H2" \
@@ -127,6 +126,9 @@ jobs:
           verbose_count="$(jq '[.[] | select((.description // "") | startswith("Identified while recording"))] | length' maintenance-followup-tasks.json)"
           test "$verbose_count" -eq 0 || { echo "Expected 0 verbose Maintenance follow-up tasks, found $verbose_count." >&2; exit 1; }
 
+          notes_display="$completion_notes"
+          if [ -z "$notes_display" ]; then notes_display='(blank - optional)'; fi
+
           {
             echo '## Maintenance final staging DB verification'
             echo
@@ -137,7 +139,7 @@ jobs:
             echo "- Task status: $status"
             echo "- Task completed at: $completed_at"
             echo "- Task completed by user ID: \`$completed_by\`"
-            echo "- Completion notes: $completion_notes"
+            echo "- Completion notes: $notes_display"
             echo "- Linked Maintenance Log ID: \`$source_record_id\`"
             echo "- Maintenance date: $(jq -r '.[0].record_date // empty' maintenance-log.json)"
             echo "- Vehicle: $(jq -r '.[0].rego' vehicle.json)"
