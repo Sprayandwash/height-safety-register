@@ -1,0 +1,167 @@
+name: Finalize staging Maintenance DB fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/finalize-staging-maintenance-db-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      KNOWN_GOOD_HEAD_SHA: 02aa4fa66e80f95779f103c63a23e9500080ff56
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Resolve staging project
+        id: staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Verify staging Maintenance database repair
+        shell: bash
+        env:
+          REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          cat > verify.sql <<'SQL'
+          select
+            not exists (
+              select 1
+              from pg_proc p
+              join pg_namespace n on n.oid=p.pronamespace
+              where n.nspname='public'
+                and p.proname='operations_add_maintenance_record_v4053'
+                and pg_get_functiondef(p.oid) like '%Identified while recording%'
+            ) as rpc_has_no_verbose_prefix,
+            exists (
+              select 1
+              from pg_proc p
+              join pg_namespace n on n.oid=p.pronamespace
+              where n.nspname='public'
+                and p.proname='operations_add_maintenance_record_v4053'
+                and pg_get_functiondef(p.oid) like '%btrim(p_further_maintenance_required)%'
+            ) as rpc_uses_followup_text,
+            exists (
+              select 1
+              from pg_constraint c
+              join pg_class t on t.oid=c.conrelid
+              join pg_namespace n on n.oid=t.relnamespace
+              where n.nspname='public'
+                and t.relname='operations_maintenance_log_items'
+                and c.conname='operations_maintenance_log_items_maintenance_done_check'
+                and pg_get_constraintdef(c.oid) like '%Engine oil changed%'
+                and pg_get_constraintdef(c.oid) like '%Oil filter changed%'
+                and pg_get_constraintdef(c.oid) like '%Repair%'
+            ) as constraint_has_full_types,
+            (
+              select count(*)
+              from public.operations_maintenance_tasks task
+              where task.source_module='maintenance'
+                and task.source_record_type='maintenance_log'
+                and task.title='Further maintenance required'
+                and task.description like 'Identified while recording%'
+            ) as remaining_verbose_followup_tasks;
+          SQL
+
+          jq -n --rawfile query verify.sql '{query:$query}' > verify.json
+          http_code="$(curl -sS \
+            -o verify-result.json \
+            -w '%{http_code}' \
+            -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data @verify.json)"
+
+          echo "Supabase verification HTTP status: $http_code"
+          cat verify-result.json
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Verification request failed with HTTP $http_code." >&2
+            exit 1
+          fi
+
+          test "$(jq -r '.[0].rpc_has_no_verbose_prefix' verify-result.json)" = "true"
+          test "$(jq -r '.[0].rpc_uses_followup_text' verify-result.json)" = "true"
+          test "$(jq -r '.[0].constraint_has_full_types' verify-result.json)" = "true"
+          test "$(jq -r '.[0].remaining_verbose_followup_tasks' verify-result.json)" = "0"
+
+          {
+            echo '## Staging Maintenance DB verification'
+            echo
+            echo '- RPC verbose task prefix removed: PASS'
+            echo '- RPC uses entered follow-up text directly: PASS'
+            echo '- Maintenance item constraint accepts full type list: PASS'
+            echo '- Existing verbose Maintenance follow-up tasks remaining: 0'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Repackage exact known-good staging app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/artifacts?name=spray-wash-staging-app-home-fixed&per_page=100" > artifacts.json
+          artifact_id="$(jq -r --arg sha "$KNOWN_GOOD_HEAD_SHA" '[.artifacts[] | select(.expired == false and .workflow_run.head_sha == $sha)] | sort_by(.created_at) | reverse | .[0].id // empty' artifacts.json)"
+          test -n "$artifact_id" || { echo 'Known-good staging artifact not found.' >&2; exit 1; }
+          echo "Using known-good artifact id: $artifact_id"
+          gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > known-good.zip
+          rm -rf staging-build
+          mkdir staging-build
+          unzip -q known-good.zip -d staging-build
+          test -f staging-build/app.js
+          test -f staging-build/operations-v4.js
+          test -f staging-build/index.html
+          test -f staging-build/config.js
+          test -f staging-build/service-worker.js
+          grep -F 'window.SPRAY_WASH_ENV = "staging"' staging-build/config.js
+          grep -F 'window.SW_STAGING_HOME_BUILD = "home-name-fix-v5-20260813";' staging-build/app.js
+          node --check staging-build/app.js
+          node --check staging-build/operations-v4.js
+          printf '%s\n' \
+            'Maintenance DB repair verified in staging.' \
+            'This app bundle is the exact known-good Home/Vehicle Checks staging artifact.' \
+            'No client-side Maintenance task rewrite is included.' \
+            > staging-build/MAINTENANCE_DB_FIX.txt
+          find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
+
+      - name: Upload clean staging app
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-app-maintenance-db-fixed
+          path: staging-build/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo
+            echo '## Clean staging app ready'
+            echo
+            echo '- Production was not changed.'
+            echo '- No additional database write was performed by this finalize workflow.'
+            echo '- Artifact: `spray-wash-staging-app-maintenance-db-fixed`.'
+          } >> "$GITHUB_STEP_SUMMARY"
