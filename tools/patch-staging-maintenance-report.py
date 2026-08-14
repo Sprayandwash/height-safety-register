@@ -54,6 +54,22 @@ new_render = r'''  function renderMaintenanceLogResults(){
     if(!rows.length){ alert('No maintenance records match the current filters for this asset.'); return null; }
     return {asset,rows};
   }
+  function normalizeLegacyMaintenanceReportItem(record,detail){
+    let type=String(record||'').trim();
+    let description=String(detail||'').trim();
+    const routineTypes=new Set([
+      'Engine oil changed','Oil filter changed','Spark plug changed','Air filter changed','Fuel filter changed',
+      'Coolant replaced','Brake fluid replaced','Transmission oil changed','Valves changed','Seals replaced'
+    ]);
+    if(type==='Oil changed'&&description==='Engine oil changed'){
+      type='Engine oil changed'; description='';
+    }else if(type==='Other maintenance'&&routineTypes.has(description)){
+      type=description; description='';
+    }else if(type==='Other maintenance'&&/^Repair:\s*/i.test(description)){
+      type='Repair'; description=description.replace(/^Repair:\s*/i,'').trim();
+    }
+    return {record:type||'Maintenance',detail:description};
+  }
   function maintenanceReportRowData(row){
     const source=row.sourceRow||{};
     const item=row.itemRow||{};
@@ -64,9 +80,10 @@ new_render = r'''  function renderMaintenanceLogResults(){
         odometer:source.odometer??'', parts:'', notes:source.notes||'', followup:'', source:'Vehicle Checks'
       };
     }
+    const normalized=normalizeLegacyMaintenanceReportItem(row.recordType||row.title||'Maintenance',item.description||source.description||'');
     return {
-      date:row.date||'', target:row.target||'', record:row.recordType||row.title||'Maintenance',
-      detail:item.description||source.description||'', person:source.performed_by||row.person||'',
+      date:row.date||'', target:row.target||'', record:normalized.record,
+      detail:normalized.detail, person:source.performed_by||row.person||'',
       odometer:source.odometer??'', parts:item.parts_used||source.parts_used||'', notes:source.notes||'',
       followup:source.further_maintenance_required||'', source:'Maintenance'
     };
@@ -104,8 +121,8 @@ new_render = r'''  function renderMaintenanceLogResults(){
     const report=maintenanceReportRows(); if(!report)return;
     const data=report.rows.map(maintenanceReportRowData);
     const tableRows=data.map(r=>`<tr><td>${esc(nzDate(r.date))}</td><td>${esc(r.record)}</td><td>${esc(r.detail||'—')}</td><td>${esc(r.person||'—')}</td><td>${esc(r.odometer===''?'—':r.odometer)}</td><td>${esc(r.parts||'—')}</td><td>${esc(r.notes||'—')}</td><td>${esc(r.followup||'—')}</td></tr>`).join('');
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(report.asset.label)} Maintenance History</title><style>
-      @page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#0f2740;margin:24px}.doc{max-width:1500px;margin:auto}.head{border-bottom:3px solid #0b4f83;padding-bottom:12px;margin-bottom:14px}.brand{font-weight:800;color:#0b4f83;font-size:18px}.title{font-size:26px;font-weight:800;margin-top:4px}.muted{color:#64748b;font-size:12px}.summary{display:flex;gap:24px;flex-wrap:wrap;margin:12px 0 18px}.summary div{background:#f5f8fb;border:1px solid #dbe5ef;border-radius:8px;padding:8px 10px}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #dbe5ef;padding:7px;vertical-align:top;text-align:left}th{background:#edf4f9;font-weight:800}tr{break-inside:avoid}.noPrint{margin-bottom:14px}.noPrint button{background:#0b4f83;color:white;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}@media print{.noPrint{display:none}body{margin:0}}
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title></title><style>
+      @page{size:A4 landscape;margin:0}html,body{margin:0;padding:0}body{font-family:Arial,sans-serif;color:#0f2740}.doc{box-sizing:border-box;width:100%;padding:12mm;max-width:none;margin:0}.head{border-bottom:3px solid #0b4f83;padding-bottom:12px;margin-bottom:14px}.brand{font-weight:800;color:#0b4f83;font-size:18px}.title{font-size:26px;font-weight:800;margin-top:4px}.muted{color:#64748b;font-size:12px}.summary{display:flex;gap:24px;flex-wrap:wrap;margin:12px 0 18px}.summary div{background:#f5f8fb;border:1px solid #dbe5ef;border-radius:8px;padding:8px 10px}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #dbe5ef;padding:7px;vertical-align:top;text-align:left}th{background:#edf4f9;font-weight:800}thead{display:table-header-group}tr{break-inside:avoid}.noPrint{margin-bottom:14px}.noPrint button{background:#0b4f83;color:white;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}@media print{.noPrint{display:none}.doc{padding:12mm}}
       </style></head><body><div class="doc"><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><div class="head"><div class="brand">Spray &amp; Wash Operations</div><div class="title">Asset Maintenance History</div><div class="muted">Generated ${esc(new Date().toLocaleString('en-NZ'))}</div></div><div class="summary"><div><strong>Asset</strong><br>${esc(report.asset.label)}</div><div><strong>Records shown</strong><br>${data.length}</div><div><strong>Filters</strong><br>${esc(maintenanceReportFilterSummary())}</div></div><table><thead><tr><th>Date</th><th>Maintenance / record type</th><th>Description / result</th><th>Performed by / inspector</th><th>Odometer</th><th>Parts / consumables</th><th>Notes</th><th>Further maintenance</th></tr></thead><tbody>${tableRows}</tbody></table><p class="muted">This report reflects the Maintenance Log records matching the selected asset and filters at the time it was generated.</p></div></body></html>`;
     const w=window.open('', '_blank');
     if(w){w.document.open();w.document.write(html);w.document.close();}
@@ -135,10 +152,14 @@ for marker in [
     'id="opsMaintenanceReportCsv"',
     'function printMaintenanceReport(){',
     'function downloadMaintenanceReportCsv(){',
+    'function normalizeLegacyMaintenanceReportItem(record,detail){',
+    "type==='Other maintenance'&&routineTypes.has(description)",
+    '@page{size:A4 landscape;margin:0}',
+    '<title></title>',
     "Select a vehicle or machinery item before generating an asset maintenance report.",
     "byId('opsMaintenanceReportPrint')?.addEventListener('click',printMaintenanceReport);",
 ]:
     if marker not in text:
         raise SystemExit("Maintenance report patch verification failed: " + marker)
 
-print("Added staging asset Maintenance report: printable PDF workflow plus CSV download using current Maintenance Log filters.")
+print("Polished staging asset Maintenance reports: legacy type normalization plus header/footer-safe print layout.")
