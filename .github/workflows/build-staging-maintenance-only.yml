@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-staging-maintenance-only.yml'
+      - 'tools/fix-staging-maintenance-save.py'
   workflow_dispatch:
 
 permissions:
@@ -56,7 +57,7 @@ jobs:
             > protected-files.sha256
           cp staging-build/operations-v4.js operations-v4.before.js
 
-      - name: Apply Maintenance-only compatibility repair
+      - name: Apply Maintenance-only repair
         shell: bash
         run: |
           set -euo pipefail
@@ -65,6 +66,8 @@ jobs:
           grep -F "uiValue==='Engine oil changed'||uiValue==='Oil changed'?'Oil changed'" staging-build/operations-v4.js
           grep -F "uiValue==='Spark plug changed'?'Spark plug changed':'Other maintenance'" staging-build/operations-v4.js
           grep -F "maintenance_done:'Other maintenance'" staging-build/operations-v4.js
+          grep -F "const furtherMaintenance=textOrNull('opsLogEntryFurtherMaintenance');" staging-build/operations-v4.js
+          grep -F "update({description:furtherMaintenance}).eq('id',r.data.task_id)" staging-build/operations-v4.js
           if cmp -s operations-v4.before.js staging-build/operations-v4.js; then
             echo 'Maintenance patch made no change.' >&2
             exit 1
@@ -89,6 +92,7 @@ jobs:
             echo 'Changed file: operations-v4.js only'
             echo 'Protected files verified unchanged: app.js index.html config.js service-worker.js'
             echo 'Maintenance DB compatibility: Oil changed / Spark plug changed / Other maintenance'
+            echo 'Follow-up task description: exact Further maintenance tasks required text only'
           } > staging-build/MAINTENANCE_ONLY_BUILD.txt
           find staging-build -type f -print0 | sort -z | xargs -0 sha256sum > staging-build/SHA256SUMS.txt
 
@@ -109,7 +113,9 @@ jobs:
             echo '- Source artifact is pinned to the known-good Home/Vehicle Checks build at `02aa4fa66e80f95779f103c63a23e9500080ff56`.'
             echo '- Only `operations-v4.js` is modified.'
             echo '- `app.js`, `index.html`, `config.js`, and `service-worker.js` are verified byte-for-byte unchanged.'
+            echo '- Maintenance values are normalized to the staging database canonical types.'
+            echo '- Follow-up Tasks now use only the text entered in `Further maintenance tasks required` as the description.'
             echo '- Production was not changed.'
             echo '- Artifact: `spray-wash-staging-app-maintenance-only-fix`.'
-            echo '- For cache isolation during testing, serve this artifact from a different localhost port than the known-good baseline, e.g. `localhost:8081`.'
+            echo '- Serve this artifact on a different localhost port from the known-good baseline, e.g. `localhost:8081`.'
           } >> "$GITHUB_STEP_SUMMARY"
