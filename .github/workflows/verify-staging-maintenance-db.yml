@@ -1,0 +1,168 @@
+name: Verify staging Maintenance DB write
+
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-staging-maintenance-db.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Resolve staging project and secret key
+        id: staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+          supabase projects api-keys --project-ref "$ref" --output json > keys.json
+          key="$(jq -r '[.[]? | select(((.name // .type // "") == "service_role") or ((.api_key // .key // "") | startswith("sb_secret_"))) | (.api_key // .key // empty)] | first // empty' keys.json)"
+          test -n "$key" || { echo 'Could not resolve a staging service/secret key for read-only verification.' >&2; exit 1; }
+          echo "::add-mask::$key"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          printf '%s' "$key" > service-key.txt
+
+      - name: Verify completed Maintenance task and linked record
+        shell: bash
+        env:
+          REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          KEY="$(cat service-key.txt)"
+          BASE="https://${REF}.supabase.co/rest/v1"
+          H1="apikey: ${KEY}"
+          H2="Authorization: Bearer ${KEY}"
+          TASK_TEXT='LHS indicator needs changing'
+
+          curl -fsS -G "$BASE/operations_maintenance_tasks" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=*" \
+            --data-urlencode "source_module=eq.maintenance" \
+            --data-urlencode "source_record_type=eq.maintenance_log" \
+            --data-urlencode "title=eq.Further maintenance required" \
+            --data-urlencode "description=eq.${TASK_TEXT}" \
+            --data-urlencode "target_label=eq.MRT70" \
+            --data-urlencode "order=created_at.desc" \
+            --data-urlencode "limit=1" > task.json
+
+          test "$(jq 'length' task.json)" -eq 1 || { echo 'Expected exactly one latest completed MRT70 Maintenance task with the test description.' >&2; cat task.json; exit 1; }
+
+          task_id="$(jq -r '.[0].id' task.json)"
+          status="$(jq -r '.[0].status // empty' task.json)"
+          source_record_id="$(jq -r '.[0].source_record_id // empty' task.json)"
+          completed_at="$(jq -r '.[0].completed_at // empty' task.json)"
+          completed_by="$(jq -r '.[0].completed_by // empty' task.json)"
+          completion_notes="$(jq -r '.[0].completion_notes // empty' task.json)"
+
+          test "$status" = 'Completed' || { echo "Expected task status Completed, found: $status" >&2; exit 1; }
+          test -n "$source_record_id" || { echo 'Completed task is missing source_record_id.' >&2; exit 1; }
+          test -n "$completed_at" || { echo 'Completed task is missing completed_at.' >&2; exit 1; }
+          test -n "$completed_by" || { echo 'Completed task is missing completed_by.' >&2; exit 1; }
+          test -n "$completion_notes" || { echo 'Completed task is missing completion_notes.' >&2; exit 1; }
+
+          curl -fsS -G "$BASE/operations_maintenance_log" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=*" \
+            --data-urlencode "id=eq.${source_record_id}" \
+            --data-urlencode "limit=1" > maintenance-log.json
+
+          test "$(jq 'length' maintenance-log.json)" -eq 1 || { echo 'Linked Maintenance Log row was not found.' >&2; cat maintenance-log.json; exit 1; }
+
+          generated_task_id="$(jq -r '.[0].generated_task_id // empty' maintenance-log.json)"
+          further_text="$(jq -r '.[0].further_maintenance_required // empty' maintenance-log.json)"
+          performed_by="$(jq -r '.[0].performed_by // empty' maintenance-log.json)"
+          vehicle_id="$(jq -r '.[0].vehicle_id // empty' maintenance-log.json)"
+
+          test "$generated_task_id" = "$task_id" || { echo 'Maintenance Log generated_task_id does not point back to the completed task.' >&2; exit 1; }
+          test "$further_text" = "$TASK_TEXT" || { echo "Expected linked follow-up text '$TASK_TEXT', found: $further_text" >&2; exit 1; }
+          test "$performed_by" = 'Samwise Gamgee' || { echo "Expected performed_by Samwise Gamgee, found: $performed_by" >&2; exit 1; }
+          test -n "$vehicle_id" || { echo 'Linked Maintenance Log is missing vehicle_id.' >&2; exit 1; }
+
+          curl -fsS -G "$BASE/operations_vehicles" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=id,rego" \
+            --data-urlencode "id=eq.${vehicle_id}" \
+            --data-urlencode "limit=1" > vehicle.json
+
+          test "$(jq 'length' vehicle.json)" -eq 1 || { echo 'Linked vehicle row was not found.' >&2; exit 1; }
+          test "$(jq -r '.[0].rego | ascii_upcase' vehicle.json)" = 'MRT70' || { echo 'Linked Maintenance Log vehicle is not MRT70.' >&2; exit 1; }
+
+          curl -fsS -G "$BASE/operations_maintenance_log_items" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=*" \
+            --data-urlencode "maintenance_log_id=eq.${source_record_id}" \
+            --data-urlencode "order=sort_order.asc" > maintenance-items.json
+
+          item_count="$(jq 'length' maintenance-items.json)"
+          test "$item_count" -gt 0 || { echo 'No individual Maintenance Log item rows were found.' >&2; exit 1; }
+
+          invalid_item_count="$(jq '[.[] | select((.maintenance_done // "") as $v | ["Engine oil changed","Oil filter changed","Oil changed","Spark plug changed","Air filter changed","Fuel filter changed","Coolant replaced","Brake fluid replaced","Transmission oil changed","Valves changed","Seals replaced","Repair","Other maintenance"] | index($v) | not)] | length' maintenance-items.json)"
+          test "$invalid_item_count" -eq 0 || { echo "Found $invalid_item_count Maintenance item rows outside the approved type list." >&2; cat maintenance-items.json; exit 1; }
+
+          curl -fsS -G "$BASE/operations_maintenance_tasks" \
+            -H "$H1" -H "$H2" \
+            --data-urlencode "select=id,description,source_module,source_record_type,title" \
+            --data-urlencode "source_module=eq.maintenance" \
+            --data-urlencode "source_record_type=eq.maintenance_log" \
+            --data-urlencode "title=eq.Further maintenance required" > maintenance-followup-tasks.json
+
+          verbose_count="$(jq '[.[] | select((.description // "") | startswith("Identified while recording"))] | length' maintenance-followup-tasks.json)"
+          test "$verbose_count" -eq 0 || { echo "Expected 0 verbose Maintenance follow-up tasks, found $verbose_count." >&2; exit 1; }
+
+          {
+            echo '## Maintenance final staging DB verification'
+            echo
+            echo '**Result: PASS**'
+            echo
+            echo "- Task ID: \`$task_id\`"
+            echo "- Task description: $TASK_TEXT"
+            echo "- Task status: $status"
+            echo "- Task completed at: $completed_at"
+            echo "- Task completed by user ID: \`$completed_by\`"
+            echo "- Completion notes: $completion_notes"
+            echo "- Linked Maintenance Log ID: \`$source_record_id\`"
+            echo "- Maintenance date: $(jq -r '.[0].record_date // empty' maintenance-log.json)"
+            echo "- Vehicle: $(jq -r '.[0].rego' vehicle.json)"
+            echo "- Performed by: $performed_by"
+            echo "- Follow-up text stored in log: $further_text"
+            echo "- Individual Maintenance item rows: $item_count"
+            echo "- Invalid Maintenance item types: $invalid_item_count"
+            echo "- Verbose Maintenance follow-up task descriptions remaining: $verbose_count"
+            echo
+            echo '### Maintenance item types'
+            jq -r '.[] | "- " + (.maintenance_done // "") + (if ((.description // "") != "") then ": " + .description else "" end)' maintenance-items.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-maintenance-final-db-verification
+          path: |
+            task.json
+            maintenance-log.json
+            maintenance-items.json
+            vehicle.json
+            maintenance-followup-tasks.json
+          retention-days: 7
+
+      - name: Cleanup key material
+        if: always()
+        run: rm -f projects.json keys.json service-key.txt
