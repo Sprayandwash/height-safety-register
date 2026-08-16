@@ -76,10 +76,12 @@
 
   function byId(id){ return document.getElementById(id); }
   function esc(v){ return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
-  function today(){ return new Date().toISOString().slice(0,10); }
+  const APP_TIME_ZONE = 'Pacific/Auckland';
+  function dateInTimeZone(value = new Date()){ const parts = new Intl.DateTimeFormat('en-NZ',{timeZone:APP_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value); const get=t => parts.find(p=>p.type===t)?.value || ''; return `${get('year')}-${get('month')}-${get('day')}`; }
+  function today(){ return dateInTimeZone(new Date()); }
   function nowIso(){ return new Date().toISOString(); }
-  function nzDate(value){ if(!value) return '—'; const d = new Date(String(value).includes('T') ? value : value + 'T00:00:00'); return Number.isNaN(d.getTime()) ? esc(value) : d.toLocaleDateString('en-NZ'); }
-  function addDays(dateStr, days){ const d = new Date((dateStr || today()) + 'T00:00:00'); d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0,10); }
+  function nzDate(value){ if(!value) return '—'; const raw=String(value); if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const [y,m,d]=raw.split('-');return `${d}/${m}/${y}`;} const dt=new Date(raw); return Number.isNaN(dt.getTime()) ? esc(value) : dt.toLocaleDateString('en-NZ',{timeZone:APP_TIME_ZONE}); }
+  function addDays(dateStr, days){ const [y,m,d]=(dateStr||today()).split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days||0)); return dt.toISOString().slice(0,10); }
   function daysUntil(dateStr){ if(!dateStr) return null; const d = new Date(dateStr + 'T00:00:00'); const n = new Date(today() + 'T00:00:00'); return Math.ceil((d - n) / 86400000); }
   function optionList(values, selected){ return values.map(v => `<option value="${esc(v)}" ${String(v)===String(selected)?'selected':''}>${esc(v)}</option>`).join(''); }
   function normalizeRego(value){ return String(value || '').toUpperCase().replace(/\s+/g,'').trim(); }
@@ -165,10 +167,16 @@
     return String(value || '').replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
   }
   function inspectorDisplayName(){
-    const name = maintenanceUserName(state.profile || {}, state.user || {});
-    if(name) return name;
-    const emailName = String(state.user?.email || '').split('@')[0];
-    return titleCaseName(emailName) || 'Inspector';
+    const currentId=String(state.user?.id||'');
+    const currentProfile=(state.actualUsers||[]).find(u=>String(userIdOfProfile(u)||'')===currentId) || state.profile || null;
+    const profileName=currentProfile ? displayNameOfProfile(currentProfile) : '';
+    if(String(profileName||'').trim()) return titleCaseName(profileName);
+
+    const fallback=maintenanceUserName(state.profile||{},state.user||{});
+    if(String(fallback||'').trim()) return titleCaseName(fallback);
+
+    const emailName=String(state.user?.email||'').split('@')[0];
+    return titleCaseName(emailName)||'Inspector';
   }
 
   function injectStyles(){
@@ -1221,7 +1229,7 @@
   function inspectionFormHtml(templateId){
     const template = state.templates.find(t => t.id === templateId) || vehicleChecklistTemplate() || {};
     const type = template.target_type || 'vehicle';
-    return `<form id="opsInspectionForm" class="ops-form">
+    return `<form id="opsInspectionForm" class="ops-form" autocomplete="off">
       <input type="hidden" id="opsInspectionTemplate" value="${esc(template.id || '')}">
       <label>Inspection date *<input id="opsInspectionDate" type="date" value="${today()}" required></label>
       <label>Inspector<input id="opsInspectorName" value="${esc(inspectorDisplayName())}" readonly></label>
@@ -1643,95 +1651,55 @@
 
   async function submitInspection(e){
     e.preventDefault(); if(!canSubmit()) return alert('Your role cannot submit Operations inspections.');
-    const template = state.templates.find(t=>t.id===byId('opsInspectionTemplate').value) || vehicleChecklistTemplate();
-    if(!template || !template.id) return alert('Vehicle Inspection Checklist is not available. Run the V4.0.4 migration.');
-    const targetType = template.target_type;
-    const vehicleId = byId('opsInspectionVehicle')?.value || null;
-    const washId = byId('opsInspectionWash')?.value || null;
-    const answerRows = [];
-    const itemPhotos = [];
-    let hasProblem = false;
+    const submit=e.submitter; if(submit?.disabled) return; if(submit) submit.disabled=true;
     try{
-      document.querySelectorAll('.ops-question').forEach(q => {
-      const item = state.checklistItems.find(i=>i.id===q.dataset.itemId);
-      if(!item) return;
-      const input = q.querySelector('.ops-answer-value');
-      const answer = input?.value || '';
-      if(input?.hasAttribute('required') && !answer){ throw new Error('Please answer every checklist item before submitting.'); }
-      const notes = q.querySelector('.ops-answer-notes')?.value || '';
-      const problem = itemIsProblem(item, answer);
-      if(problem) hasProblem = true;
-      const photoFiles = Array.from(q.querySelectorAll('.ops-item-photo')).flatMap(input=>Array.from(input.files||[]));
-      if(q.dataset.photoRequired==='true' && !photoFiles.length){ throw new Error('Upload at least one photo of the cleaned vehicle or cab before submitting.'); }
-      answerRows.push({ item, answer, notes, problem });
-      photoFiles.forEach(file=>itemPhotos.push({ item, file }));
-    });
-    }catch(err){ return alert(err.message); }
-    const insRow = {
-      template_id: template.id,
-      target_type: targetType,
-      vehicle_id: vehicleId,
-      washing_equipment_id: washId,
-      submitted_by: state.user.id,
-      submitted_by_email: state.user.email || '',
-      inspector_name: byId('opsInspectorName').value.trim() || null,
-      inspection_date: byId('opsInspectionDate').value || today(),
-      odometer: byId('opsInspectionOdo').value ? Number(byId('opsInspectionOdo').value) : null,
-      overall_result: hasProblem ? 'Problem' : 'Pass',
-      notes: byId('opsInspectionNotes').value.trim() || null
-    };
-    const created = await state.sb.from('operations_inspections').insert(insRow).select().single();
-    if(created.error) return alert(created.error.message);
-    const inspectionId = created.data.id;
-    const answerInserts = answerRows.map(a => ({
-      inspection_id: inspectionId,
-      checklist_item_id: a.item.id,
-      question_text: a.item.question_text,
-      answer_value: a.answer,
-      answer_number: a.item.response_type === 'number' && a.answer !== '' ? Number(a.answer) : null,
-      is_problem: a.problem,
-      severity: a.item.default_severity || 'Medium',
-      notes: a.notes || null
-    }));
-    const ans = await state.sb.from('operations_inspection_answers').insert(answerInserts).select();
-    if(ans.error) return alert('Inspection saved, but answers failed: ' + ans.error.message);
-
-    const taskRows = [];
-    (ans.data || []).forEach(answerRecord => {
-      const source = answerRows.find(a => a.item.id === answerRecord.checklist_item_id);
-      if(!source || !source.problem || !source.item.creates_task_on_problem) return;
-      taskRows.push({
-        source_type: 'Inspection',
-        source_module: 'vehicle_checks',
-        source_record_type: 'inspection_answer',
-        source_record_id: answerRecord.id,
-        source_inspection_id: inspectionId,
-        source_answer_id: answerRecord.id,
-        target_type: washId ? 'washing_equipment' : 'vehicle',
-        target_record_id: washId || vehicleId,
-        target_label: targetName({vehicle_id:vehicleId,washing_equipment_id:washId}),
-        vehicle_id: vehicleId,
-        washing_equipment_id: washId,
-        title: source.item.default_task_title || source.item.question_text,
-        description: `${source.item.question_text}\nAnswer: ${source.answer}${source.notes ? '\nNotes: ' + source.notes : ''}`,
-        status: 'Open',
-        priority: source.item.default_severity || 'Medium',
-        created_by: state.user.id,
-        due_date: today(),
-        assigned_role: 'Maintenance manager',
-        automatic_key: `vehicle_check_answer:${answerRecord.id}`
+      const template=state.templates.find(t=>t.id===byId('opsInspectionTemplate').value)||vehicleChecklistTemplate();
+      if(!template||!template.id)return alert('Vehicle Inspection Checklist is not available.');
+      const targetType=template.target_type;
+      const vehicleId=byId('opsInspectionVehicle')?.value||null;
+      const washId=byId('opsInspectionWash')?.value||null;
+      if(['vehicle','combined'].includes(targetType)&&!vehicleId)return alert('Select a vehicle before submitting.');
+      const answerRows=[]; const itemPhotos=[]; let hasProblem=false;
+      try{
+        document.querySelectorAll('.ops-question').forEach(q=>{
+          const item=state.checklistItems.find(i=>i.id===q.dataset.itemId); if(!item)return;
+          const input=q.querySelector('.ops-answer-value'); const answer=input?.value||'';
+          if(input?.hasAttribute('required')&&!answer)throw new Error('Please answer every checklist item before submitting.');
+          const notes=q.querySelector('.ops-answer-notes')?.value||''; const problem=itemIsProblem(item,answer);
+          if(problem)hasProblem=true;
+          const photoFiles=Array.from(q.querySelectorAll('.ops-item-photo')).flatMap(el=>Array.from(el.files||[]));
+          if(q.dataset.photoRequired==='true'&&!photoFiles.length)throw new Error('Upload at least one photo of the cleaned vehicle or cab before submitting.');
+          answerRows.push({item,answer,notes,problem}); photoFiles.forEach(file=>itemPhotos.push({item,file}));
+        });
+      }catch(err){return alert(err.message);}
+      if(!answerRows.length)return alert('No checklist answers were captured. The inspection was not saved.');
+      const insRow={template_id:template.id,target_type:targetType,vehicle_id:vehicleId,washing_equipment_id:washId,submitted_by:state.user.id,submitted_by_email:state.user.email||'',inspector_name:inspectorDisplayName(),inspection_date:byId('opsInspectionDate').value||today(),odometer:byId('opsInspectionOdo').value?Number(byId('opsInspectionOdo').value):null,overall_result:hasProblem?'Problem':'Pass',notes:byId('opsInspectionNotes').value.trim()||null};
+      const created=await state.sb.from('operations_inspections').insert(insRow).select().single();
+      if(created.error)return alert('Inspection was not saved: '+created.error.message);
+      const inspectionId=created.data.id;
+      const answerInserts=answerRows.map(a=>({inspection_id:inspectionId,checklist_item_id:a.item.id,question_text:a.item.question_text,answer_value:a.answer,answer_number:a.item.response_type==='number'&&a.answer!==''?Number(a.answer):null,is_problem:a.problem,severity:a.item.default_severity||'Medium',notes:a.notes||null}));
+      const ans=await state.sb.from('operations_inspection_answers').insert(answerInserts).select();
+      if(ans.error){await state.sb.from('operations_inspections').delete().eq('id',inspectionId);return alert('Inspection was not completed because its answers failed to save: '+ans.error.message);}
+      if((ans.data||[]).length!==answerInserts.length)return alert('Inspection verification failed: not all checklist answers were returned after save.');
+      const taskRows=[];
+      (ans.data||[]).forEach(answerRecord=>{
+        const source=answerRows.find(a=>a.item.id===answerRecord.checklist_item_id);
+        if(!source||!source.problem)return;
+        taskRows.push({source_type:'Inspection',source_module:'vehicle_checks',source_record_type:'inspection_answer',source_record_id:answerRecord.id,source_inspection_id:inspectionId,source_answer_id:answerRecord.id,target_type:washId?'washing_equipment':'vehicle',target_record_id:washId||vehicleId,target_label:targetName({vehicle_id:vehicleId,washing_equipment_id:washId}),vehicle_id:vehicleId,washing_equipment_id:washId,title:source.item.default_task_title||source.item.question_text,description:`${source.item.question_text}\nAnswer: ${source.answer}${source.notes?'\nNotes: '+source.notes:''}`,status:'Open',priority:source.item.default_severity||'Medium',created_by:state.user.id,due_date:today(),assigned_role:'Maintenance manager',automatic_key:`vehicle_check_answer:${answerRecord.id}`});
       });
-    });
-    if(taskRows.length){
-      const tr = await state.sb.from('operations_maintenance_tasks').insert(taskRows);
-      if(tr.error) alert('Inspection saved, but task generation failed: ' + tr.error.message);
-    }
-
-    for(const p of itemPhotos){ await uploadInspectionPhoto(inspectionId, p.file, p.item.id, p.item.question_text); }
-
-    alert(`Inspection saved. ${taskRows.length} maintenance task${taskRows.length===1?'':'s'} created.`);
-    state.currentView = canUseManagement() ? 'history' : 'vehicle-checks';
-    await loadAll();
+      if(taskRows.length){
+        const tr=await state.sb.from('operations_maintenance_tasks').insert(taskRows).select('id');
+        if(tr.error)return alert('Inspection answers saved, but the required follow-up task could not be created: '+tr.error.message);
+        if((tr.data||[]).length!==taskRows.length)return alert('Inspection task verification failed. Please report this test result.');
+      }
+      for(const p of itemPhotos)await uploadInspectionPhoto(inspectionId,p.file,p.item.id,p.item.question_text);
+      const verify=await state.sb.from('operations_inspections').select('id,overall_result,inspector_name').eq('id',inspectionId).single();
+      if(verify.error||!verify.data?.id)return alert('Inspection save verification failed. Please report this test result.');
+      state.currentView='vehicle-checks'; await loadAll();
+      const fresh=byId('opsInspectionForm');
+      if(fresh){fresh.reset();if(byId('opsInspectionDate'))byId('opsInspectionDate').value=today();if(byId('opsInspectorName'))byId('opsInspectorName').value=inspectorDisplayName();}
+      alert(`Inspection saved and verified. ${taskRows.length} maintenance task${taskRows.length===1?'':'s'} created.`);
+    }finally{if(submit)submit.disabled=false;}
   }
 
   async function uploadInspectionPhoto(inspectionId, file, checklistItemId, caption){
@@ -2537,7 +2505,7 @@
       <label>Date from<input id="opsLogDateFrom" type="date" value="${esc(state.logDateFrom||'')}"></label>
       <label>Date to<input id="opsLogDateTo" type="date" value="${esc(state.logDateTo||'')}"></label>
       <label>Keyword search<input id="opsLogKeyword" type="search" value="${esc(state.logKeyword||'')}" placeholder="Repair, description, part or consumable"></label>
-    </div><div class="registerFilterActions"><button type="button" data-ops-action="clearMaintenanceLogFilters">Clear filters</button></div><div id="opsLogFilterCount" class="ops-subtle registerFilterCount">${resultCount} item${resultCount===1?'':'s'} shown.</div></div>`;
+    </div><div class="registerFilterActions"><button type="button" data-ops-action="clearMaintenanceLogFilters">Clear filters</button><button type="button" id="opsMaintenanceReportPrint">Print / Save PDF</button><button type="button" id="opsMaintenanceReportCsv">Download CSV</button></div><div id="opsLogFilterCount" class="ops-subtle registerFilterCount">${resultCount} item${resultCount===1?'':'s'} shown.</div></div>`;
   }
   function maintenanceLogEntryFormHtml(){
     return `<div class="ops-card"><div class="ops-section-title"><h3>Record Maintenance</h3><button class="ops-btn ghost" type="button" data-ops-action="closeMaintenanceEditor">Cancel</button></div><form id="opsMaintenanceLogForm" class="ops-form">
@@ -2668,6 +2636,107 @@
     if(list)list.innerHTML=rows.length?rows.map(maintenanceLogRecordHtml).join(''):'<p class="ops-subtle">No maintenance records match the current filters.</p>';
     const count=byId('opsLogFilterCount');
     if(count)count.textContent=`${rows.length} item${rows.length===1?'':'s'} shown.`;
+  }
+  function maintenanceReportAsset(){
+    if(state.logMachineryId){
+      const machine=state.washEquipment.find(w=>String(w.id)===String(state.logMachineryId));
+      const vehicle=state.vehicles.find(v=>String(v.id)===String(machine?.assigned_vehicle_id||state.logAssetId||''));
+      return {
+        label:[normalizeRego(vehicle?.rego)||vehicle?.name||'',machine?machineryIdentifier(machine):''].filter(Boolean).join(' / '),
+        slug:machine?machineryIdentifier(machine):'machinery'
+      };
+    }
+    if(state.logAssetId){
+      const vehicle=state.vehicles.find(v=>String(v.id)===String(state.logAssetId));
+      const label=normalizeRego(vehicle?.rego)||vehicle?.name||'Vehicle';
+      return {label,slug:label};
+    }
+    return null;
+  }
+  function maintenanceReportRows(){
+    const asset=maintenanceReportAsset();
+    if(!asset){ alert('Select a vehicle or machinery item before generating an asset maintenance report.'); return null; }
+    const rows=maintenanceLogRecords().filter(maintenanceRecordMatches);
+    if(!rows.length){ alert('No maintenance records match the current filters for this asset.'); return null; }
+    return {asset,rows};
+  }
+  function normalizeLegacyMaintenanceReportItem(record,detail){
+    let type=String(record||'').trim();
+    let description=String(detail||'').trim();
+    const routineTypes=new Set([
+      'Engine oil changed','Oil filter changed','Spark plug changed','Air filter changed','Fuel filter changed',
+      'Coolant replaced','Brake fluid replaced','Transmission oil changed','Valves changed','Seals replaced'
+    ]);
+    if(type==='Oil changed'&&description==='Engine oil changed'){
+      type='Engine oil changed'; description='';
+    }else if(type==='Other maintenance'&&routineTypes.has(description)){
+      type=description; description='';
+    }else if(type==='Other maintenance'&&/^Repair:\s*/i.test(description)){
+      type='Repair'; description=description.replace(/^Repair:\s*/i,'').trim();
+    }
+    return {record:type||'Maintenance',detail:description};
+  }
+  function maintenanceReportRowData(row){
+    const source=row.sourceRow||{};
+    const item=row.itemRow||{};
+    if(row.source==='inspection'){
+      return {
+        date:row.date||'', target:row.target||'', record:'Periodic inspection',
+        detail:displayStatusLabel(source.overall_result)||'', person:row.person||'',
+        odometer:source.odometer??'', parts:'', notes:source.notes||'', followup:'', source:'Vehicle Checks'
+      };
+    }
+    const normalized=normalizeLegacyMaintenanceReportItem(row.recordType||row.title||'Maintenance',item.description||source.description||'');
+    return {
+      date:row.date||'', target:row.target||'', record:normalized.record,
+      detail:normalized.detail, person:source.performed_by||row.person||'',
+      odometer:source.odometer??'', parts:item.parts_used||source.parts_used||'', notes:source.notes||'',
+      followup:source.further_maintenance_required||'', source:'Maintenance'
+    };
+  }
+  function maintenanceReportFilterSummary(){
+    const bits=[];
+    if(state.logType)bits.push(`Type: ${state.logType}`);
+    if(state.logDateFrom)bits.push(`From: ${nzDate(state.logDateFrom)}`);
+    if(state.logDateTo)bits.push(`To: ${nzDate(state.logDateTo)}`);
+    if(String(state.logKeyword||'').trim())bits.push(`Keyword: ${String(state.logKeyword).trim()}`);
+    return bits.length?bits.join(' · '):'All maintenance history for selected asset';
+  }
+  function maintenanceReportSlug(value){
+    return String(value||'asset').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'asset';
+  }
+  function maintenanceCsvCell(value){
+    const text=String(value??'').replace(/\r?\n/g,' ').replace(/"/g,'""');
+    return `"${text}"`;
+  }
+  function downloadMaintenanceReportCsv(){
+    const report=maintenanceReportRows(); if(!report)return;
+    const headings=['Date','Asset','Source','Maintenance / record type','Description / result','Performed by / inspector','Odometer (km)','Parts or consumables','Notes','Further maintenance required'];
+    const data=report.rows.map(maintenanceReportRowData);
+    const lines=[headings.map(maintenanceCsvCell).join(',')].concat(data.map(r=>[
+      r.date,r.target,r.source,r.record,r.detail,r.person,r.odometer,r.parts,r.notes,r.followup
+    ].map(maintenanceCsvCell).join(',')));
+    const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`spray-wash-maintenance-history-${maintenanceReportSlug(report.asset.slug)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function printMaintenanceReport(){
+    const report=maintenanceReportRows(); if(!report)return;
+    const data=report.rows.map(maintenanceReportRowData);
+    const tableRows=data.map(r=>`<tr><td>${esc(nzDate(r.date))}</td><td>${esc(r.record)}</td><td>${esc(r.detail||'—')}</td><td>${esc(r.person||'—')}</td><td>${esc(r.odometer===''?'—':r.odometer)}</td><td>${esc(r.parts||'—')}</td><td>${esc(r.notes||'—')}</td><td>${esc(r.followup||'—')}</td></tr>`).join('');
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title></title><style>
+      @page{size:A4 landscape;margin:0}html,body{margin:0;padding:0}body{font-family:Arial,sans-serif;color:#0f2740}.doc{box-sizing:border-box;width:100%;padding:12mm;max-width:none;margin:0}.head{border-bottom:3px solid #0b4f83;padding-bottom:12px;margin-bottom:14px}.brand{font-weight:800;color:#0b4f83;font-size:18px}.title{font-size:26px;font-weight:800;margin-top:4px}.muted{color:#64748b;font-size:12px}.summary{display:flex;gap:24px;flex-wrap:wrap;margin:12px 0 18px}.summary div{background:#f5f8fb;border:1px solid #dbe5ef;border-radius:8px;padding:8px 10px}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #dbe5ef;padding:7px;vertical-align:top;text-align:left}th{background:#edf4f9;font-weight:800}thead{display:table-header-group}tr{break-inside:avoid}.noPrint{margin-bottom:14px}.noPrint button{background:#0b4f83;color:white;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}@media print{.noPrint{display:none}.doc{padding:12mm}}
+      </style></head><body><div class="doc"><div class="noPrint"><button onclick="print()">Print / Save as PDF</button></div><div class="head"><div class="brand">Spray &amp; Wash Operations</div><div class="title">Asset Maintenance History</div><div class="muted">Generated ${esc(new Date().toLocaleString('en-NZ'))}</div></div><div class="summary"><div><strong>Asset</strong><br>${esc(report.asset.label)}</div><div><strong>Records shown</strong><br>${data.length}</div><div><strong>Filters</strong><br>${esc(maintenanceReportFilterSummary())}</div></div><table><thead><tr><th>Date</th><th>Maintenance / record type</th><th>Description / result</th><th>Performed by / inspector</th><th>Odometer</th><th>Parts / consumables</th><th>Notes</th><th>Further maintenance</th></tr></thead><tbody>${tableRows}</tbody></table><p class="muted">This report reflects the Maintenance Log records matching the selected asset and filters at the time it was generated.</p></div></body></html>`;
+    const w=window.open('', '_blank');
+    if(w){w.document.open();w.document.write(html);w.document.close();}
+    else{
+      const blob=new Blob([html],{type:'text/html'}); const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob); a.download=`spray-wash-maintenance-history-${maintenanceReportSlug(report.asset.slug)}.html`; a.click(); URL.revokeObjectURL(a.href);
+      alert('Popup blocked. The printable report HTML has been downloaded instead.');
+    }
   }
   async function saveMaintenanceLogEntry(e){
     e.preventDefault();if(!canMaintain())return alert('Only Admin or Maintenance manager users can add maintenance records.');
@@ -3033,6 +3102,8 @@
     byId('opsLogDateFrom')?.addEventListener('change',e=>{state.logDateFrom=e.target.value;render();});
     byId('opsLogDateTo')?.addEventListener('change',e=>{state.logDateTo=e.target.value;render();});
     byId('opsLogKeyword')?.addEventListener('input',e=>{state.logKeyword=e.target.value;renderMaintenanceLogResults();});
+    byId('opsMaintenanceReportPrint')?.addEventListener('click',printMaintenanceReport);
+    byId('opsMaintenanceReportCsv')?.addEventListener('click',downloadMaintenanceReportCsv);
     byId('opsLogEntryVehicle')?.addEventListener('change',updateMaintenanceLogEntryAssetOptions);
     document.querySelectorAll('.ops-maintenance-repeatable-toggle').forEach(input=>input.addEventListener('change',()=>updateRepeatableMaintenanceItems(input)));
     document.querySelectorAll('[data-ops-add-maintenance-detail]').forEach(button=>button.addEventListener('click',()=>addMaintenanceDetailItem(button.dataset.opsAddMaintenanceDetail)));
