@@ -31,47 +31,6 @@ jobs:
           python3 tools/fix-staging-inspector-name.py operations-v4.js
           python3 tools/patch-staging-maintenance-report.py operations-v4.js
 
-      - name: Add permanent JavaScript syntax validation
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > .github/workflows/validate-javascript.yml <<'YAML'
-          name: Validate JavaScript syntax
-
-          on:
-            pull_request:
-              paths:
-                - '*.js'
-                - '.github/workflows/validate-javascript.yml'
-            push:
-              branches:
-                - main
-              paths:
-                - '*.js'
-                - '.github/workflows/validate-javascript.yml'
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            syntax:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: '24'
-                - name: Check application JavaScript
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    node --check app.js
-                    node --check operations-v4.js
-                    node --check backup-v4.js
-                    node --check service-worker.js
-          YAML
-
       - name: Validate consolidated source
         shell: bash
         run: |
@@ -90,16 +49,13 @@ jobs:
             exit 1
           fi
 
-      - name: Commit consolidated source to draft branch
+      - name: Commit consolidated application source
         shell: bash
         run: |
           set -euo pipefail
-          rm .github/workflows/consolidate-validated-fixes-on-branch.yml
-          rm tools/consolidate_validated_fixes.py
           git config user.name 'Spray & Wash consolidation bot'
           git config user.email 'sprayandwash@users.noreply.github.com'
-          git add app.js operations-v4.js supabase/migrations/20260816_consolidate_validated_maintenance.sql .github/workflows/validate-javascript.yml
-          git add -u .github/workflows/consolidate-validated-fixes-on-branch.yml tools/consolidate_validated_fixes.py
+          git add app.js operations-v4.js supabase/migrations/20260816_consolidate_validated_maintenance.sql
           git diff --cached --check
           git diff --cached --stat
           git commit -m 'Consolidate staging-validated operations fixes'
