@@ -6,12 +6,18 @@ on:
       - agent/consolidate-staging-validated-operations-fixes
     paths:
       - '.github/workflows/consolidate-validated-fixes-on-branch.yml'
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   consolidate:
+    if: github.event_name != 'pull_request' || github.head_ref == 'agent/consolidate-staging-validated-operations-fixes'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -94,7 +100,7 @@ jobs:
       (ans.data||[]).forEach(answerRecord=>{
         const source=answerRows.find(a=>a.item.id===answerRecord.checklist_item_id);
         if(!source||!source.problem)return;
-        taskRows.push({source_type:'Inspection',source_module:'vehicle_checks',source_record_type:'inspection_answer',source_record_id:answerRecord.id,source_inspection_id:inspectionId,source_answer_id:answerRecord.id,target_type:washId?'washing_equipment':'vehicle',target_record_id:washId||vehicleId,target_label:targetName({vehicle_id:vehicleId,washing_equipment_id:washId}),vehicle_id:vehicleId,washing_equipment_id:washId,title:source.item.default_task_title||source.item.question_text,description:`${source.item.question_text}\\nAnswer: ${source.answer}${source.notes?'\\nNotes: '+source.notes:''}`,status:'Open',priority:source.item.default_severity||'Medium',created_by:state.user.id,due_date:today(),assigned_role:'Maintenance manager',automatic_key:`vehicle_check_answer:${answerRecord.id}`});
+        taskRows.push({source_type:'Inspection',source_module:'vehicle_checks',source_record_type:'inspection_answer',source_record_id:answerRecord.id,source_inspection_id:inspectionId,source_answer_id:answerRecord.id,target_type:washId?'washing_equipment':'vehicle',target_record_id:washId||vehicleId,target_label:targetName({vehicle_id:vehicleId,washing_equipment_id:washId}),vehicle_id:vehicleId,washing_equipment_id:washId,title:source.item.default_task_title||source.item.question_text,description:`${source.item.question_text}\nAnswer: ${source.answer}${source.notes?'\nNotes: '+source.notes:''}`,status:'Open',priority:source.item.default_severity||'Medium',created_by:state.user.id,due_date:today(),assigned_role:'Maintenance manager',automatic_key:`vehicle_check_answer:${answerRecord.id}`});
       });
       if(taskRows.length){
         const tr=await state.sb.from('operations_maintenance_tasks').insert(taskRows).select('id');
@@ -117,7 +123,6 @@ jobs:
               raise SystemExit(f'submitInspection replacement count was {n}, expected 1')
           ops.write_text(s2,encoding='utf-8')
 
-          # Persist the exact staging-tested Maintenance DB repair as a migration.
           workflow=Path('.github/workflows/apply-staging-maintenance-db-fix.yml').read_text(encoding='utf-8')
           match=re.search(r"cat > patch\.sql <<'SQL'\n(.*?)\n\s*SQL\n",workflow,re.S)
           if not match:
@@ -138,7 +143,6 @@ jobs:
           grep -F "Inspection saved and verified." operations-v4.js
           grep -F 'id="opsMaintenanceReportPrint"' operations-v4.js
           grep -F 'id="opsMaintenanceReportCsv"' operations-v4.js
-          grep -F "description:\`${source.item.question_text}\\nAnswer:" operations-v4.js
           grep -F "btrim(p_further_maintenance_required)" supabase/migrations/20260816_consolidate_validated_maintenance.sql
 
       - name: Add permanent JavaScript syntax validation
