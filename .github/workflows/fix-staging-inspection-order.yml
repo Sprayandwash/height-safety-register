@@ -1,0 +1,166 @@
+name: Fix staging inspection ordering
+
+on:
+  push:
+    branches:
+      - agent/consolidate-staging-validated-operations-fixes
+    paths:
+      - '.github/workflows/fix-staging-inspection-order.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - name: Check out consolidation branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/consolidate-staging-validated-operations-fixes
+          fetch-depth: 0
+
+      - name: Fix same-day inspection ordering
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('operations-v4.js')
+          s=p.read_text(encoding='utf-8')
+
+          old_latest="""    const rows = state.inspections.filter(i => targetType === 'vehicle' ? i.vehicle_id === id : i.washing_equipment_id === id)\n      .sort((a,b) => String(b.inspection_date || '').localeCompare(String(a.inspection_date || '')));"""
+          new_latest="""    const rows = state.inspections.filter(i => targetType === 'vehicle' ? i.vehicle_id === id : i.washing_equipment_id === id)\n      .sort((a,b) =>\n        String(b.inspection_date || '').localeCompare(String(a.inspection_date || ''))\n        || String(b.created_at || '').localeCompare(String(a.created_at || ''))\n        || String(b.id || '').localeCompare(String(a.id || ''))\n      );"""
+          if old_latest not in s:
+              raise SystemExit('latestInspectionFor ordering anchor not found')
+          s=s.replace(old_latest,new_latest,1)
+
+          old_recent="""    const myRecent = state.inspections.filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email).slice(0,5);"""
+          new_recent="""    const myRecent = state.inspections\n      .filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email)\n      .sort((a,b) =>\n        String(b.inspection_date || '').localeCompare(String(a.inspection_date || ''))\n        || String(b.created_at || '').localeCompare(String(a.created_at || ''))\n        || String(b.id || '').localeCompare(String(a.id || ''))\n      )\n      .slice(0,5);"""
+          if old_recent not in s:
+              raise SystemExit('My recent checks ordering anchor not found')
+          s=s.replace(old_recent,new_recent,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          node --check operations-v4.js
+          grep -F "String(b.created_at || '').localeCompare(String(a.created_at || ''))" operations-v4.js | wc -l | grep -Fx '3'
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Spray & Wash consolidation bot'
+          git config user.email 'sprayandwash@users.noreply.github.com'
+          git add operations-v4.js
+          git diff --cached --check
+          git commit -m 'Order same-day inspection records newest first'
+          git push origin HEAD:agent/consolidate-staging-validated-operations-fixes
+          git rev-parse HEAD > source-commit.txt
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Resolve staging project and publishable key
+        id: staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing SUPABASE_ACCESS_TOKEN.' >&2; exit 1; }
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1 || { echo "Expected one staging project; found $count." >&2; exit 1; }
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+          supabase projects api-keys --project-ref "$ref" --output json > keys.json
+          key="$(jq -r '[.[]? | (.api_key // .key // empty) | select(startswith("sb_publishable_"))] | first // empty' keys.json)"
+          if [ -z "$key" ]; then key="$(jq -r '[.[]? | select((.name // .type // "") == "anon") | (.api_key // .key // empty)] | first // empty' keys.json)"; fi
+          test -n "$key" || { echo 'No staging publishable/anon key returned.' >&2; exit 1; }
+          echo "::add-mask::$key"
+          printf '%s' "$key" > publishable-key.txt
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "url=https://${ref}.supabase.co" >> "$GITHUB_OUTPUT"
+
+      - name: Build direct-source staging artifact
+        shell: bash
+        env:
+          STAGING_URL: ${{ steps.staging.outputs.url }}
+          STAGING_REF: ${{ steps.staging.outputs.ref }}
+        run: |
+          set -euo pipefail
+          rm -rf staging-build
+          mkdir staging-build
+          rsync -a ./ staging-build/ \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'supabase/' \
+            --exclude 'tools/' \
+            --exclude 'staging-build/' \
+            --exclude '*.zip'
+
+          publishable="$(cat publishable-key.txt)"
+          cat > staging-build/config.js <<EOF
+          // STAGING ONLY. Generated by GitHub Actions. Do not use for production.
+          window.SUPABASE_URL = "$STAGING_URL";
+          window.SUPABASE_ANON_KEY = "$publishable";
+          window.SPRAY_WASH_ENV = "staging";
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('staging-build/index.html')
+          s=p.read_text(encoding='utf-8')
+          marker='<body>'
+          banner='''<body class="stagingEnvironment">\n<div id="stagingEnvironmentBanner" style="position:sticky;top:0;z-index:99999;background:#b91c1c;color:#fff;text-align:center;padding:9px 12px;font:900 14px system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.04em;box-shadow:0 2px 10px #0003">STAGING — INSPECTION ORDER FIX — TEST DATA ONLY — NOT PRODUCTION</div>'''
+          if marker not in s: raise SystemExit('Could not locate body marker')
+          p.write_text(s.replace(marker,banner,1),encoding='utf-8')
+          PY
+
+          if [ -f staging-build/service-worker.js ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+          p=Path('staging-build/service-worker.js')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('operations-v4','operations-staging-order-fix-v4')
+          s=s.replace('height-safety-register','height-safety-register-staging-order-fix')
+          p.write_text(s,encoding='utf-8')
+          PY
+          fi
+
+          cmp operations-v4.js staging-build/operations-v4.js
+          node --check staging-build/operations-v4.js
+          if grep -Fq "$PRODUCTION_PROJECT_REF" staging-build/config.js; then echo 'SAFETY STOP: production ref found.' >&2; exit 1; fi
+          grep -F "$STAGING_URL" staging-build/config.js >/dev/null
+          grep -F 'STAGING — INSPECTION ORDER FIX — TEST DATA ONLY — NOT PRODUCTION' staging-build/index.html >/dev/null
+
+          source_commit="$(cat source-commit.txt)"
+          cat > staging-build/STAGING-README.txt <<EOF
+          Spray & Wash Operations — inspection ordering fix
+          Source branch: agent/consolidate-staging-validated-operations-fixes
+          Source commit: $source_commit
+          Staging Supabase ref: $STAGING_REF
+          Production was not targeted.
+          EOF
+
+      - name: Upload fixed staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spray-wash-staging-direct-inspection-order-fixed
+          path: staging-build/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: rm -f projects.json keys.json publishable-key.txt
