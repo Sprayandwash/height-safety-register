@@ -133,7 +133,11 @@
   }
   function latestInspectionFor(targetType, id){
     const rows = state.inspections.filter(i => targetType === 'vehicle' ? i.vehicle_id === id : i.washing_equipment_id === id)
-      .sort((a,b) => String(b.inspection_date || '').localeCompare(String(a.inspection_date || '')));
+      .sort((a,b) =>
+        String(b.inspection_date || '').localeCompare(String(a.inspection_date || ''))
+        || String(b.created_at || '').localeCompare(String(a.created_at || ''))
+        || String(b.id || '').localeCompare(String(a.id || ''))
+      );
     return rows[0] || null;
   }
   function openTasks(){ return state.tasks.filter(t => !['Completed','Deferred'].includes(t.status)); }
@@ -1036,7 +1040,14 @@
   function periodicVehicleChecksHtml(){
     if(!canSubmit()) return `<div class="ops-card"><h3>Vehicle Inspection Checklist</h3><p>Your role can view Operations, but cannot submit vehicle checks.</p></div>`;
     const template = vehicleChecklistTemplate();
-    const myRecent = state.inspections.filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email).slice(0,5);
+    const myRecent = state.inspections
+      .filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email)
+      .sort((a,b) =>
+        String(b.inspection_date || '').localeCompare(String(a.inspection_date || ''))
+        || String(b.created_at || '').localeCompare(String(a.created_at || ''))
+        || String(b.id || '').localeCompare(String(a.id || ''))
+      )
+      .slice(0,5);
     return `
       <div class="ops-card">
         <h3>Vehicle Inspection Checklist</h3>
