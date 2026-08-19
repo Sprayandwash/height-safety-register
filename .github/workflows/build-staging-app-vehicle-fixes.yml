@@ -102,8 +102,10 @@ jobs:
             'function datePlus(days){let d=new Date(today()+"T00:00:00"); d.setDate(d.getDate()+Number(days)); return d.toISOString().slice(0,10);}': 'function datePlus(days){const [y,m,d]=today().split("-").map(Number);const x=new Date(Date.UTC(y,m-1,d));x.setUTCDate(x.getUTCDate()+Number(days||0));return x.toISOString().slice(0,10);}'
           }
           for old,new in replacements.items():
-              if old not in s: raise SystemExit('app.js patch anchor missing: '+old[:80])
-              s=s.replace(old,new,1)
+              if old in s:
+                  s=s.replace(old,new,1)
+              elif new not in s:
+                  raise SystemExit('app.js patch anchor missing: '+old[:80])
 
           helper_anchor='window.addEventListener("DOMContentLoaded",init);\nasync function init(){'
           helper='''function handoffToOperationsHome(){
@@ -116,20 +118,26 @@ jobs:
 }
 window.addEventListener("DOMContentLoaded",init);
 async function init(){'''
-          if helper_anchor not in s: raise SystemExit('app.js Home handoff anchor missing')
-          s=s.replace(helper_anchor,helper,1)
+          if helper_anchor in s:
+              s=s.replace(helper_anchor,helper,1)
+          elif 'function handoffToOperationsHome(){' not in s:
+              raise SystemExit('app.js Home handoff anchor missing')
 
           init_old='''  const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser){await ensureCurrentProfile(); await loadRoles(); await loadAppSettings(); await loadData(); await refreshAuditLogs();}
 }'''
           init_new='''  const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser){await ensureCurrentProfile(); await loadRoles(); await loadAppSettings(); await loadData(); await refreshAuditLogs(); handoffToOperationsHome();}
 }'''
-          if init_old not in s: raise SystemExit('app.js restored-session flow anchor missing')
-          s=s.replace(init_old,init_new,1)
+          if init_old in s:
+              s=s.replace(init_old,init_new,1)
+          elif 'await refreshAuditLogs(); handoffToOperationsHome();' not in s:
+              raise SystemExit('app.js restored-session flow anchor missing')
 
           signin_old='''async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await ensureCurrentProfile();await loadRoles();await loadAppSettings();await loadData();await refreshAuditLogs();}'''
           signin_new='''async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await ensureCurrentProfile();await loadRoles();await loadAppSettings();await loadData();await refreshAuditLogs();handoffToOperationsHome();}'''
-          if signin_old not in s: raise SystemExit('app.js sign-in flow anchor missing')
-          s=s.replace(signin_old,signin_new,1)
+          if signin_old in s:
+              s=s.replace(signin_old,signin_new,1)
+          elif 'await refreshAuditLogs();handoffToOperationsHome();' not in s:
+              raise SystemExit('app.js sign-in flow anchor missing')
           app.write_text(s,encoding='utf-8')
 
           ops = Path('staging-build/operations-v4.js')
@@ -143,8 +151,10 @@ async function init(){'''
             "    refreshTopUserSummary();\n    if(state.currentModule === 'home') renderModuleHome();": "    refreshTopUserSummary();\n    setupLogoHomeClick();\n    if(state.currentModule === 'home') renderModuleHome();"
           }
           for old,new in replacements.items():
-              if old not in s: raise SystemExit('operations-v4.js patch anchor missing: '+old[:100])
-              s=s.replace(old,new,1)
+              if old in s:
+                  s=s.replace(old,new,1)
+              elif new not in s:
+                  raise SystemExit('operations-v4.js patch anchor missing: '+old[:100])
 
           old_name = '''  function inspectorDisplayName(){
     const name = maintenanceUserName(state.profile || {}, state.user || {});
