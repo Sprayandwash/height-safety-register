@@ -1089,7 +1089,7 @@
   function vehicleCheckDueItems(){
     const template=vehicleChecklistTemplate();
     const frequency=Math.max(1,Number(template.frequency_days)||14);
-    const lead=Math.min(14,frequency);
+    const lead=Math.min(7,frequency);
     return state.vehicles.filter(vehicle=>vehicle.status==='Active').flatMap(vehicle=>{
       const latest=state.inspections.filter(inspection=>String(inspection.template_id)===String(template.id)&&String(inspection.vehicle_id)===String(vehicle.id))
         .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))[0];
