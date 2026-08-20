@@ -20,8 +20,20 @@ async function signInAndOpenVehicleChecks(page, staging) {
   await page.locator('#loginPassword').fill(staging.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.locator('#signedIn')).toBeVisible({ timeout: 15_000 });
-  await page.waitForFunction(() => Boolean(window.openVehicleChecksModule));
-  await page.evaluate(() => window.openVehicleChecksModule());
+  // #signedIn changes before Operations has necessarily received the auth
+  // event and loaded the user's roles. Wait for the actual authorised module
+  // card, then use its normal UI path rather than calling an app global early.
+  await page.waitForFunction(() => Boolean(window.SWOperationsV4?.state?.user?.id));
+  try {
+    await expect(page.locator('.ops-home-vehicle')).toBeVisible({ timeout: 15_000 });
+  } catch {
+    const details = await page.evaluate(() => ({
+      signedInUser: window.SWOperationsV4?.state?.user?.email || null,
+      loadedRoles: window.SWOperationsV4?.state?.roles || []
+    }));
+    throw new Error(`Staging test account cannot access Vehicle Checks. Assign it the Vehicle inspector or Admin role. Loaded roles: ${details.loadedRoles.join(', ') || 'none'}; user: ${details.signedInUser || 'not loaded'}.`);
+  }
+  await page.locator('.ops-home-vehicle').click();
   await expect(page.locator('#opsInspectionForm')).toBeVisible({ timeout: 15_000 });
 }
 
