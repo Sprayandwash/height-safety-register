@@ -1069,14 +1069,17 @@
     const reminderHtml = vehicleCheckReminderHtml(reminders);
     if(!canSubmit()) return `${reminderHtml}<div class="ops-card"><h3>Vehicle Inspection Checklist</h3><p>Your role can view Operations, but cannot submit vehicle checks.</p></div>`;
     const template = vehicleChecklistTemplate();
-    const myRecent = state.inspections
-      .filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email)
+    const newestFirst = rows => rows
       .sort((a,b) =>
         String(b.inspection_date || '').localeCompare(String(a.inspection_date || ''))
         || String(b.created_at || '').localeCompare(String(a.created_at || ''))
         || String(b.id || '').localeCompare(String(a.id || ''))
-      )
+      );
+    const myRecent = newestFirst(state.inspections
+      .filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email))
       .slice(0,5);
+    const sharedRecent = canManage() ? newestFirst([...state.inspections]).slice(0,10) : [];
+    const recentTable = (rows, includeInspector=false) => `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Vehicle</th>${includeInspector?'<th>Inspector</th>':''}<th>Result</th><th>Notes</th></tr>${rows.map(i=>`<tr><td>${nzDate(i.inspection_date)}</td><td>${esc(targetName(i))}</td>${includeInspector?`<td>${esc(i.inspector_name||i.submitted_by_email||'—')}</td>`:''}<td>${statusPill(i.overall_result)}</td><td>${esc(i.notes||'')}</td></tr>`).join('')}</table></div>`;
     return `
       ${reminderHtml}
       <div class="ops-card">
@@ -1085,8 +1088,9 @@
       </div>
       <div class="ops-card" style="margin-top:1rem">
         <h3>My recent checks</h3>
-        ${myRecent.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Vehicle</th><th>Result</th><th>Notes</th></tr>${myRecent.map(i=>`<tr><td>${nzDate(i.inspection_date)}</td><td>${esc(targetName(i))}</td><td>${statusPill(i.overall_result)}</td><td>${esc(i.notes||'')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No recent checks submitted by you yet.</p>'}
-      </div>`;
+        ${myRecent.length ? recentTable(myRecent) : '<p class="ops-subtle">No recent checks submitted by you yet.</p>'}
+      </div>
+      ${canManage() ? `<div class="ops-card" style="margin-top:1rem"><h3>Recent checks (all staff)</h3><p class="ops-subtle">Manager view of the latest submitted vehicle checks.</p>${sharedRecent.length ? recentTable(sharedRecent,true) : '<p class="ops-subtle">No vehicle checks have been submitted yet.</p>'}</div>` : ''}`;
   }
   function vehicleCheckDueItems(){
     const template=vehicleChecklistTemplate();

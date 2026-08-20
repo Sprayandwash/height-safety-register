@@ -27,6 +27,13 @@ test('REG-015: vehicle-check selects start blank and never offer No response',()
   assert.doesNotMatch(operations,/No response/i);
 });
 
+test('REG-016: shared vehicle-check history is restricted to managers and admins',()=>{
+  const operations=read('operations-v4.js');
+  assert.match(operations,/const sharedRecent = canManage\(\) \? newestFirst\(\[\.\.\.state\.inspections\]\)\.slice\(0,10\) : \[\];/);
+  assert.match(operations,/Recent checks \(all staff\)/);
+  assert.match(operations,/includeInspector\?'<th>Inspector<\/th>':''/);
+});
+
 test('REG-051: manifest and index reference the approved packaged app icons',()=>{
   const manifest=JSON.parse(read('manifest.webmanifest'));
   const index=read('index.html');
