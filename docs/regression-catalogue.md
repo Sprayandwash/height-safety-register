@@ -8,6 +8,25 @@ IDs are permanent. A fixed bug remains here so that it cannot silently return. `
 
 The first eight Operations regressions are implemented in `tests/regression/operations-rules.test.cjs` and run in the **Regression tests** GitHub Actions workflow.
 
+## Browser smoke suite
+
+The first Playwright browser checks live in `tests/e2e/` and run in the **Browser smoke tests** GitHub Actions job. They use a local static server and do not sign in, write to Supabase, or use production data.
+
+| ID | Check | Status |
+| --- | --- | --- |
+| REG-UI-001 | A visitor can load the application and see the sign-in form. | Automated in Chromium |
+| REG-UI-002 | The PWA manifest and the approved 192px/512px app icons load. | Automated in Chromium |
+
+Run locally after installing the test dependencies and Chromium:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:ui
+```
+
+On failure, Playwright keeps an HTML report, screenshot, video, and execution trace locally; GitHub Actions uploads these as a 14-day PR artifact.
+
 | ID | Confirmed regression | Expected behaviour | Coverage target | Current state |
 | --- | --- | --- | --- | --- |
 | REG-001 | A passed periodic vehicle check could create maintenance tasks. | A check containing only `Completed OK` / `N/A` creates no follow-up task. | Unit + staging integration | Automated |
