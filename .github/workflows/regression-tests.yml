@@ -1,0 +1,30 @@
+name: Regression tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Known-bug regression suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate browser scripts
+        run: |
+          node --check operations-rules.js
+          node --check operations-v4.js
+          node --check app.js
+      - name: Run regression catalogue tests
+        run: node --test tests/regression/*.test.cjs
+      - name: Publish manual staging checklist
+        run: |
+          echo '## Manual staging checks' >> "$GITHUB_STEP_SUMMARY"
+          echo 'See `docs/regression-catalogue.md` for REG-005 and REG-006, plus any entry marked manual.' >> "$GITHUB_STEP_SUMMARY"

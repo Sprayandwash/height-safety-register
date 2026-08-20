@@ -14,6 +14,7 @@
   const MACHINERY_TYPE_LABELS = { Engine:'Engine', Gearbox:'Reduction gearbox', Pump:'Pump' };
   const MACHINERY_SIDE_CODES = { Driver:'DS', Passenger:'PS' };
   const ROLE_DEFS = ['Admin','Height equipment manager','Height equipment user','Maintenance manager','Vehicle inspector'];
+  const REGRESSION_RULES = window.SWOperationsRules || {};
   const state = {
     sb: null,
     user: null,
@@ -99,6 +100,7 @@
     return MACHINERY_TYPE_LABELS[type] || type || 'Machinery';
   }
   function scheduleProcedureMatchesMachinery(procedure, machinery){
+    if(typeof REGRESSION_RULES.scheduleProcedureMatchesMachinery==='function') return REGRESSION_RULES.scheduleProcedureMatchesMachinery(procedure, machinery);
     if(/^pm planned\b/i.test(String(procedure?.name || '')) || /^planned:/i.test(String(procedure?.category || ''))) return true;
     const category = certNorm(procedure?.category);
     const type = machineryType(machinery);
@@ -158,7 +160,7 @@
       );
     return rows[0] || null;
   }
-  function openTasks(){ return state.tasks.filter(t => !['Completed','Deferred'].includes(t.status)); }
+  function openTasks(){ return state.tasks.filter(t => typeof REGRESSION_RULES.taskIsOpen==='function' ? REGRESSION_RULES.taskIsOpen(t) : !['Completed','Deferred'].includes(t.status)); }
   function canUseManagement(){ return hasAny(['Maintenance manager']); }
   function canUseHeight(){ return hasAny(['Height equipment manager','Height equipment user']); }
   function canUseVehicleChecks(){ return hasAny(['Vehicle inspector']); }
@@ -1089,7 +1091,7 @@
   function vehicleCheckDueItems(){
     const template=vehicleChecklistTemplate();
     const frequency=Math.max(1,Number(template.frequency_days)||14);
-    const lead=Math.min(7,frequency);
+    const lead=typeof REGRESSION_RULES.vehicleCheckDueSoonLeadDays==='function' ? REGRESSION_RULES.vehicleCheckDueSoonLeadDays(frequency) : Math.min(7,frequency);
     return state.vehicles.filter(vehicle=>vehicle.status==='Active').flatMap(vehicle=>{
       const latest=state.inspections.filter(inspection=>String(inspection.template_id)===String(template.id)&&String(inspection.vehicle_id)===String(vehicle.id))
         .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))[0];
@@ -1097,7 +1099,7 @@
       if(!anchor) return [];
       const dueDate=addDays(anchor,frequency);
       const days=daysUntil(dueDate);
-      if(days===null||days>lead) return [];
+      if(days===null || !(typeof REGRESSION_RULES.vehicleCheckNeedsAttention==='function' ? REGRESSION_RULES.vehicleCheckNeedsAttention(days, frequency) : days<=lead)) return [];
       return [{vehicle,latest,dueDate,days,note:latest?`Last completed ${nzDate(latest.inspection_date)}`:'No completed vehicle check recorded'}];
     }).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
   }
@@ -1703,6 +1705,7 @@
   }
 
   function itemIsProblem(item, answer){
+    if(typeof REGRESSION_RULES.itemIsProblem==='function') return REGRESSION_RULES.itemIsProblem(item, answer);
     if(/(?:Record reading from TDS Meter|Measure pure water system)/i.test(String(item?.question_text||''))){
       const reading=Number(answer);
       return Number.isFinite(reading) && reading>10;
@@ -1746,9 +1749,10 @@
       if(ans.error){await state.sb.from('operations_inspections').delete().eq('id',inspectionId);return alert('Inspection was not completed because its answers failed to save: '+ans.error.message);}
       if((ans.data||[]).length!==answerInserts.length)return alert('Inspection verification failed: not all checklist answers were returned after save.');
       const taskRows=[];
+      const issueItemIds=new Set((typeof REGRESSION_RULES.issueAnswerRows==='function' ? REGRESSION_RULES.issueAnswerRows(answerRows) : answerRows.filter(row=>row.problem)).map(row=>String(row.item.id)));
       (ans.data||[]).forEach(answerRecord=>{
         const source=answerRows.find(a=>a.item.id===answerRecord.checklist_item_id);
-        if(!source||!source.problem)return;
+        if(!source || !issueItemIds.has(String(source.item.id)))return;
         taskRows.push({source_type:'Inspection',source_module:'vehicle_checks',source_record_type:'inspection_answer',source_record_id:answerRecord.id,source_inspection_id:inspectionId,source_answer_id:answerRecord.id,target_type:washId?'washing_equipment':'vehicle',target_record_id:washId||vehicleId,target_label:targetName({vehicle_id:vehicleId,washing_equipment_id:washId}),vehicle_id:vehicleId,washing_equipment_id:washId,title:source.item.default_task_title||source.item.question_text,description:`${source.item.question_text}\nAnswer: ${source.answer}${source.notes?'\nNotes: '+source.notes:''}`,status:'Open',priority:source.item.default_severity||'Medium',created_by:state.user.id,due_date:today(),assigned_role:'Maintenance manager',automatic_key:`vehicle_check_answer:${answerRecord.id}`});
       });
       if(taskRows.length){
