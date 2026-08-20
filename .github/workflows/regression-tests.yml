@@ -19,6 +19,12 @@ jobs:
           node-version: 20
       - name: Validate browser scripts
         run: |
+          node --check config.js
+          node --check backup-v4-core.js
+          node --check backup-v4.js
+          node --check photo-storage-v4.0.84.js
+          node --check release-v4.0.83.js
+          node --check service-worker.js
           node --check operations-rules.js
           node --check operations-v4.js
           node --check app.js

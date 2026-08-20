@@ -36,7 +36,7 @@ The first eight Operations regressions are implemented in `tests/regression/oper
 | ID | Confirmed regression | Expected behaviour | Coverage target | Status |
 | --- | --- | --- | --- | --- |
 | REG-014 | Same-day inspections could display in non-deterministic order. | Order by inspection date, then creation time, then stable ID—newest first. | Database/browser integration | Pending |
-| REG-015 | Vehicle-check dropdowns offered `No response` as a selectable answer. | Required fields start blank; blank is invalid; `No response` is never a selectable response. | Checklist schema/browser test | Pending |
+| REG-015 | Vehicle-check dropdowns offered `No response` as a selectable answer. | Required fields start blank; blank is invalid; `No response` is never a selectable response. | Static checklist guard + browser test | Automated static guard; browser pending |
 
 ### Maintenance, schedules, tasks, and reports
 
@@ -92,17 +92,17 @@ The first eight Operations regressions are implemented in `tests/regression/oper
 | --- | --- | --- | --- | --- |
 | REG-049 | Logo could load late, wrong, blank, or distorted before authentication. | The packaged logo is correct and proportionate from first paint. | Screenshot/browser test | Pending |
 | REG-050 | Shared palette and dashboard/action layouts drifted between modules. | Shared tokens, active states, spacing, and card alignment remain consistent. | CSS token + visual baseline | Pending |
-| REG-051 | Browser/PWA icons could remain obsolete after an icon release. | Manifest/favicons reference approved assets; clean installs use them. | Static manifest + manual device test | Pending |
-| REG-052 | Service-worker/browser caching could keep an old release active or omit critical assets. | Upgrade uses the new complete asset set; service worker cache includes critical files. | Static manifest + controlled upgrade/offline test | Pending |
-| REG-053 | Release assets and version references could be inconsistent or installation instructions could omit changed runtime files. | All active asset/version/cache references agree and release manifest lists every changed runtime file. | CI release-integrity test | Pending |
+| REG-051 | Browser/PWA icons could remain obsolete after an icon release. | Manifest/favicons reference approved assets; clean installs use them. | Static manifest + manual device test | Automated static guard; device test pending |
+| REG-052 | Service-worker/browser caching could keep an old release active or omit critical assets. | Upgrade uses the new complete asset set; service worker cache includes critical files. | Static service-worker guard + controlled upgrade/offline test | Automated static guard; upgrade test pending |
+| REG-053 | Release assets and version references could be inconsistent or installation instructions could omit changed runtime files. | All active asset/version/cache references agree and release manifest lists every changed runtime file. | CI release-integrity test | Automated entry-script guard; full release metadata check pending |
 | REG-054 | GitHub could not reproduce the deployed database schema/migrations. | All applied migrations are version-controlled and clean migration output matches an approved snapshot. | Clean database migration/schema test | Pending; live schema export needed |
 
 ### Regression-system safeguards
 
 | ID | Confirmed regression | Expected behaviour | Coverage target | Status |
 | --- | --- | --- | --- | --- |
-| REG-055 | A verifier treated a successful non-200 `2xx` response as failure. | Defined successful `2xx` responses pass; `4xx`/`5xx` fail. | Verifier unit test | Pending |
-| REG-056 | A verifier treated optional blank completion notes as failure. | A completed task can have blank notes if completion identity and timestamp exist. | Verifier integration | Pending |
+| REG-055 | A verifier treated a successful non-200 `2xx` response as failure. | Defined successful `2xx` responses pass; `4xx`/`5xx` fail. | Verifier unit test | Automated |
+| REG-056 | A verifier treated optional blank completion notes as failure. | A completed task can have blank notes if completion identity and timestamp exist. | Verifier helper + integration | Automated helper; integration pending |
 
 ## Manual release checklist
 
