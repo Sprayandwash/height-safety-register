@@ -13,10 +13,9 @@ jobs:
     timeout-minutes: 10
     environment: staging
     env:
-      E2E_STAGING_PROJECT_REF: ${{ secrets.E2E_STAGING_PROJECT_REF }}
-      E2E_STAGING_BASE_URL: ${{ secrets.E2E_STAGING_BASE_URL }}
       E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
       E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,13 +26,44 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Verify the isolated staging app and test account
-        run: npm run test:staging:preflight
+      - name: Download latest isolated staging app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          if [ -z "$artifact_id" ]; then
+            echo 'No current spray-wash-staging-app artifact exists. Run Build staging app first.' >&2
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app
+          unzip -q staging-app.zip -d staging-app
+          test -f staging-app/index.html
+          test -f staging-app/config.js
+          test -f staging-app/STAGING-README.txt
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test -n "$ref" || { echo 'Staging artifact has no project ref.' >&2; exit 1; }
+          test "$ref" != 'twkgfmctuffmkvkmdkct' || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
+          ! grep -F 'twkgfmctuffmkvkmdkct' staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+      - name: Serve and verify the isolated staging app and test account
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:preflight
       - name: Publish review-run status
         run: |
           echo '## Staging browser review preflight passed' >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
-          echo 'This run only verifies the isolated staging app, its warning banner, and the dedicated test-account sign-in.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This run downloads and serves the latest isolated staging build, then verifies its warning banner and the dedicated test-account sign-in.' >> "$GITHUB_STEP_SUMMARY"
           echo 'It does not create, change, or remove app records.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Playwright failure evidence
         if: ${{ failure() }}
@@ -43,5 +73,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            staging-http-server.log
           if-no-files-found: warn
           retention-days: 14

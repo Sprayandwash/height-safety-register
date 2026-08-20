@@ -14,14 +14,14 @@ In the repository's `staging` GitHub Environment, add these secrets:
 
 | Secret | Value |
 | --- | --- |
-| `E2E_STAGING_PROJECT_REF` | The isolated staging Supabase project ref. It must not be the production ref. |
-| `E2E_STAGING_BASE_URL` | The deployed staging app URL showing the persistent `STAGING — TEST DATA ONLY — NOT PRODUCTION` banner. |
 | `E2E_STAGING_TEST_EMAIL` | The dedicated staging test-account email. |
 | `E2E_STAGING_TEST_PASSWORD` | Its password. |
 
+The preflight retrieves the staging project ref and temporary browser URL itself from the latest `spray-wash-staging-app` artifact. Do not add a local `127.0.0.1` URL as a GitHub secret: that address only exists on your own computer.
+
 ## Running the access preflight
 
-In GitHub, open **Actions** → **Staging browser review preflight** → **Run workflow**. A successful run confirms that the test harness can safely reach staging and sign in. A missing secret, production ref, production URL, or absent staging banner stops the run.
+First run **Build staging app** to create a current `spray-wash-staging-app` artifact. Then open **Actions** → **Staging browser review preflight** → **Run workflow**. A successful run confirms that the test harness can safely serve the isolated staging bundle and sign in. A missing secret, absent bundle, production ref/configuration, or absent staging banner stops the run.
 
 ## Review workflow contract
 
