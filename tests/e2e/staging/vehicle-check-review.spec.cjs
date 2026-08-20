@@ -47,7 +47,11 @@ async function chooseSafeAnswer(input) {
     await input.selectOption(value);
     return;
   }
-  await input.fill((await input.getAttribute('type')) === 'number' ? '0' : 'Completed OK');
+  const inputType = await input.getAttribute('type');
+  // Photo-only checklist items use a hidden answer pre-set by the app. The
+  // review must preserve that value and attach the required evidence below.
+  if (inputType === 'hidden') return;
+  await input.fill(inputType === 'number' ? '0' : 'Completed OK');
 }
 
 async function completeChecklist(page, { issueItemId, issueNote } = {}) {
