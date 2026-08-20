@@ -7,6 +7,9 @@ const staging = getStagingConfig();
 
 module.exports = defineConfig({
   testDir: './tests/e2e/staging',
+  // Keep the preflight permanently read-only. Data-creating review journeys
+  // each use their own explicit config and manually confirmed workflow.
+  testMatch: '**/staging-preflight.spec.cjs',
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,

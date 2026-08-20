@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { PRODUCTION_PROJECT_REF, REVIEW_PREFIX, getStagingConfig } = require('../e2e/support/staging-config.cjs');
 
 const valid = {
@@ -19,4 +21,12 @@ test('STAGING-SAFETY-001: staging test configuration is accepted only with all r
 test('STAGING-SAFETY-002: staging tests refuse the production project or production URL', () => {
   assert.throws(() => getStagingConfig({ ...valid, E2E_STAGING_PROJECT_REF: PRODUCTION_PROJECT_REF }), /SAFETY STOP/);
   assert.throws(() => getStagingConfig({ ...valid, E2E_STAGING_BASE_URL: `https://${PRODUCTION_PROJECT_REF}.supabase.co` }), /SAFETY STOP/);
+});
+
+test('STAGING-SAFETY-003: the read-only preflight cannot collect data-creating review tests', () => {
+  const preflightConfig = fs.readFileSync(path.resolve(__dirname, '../../playwright.staging.config.cjs'), 'utf8');
+  const reviewConfig = fs.readFileSync(path.resolve(__dirname, '../../playwright.staging.review.config.cjs'), 'utf8');
+  assert.match(preflightConfig, /testMatch:\s*'\*\*\/staging-preflight\.spec\.cjs'/);
+  assert.match(reviewConfig, /testMatch:\s*'\*\*\/vehicle-check-review\.spec\.cjs'/);
+  assert.doesNotMatch(preflightConfig, /vehicle-check-review/);
 });
