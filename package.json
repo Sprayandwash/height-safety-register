@@ -7,7 +7,8 @@
     "test:regression": "node --test tests/regression/*.test.cjs",
     "test:ui": "playwright test",
     "test:ui:headed": "playwright test --headed",
-    "test:ui:report": "playwright show-report"
+    "test:ui:report": "playwright show-report",
+    "test:staging:preflight": "playwright test --config=playwright.staging.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

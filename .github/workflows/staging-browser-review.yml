@@ -1,0 +1,47 @@
+name: Staging browser review preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Verify staging browser test access
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      E2E_STAGING_PROJECT_REF: ${{ secrets.E2E_STAGING_PROJECT_REF }}
+      E2E_STAGING_BASE_URL: ${{ secrets.E2E_STAGING_BASE_URL }}
+      E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
+      E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install locked test tooling
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify the isolated staging app and test account
+        run: npm run test:staging:preflight
+      - name: Publish review-run status
+        run: |
+          echo '## Staging browser review preflight passed' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo 'This run only verifies the isolated staging app, its warning banner, and the dedicated test-account sign-in.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'It does not create, change, or remove app records.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Playwright failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-browser-preflight-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14

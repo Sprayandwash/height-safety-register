@@ -123,6 +123,37 @@ On failure, Playwright keeps an HTML report, screenshot, video, and execution tr
 | REG-055 | A verifier treated a successful non-200 `2xx` response as failure. | Defined successful `2xx` responses pass; `4xx`/`5xx` fail. | Verifier unit test | Automated |
 | REG-056 | A verifier treated optional blank completion notes as failure. | A completed task can have blank notes if completion identity and timestamp exist. | Verifier helper + integration | Automated helper; integration pending |
 
+## Module coverage map
+
+This map covers the normal operational journeys in every app module. It complements the bug-by-bug catalogue above: a journey can pass its individual regression tests yet still fail when its screens, permissions, and saved data are used together.
+
+`CI` tests are safe deterministic checks with no Supabase writes. `Staging` tests use labelled, disposable records in the isolated staging project. `Review` tests leave labelled staging records temporarily so that the Operations manager can refresh an already-open, signed-in staging browser tab and inspect the outcome. `Device` tests require a real supported phone/tablet or print dialog.
+
+| Module | Priority journey | Expected result | Coverage type | Initial status |
+| --- | --- | --- | --- | --- |
+| Global / Home | Sign in, role landing, Home navigation, dashboard attention counts | User reaches only permitted modules; Home counts match the underlying visible records | CI + Staging browser | CI sign-in shell only; integration pending |
+| Global / Home | Staging identity and cache/update behaviour | Persistent staging banner; no production configuration; new release assets install correctly | CI + Device | Banner/static checks automated; device update pending |
+| Height Equipment | Find an asset, open it, record an inspection, return to preserved filters/history | Correct record is saved; list, scroll position and filters remain stable | Staging browser + Review | Pending |
+| Height Equipment | Certificates and Inspector Details | Eligible selections, counts and generated documents match selected records and evidence | Staging browser + Review + Device/PDF | Pending |
+| Height Equipment | Qualification upload/replacement | Valid evidence is readable and retained; bad files are rejected | Isolated staging Storage + Review | Pending |
+| Vehicle Checks | See due/overdue attention and start the correct vehicle check | Alert opens one usable preselected check; completion advances its next due date | Staging browser + Review | Alert routing manually passed; lifecycle pending |
+| Vehicle Checks | Complete a check with all pass/N/A answers | Check saves, produces no maintenance tasks, and updates due/overdue attention | Staging browser + Review | Rule automated; end-to-end pending |
+| Vehicle Checks | Report one or more issues | Exactly one follow-up task is created per issue; passes create none | Staging browser + Review | Rule automated; end-to-end pending |
+| Maintenance | Add/edit vehicle and compatible machinery/sub-assets | Only compatible maintenance procedures can be assigned; active schedules appear in the appropriate attention list | Staging browser | Pending |
+| Maintenance | Record routine/other maintenance with parts and a follow-up | One valid maintenance log record; required task is created by the approved RPC with correct text | Staging browser + Review | Pending |
+| Maintenance | Open, update and complete tasks | Status, steps, parts, responsible role and completion evidence save atomically without duplicates | Staging browser | Pending |
+| Maintenance | Filter/export maintenance history | Filters match exported CSV/PDF; print/PDF is readable and has no browser chrome | CI + Staging browser + Device/PDF | Pending |
+| Admin | Create/edit users and roles | Canonical roles display once; edits retain the working page and never remove the final active Admin | Disposable staging role matrix + Review | Pending |
+| Admin | Enforce permissions | Hidden controls and direct Supabase writes both respect role restrictions | Authenticated staging role matrix | Pending |
+| Mobile / PWA | Critical Home, Height, Vehicle Checks, Maintenance and Admin journeys at phone widths | Controls remain usable; no clipping, scroll traps, unusable dialogs or accidental desktop-only behaviour | Playwright mobile project + Device | Pending |
+
+### Delivery order
+
+1. Build shared authenticated staging fixtures and cleanup helpers once, with a dedicated staging-only test account and the `E2E REVIEW —` prefix.
+2. Add the critical Vehicle Checks review journey first: one pass, one reported issue, exact task verification, and user-visible staging review records.
+3. Add one critical end-to-end journey for Height Equipment, Maintenance and Admin using the same fixture layer.
+4. Add Playwright mobile viewports for the safe browser cases, then real-device/PWA and print checks where browser emulation is insufficient.
+
 ## Manual release checklist
 
 Run these in **staging only** before production review. They are important but require visual, device, or print confirmation beyond deterministic CI assertions.
