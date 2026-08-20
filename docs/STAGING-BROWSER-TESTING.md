@@ -4,7 +4,7 @@ The automated browser tests are split deliberately:
 
 - `npm run test:ui` is the safe local browser suite. It never signs in or writes data.
 - `npm run test:staging:preflight` is a manually triggered staging-only access check. It verifies the staging banner and a dedicated staging test-account sign-in. It does not create, change, or remove app records.
-- Future **review runs** will use the same staging-only configuration to create temporary records beginning with `E2E REVIEW —`. They will leave those records in place until the Operations manager has refreshed their already-open staging tab and confirmed the result.
+- **Create staging Vehicle Checks review records** is a separately confirmed review run. It creates two temporary records beginning with `E2E REVIEW —` and leaves them in place until the Operations manager has refreshed their already-open staging tab and confirmed the result.
 
 ## One-time GitHub setup
 
@@ -27,7 +27,18 @@ First run **Build staging app** to create a current `spray-wash-staging-app` art
 
 Every future staging review test must:
 
-1. Use only the four staging secrets above and refuse production configuration.
+1. Use only the dedicated staging test-account secrets above, discover the project ref and temporary browser URL from the staging artifact, and refuse production configuration.
 2. Prefix temporary labels with `E2E REVIEW —`.
 3. State the records it creates, the pages to refresh and inspect, and the expected result in the GitHub Actions summary.
 4. Never silently delete review records; cleanup is a separate, explicitly triggered action after review.
+
+## Vehicle Checks browser review journey
+
+Use **Actions → Create staging Vehicle Checks review records** only when fresh visible review evidence is wanted. It requires the exact confirmation `CREATE STAGING REVIEW RECORDS` and runs only against the isolated staging bundle.
+
+It deliberately retains two labelled records so they can be inspected after refreshing the staging browser tab:
+
+- one completed vehicle check, verified to create **zero** tasks;
+- one check with a single reported issue, verified to create **exactly one** task.
+
+This write journey runs on one desktop browser only. Mobile coverage will be added separately without duplicating staging review records.
