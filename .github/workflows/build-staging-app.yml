@@ -135,9 +135,10 @@ jobs:
             'function datePlus(days){let d=new Date(today()+"T00:00:00"); d.setDate(d.getDate()+Number(days)); return d.toISOString().slice(0,10);}': 'function datePlus(days){const [y,m,d]=today().split("-").map(Number);const x=new Date(Date.UTC(y,m-1,d));x.setUTCDate(x.getUTCDate()+Number(days||0));return x.toISOString().slice(0,10);}'
           }
           for old,new in replacements.items():
-              if old not in s:
+              if old in s:
+                  s = s.replace(old,new,1)
+              elif new not in s:
                   raise SystemExit(f'app.js NZ-time patch anchor not found: {old[:80]}')
-              s = s.replace(old,new,1)
           app.write_text(s, encoding='utf-8')
 
           ops = Path('staging-build/operations-v4.js')
@@ -148,9 +149,10 @@ jobs:
             "  function addDays(dateStr, days){ const d = new Date((dateStr || today()) + 'T00:00:00'); d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0,10); }": "  function addDays(dateStr, days){ const [y,m,d]=(dateStr||today()).split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days||0)); return dt.toISOString().slice(0,10); }"
           }
           for old,new in replacements.items():
-              if old not in s:
+              if old in s:
+                  s = s.replace(old,new,1)
+              elif new not in s:
                   raise SystemExit(f'operations-v4.js NZ-time patch anchor not found: {old[:80]}')
-              s = s.replace(old,new,1)
           ops.write_text(s, encoding='utf-8')
           PY
 

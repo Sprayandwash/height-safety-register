@@ -1,0 +1,30 @@
+const { test, expect } = require('@playwright/test');
+
+test.describe('local application shell', () => {
+  test('REG-UI-001: visitor can load the app and sees the sign-in form', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page).toHaveTitle(/Spray & Wash Operations/i);
+    await expect(page.locator('#signedOut')).toBeVisible();
+    await expect(page.locator('#loginEmail')).toBeVisible();
+    await expect(page.locator('#loginPassword')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  });
+
+  test('REG-UI-002: the packaged PWA manifest and app icons are available', async ({ page, request }) => {
+    await page.goto('/');
+
+    const manifest = await request.get('/manifest.webmanifest?v=4.0.83');
+    expect(manifest.ok()).toBe(true);
+    expect(await manifest.json()).toMatchObject({
+      name: 'Spray & Wash Operations',
+      short_name: 'Spray & Wash'
+    });
+
+    for (const icon of ['assets/spray-wash-app-icon-192.png', 'assets/spray-wash-app-icon-512.png']) {
+      const response = await request.get(`/${icon}`);
+      expect(response.ok(), `${icon} should load`).toBe(true);
+      expect(response.headers()['content-type']).toContain('image/png');
+    }
+  });
+});

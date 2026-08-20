@@ -14,6 +14,7 @@
   const MACHINERY_TYPE_LABELS = { Engine:'Engine', Gearbox:'Reduction gearbox', Pump:'Pump' };
   const MACHINERY_SIDE_CODES = { Driver:'DS', Passenger:'PS' };
   const ROLE_DEFS = ['Admin','Height equipment manager','Height equipment user','Maintenance manager','Vehicle inspector'];
+  const REGRESSION_RULES = window.SWOperationsRules || {};
   const state = {
     sb: null,
     user: null,
@@ -71,6 +72,7 @@
     editingMaintenanceItemKey: '',
     addingMaintenanceItem: false,
     homeAttentionFilter: 'all',
+    prefillVehicleCheckId: '',
     lastError: ''
   };
 
@@ -96,6 +98,24 @@
   function machineryTypeLabel(itemOrType){
     const type = typeof itemOrType === 'string' ? itemOrType : machineryType(itemOrType);
     return MACHINERY_TYPE_LABELS[type] || type || 'Machinery';
+  }
+  function scheduleProcedureMatchesMachinery(procedure, machinery){
+    if(typeof REGRESSION_RULES.scheduleProcedureMatchesMachinery==='function') return REGRESSION_RULES.scheduleProcedureMatchesMachinery(procedure, machinery);
+    if(/^pm planned\b/i.test(String(procedure?.name || '')) || /^planned:/i.test(String(procedure?.category || ''))) return true;
+    const category = certNorm(procedure?.category);
+    const type = machineryType(machinery);
+    if(category === 'engine') return type === 'Engine';
+    if(category === 'pump') return type === 'Pump';
+    if(category === 'gearbox') return type === 'Gearbox';
+    if(category === 'hose reel') return /hose\s*reel/i.test(String(machinery?.equipment_type || machinery?.name || ''));
+    if(category === 'pressure system') return /pressure\s*system/i.test(String(machinery?.equipment_type || machinery?.name || ''));
+    // A general procedure belongs on a whole water-blaster asset, not each engine,
+    // pump, or gearbox sub-asset.
+    if(category === 'general') return /^water\s*blaster$/i.test(String(machinery?.equipment_type || '').trim());
+    return false;
+  }
+  function compatibleProceduresForMachinery(machinery, procedures=state.procedures){
+    return procedures.filter(procedure => procedure?.is_active !== false && scheduleProcedureMatchesMachinery(procedure, machinery));
   }
   function buildInstalledMachineryIdentifier(rego, side, type){
     const reg = normalizeRego(rego);
@@ -140,7 +160,7 @@
       );
     return rows[0] || null;
   }
-  function openTasks(){ return state.tasks.filter(t => !['Completed','Deferred'].includes(t.status)); }
+  function openTasks(){ return state.tasks.filter(t => typeof REGRESSION_RULES.taskIsOpen==='function' ? REGRESSION_RULES.taskIsOpen(t) : !['Completed','Deferred'].includes(t.status)); }
   function canUseManagement(){ return hasAny(['Maintenance manager']); }
   function canUseHeight(){ return hasAny(['Height equipment manager','Height equipment user']); }
   function canUseVehicleChecks(){ return hasAny(['Vehicle inspector']); }
@@ -781,8 +801,14 @@
       state.schedules.filter(s=>s.is_active!==false&&s.next_due_at).forEach(s=>{
         const days=daysUntil(String(s.next_due_at).slice(0,10)); if(days===null||days>14)return;
         const procedure=state.procedures.find(p=>String(p.id)===String(s.procedure_id));
+        const machinery=state.washEquipment.find(w=>String(w.id)===String(s.washing_equipment_id));
+        if(machinery && !scheduleProcedureMatchesMachinery(procedure,machinery)) return;
+        if(!machinery && !s.vehicle_id) return;
         items.push({group:days<0?'critical':'soon',kind:'maintenance-schedule',module:'Maintenance',title:`${String(procedure?.category||procedure?.name||'Maintenance').replace(/^Planned:\\s*/, '')} ${days<0?'overdue':'due soon'}`,note:plannedMaintenanceTargetName(s),date:s.next_due_at,days});
       });
+    }
+    if(canUseVehicleChecks()){
+      vehicleCheckDueItems().forEach(item=>items.push({group:item.days<0?'critical':'soon',kind:'vehicle-check-due',module:'Vehicle Checks',title:`${item.vehicle.rego||item.vehicle.name||'Vehicle'} check ${item.days<0?'overdue':'due soon'}`,note:item.note,date:item.dueDate,days:item.days,vehicleId:item.vehicle.id}));
     }
     if(canAccessSharedTasks()){
       openTasks().forEach(t=>{
@@ -795,7 +821,7 @@
   function attentionHomeHtml({critical,soon,tasks,filtered}){
     const summary=(title,value,note,group,icon)=>`<button type="button" class="ops-maintenance-summary ops-attention-summary ${group}" onclick="SWOperationsV4.openAppAttention('${group}')">${appIcon(icon,'ops-maintenance-summary-icon')}<span><span class="ops-maintenance-summary-title">${title}</span><span class="ops-maintenance-summary-value">${value}</span><span class="ops-maintenance-summary-note">${note}</span></span></button>`;
     const label={all:'All attention items',critical:'Critical / overdue',soon:'Due soon',tasks:'Open tasks'}[state.homeAttentionFilter]||'Attention items';
-    const rows=filtered.slice(0,12).map(item=>`<button type="button" class="ops-attention-item ${item.group}" onclick="SWOperationsV4.openAttentionItem('${esc(item.kind)}','${esc(item.taskId||'')}')">${appIcon(item.group==='critical'?'alert':item.group==='soon'?'schedule':'task','ops-attention-item-icon')}<span><span class="ops-attention-item-title">${esc(item.module)} · ${esc(item.title)}</span><span class="ops-attention-item-note">${esc(item.note||'')}</span></span><span class="ops-attention-date">${item.date?esc(nzDate(item.date)):''}</span></button>`).join('')||'<div class="ops-attention-empty">No current attention items.</div>';
+    const rows=filtered.slice(0,12).map(item=>`<button type="button" class="ops-attention-item ${item.group}" onclick="SWOperationsV4.openAttentionItem('${esc(item.kind)}','${esc(item.taskId||item.vehicleId||'')}')">${appIcon(item.group==='critical'?'alert':item.group==='soon'?'schedule':'task','ops-attention-item-icon')}<span><span class="ops-attention-item-title">${esc(item.module)} · ${esc(item.title)}</span><span class="ops-attention-item-note">${esc(item.note||'')}</span></span><span class="ops-attention-date">${item.date?esc(nzDate(item.date)):''}</span></button>`).join('')||'<div class="ops-attention-empty">No current attention items.</div>';
     const open=state.homeAttentionFilter!=='all'?'open':'';
     return `<div class="ops-maintenance-dashboard">${summary('Critical / overdue',critical,'Action required','critical','alert')}${summary('Due soon',soon,'Due within the alert period','soon','schedule')}${summary('Open tasks',tasks,'Tasks requiring completion','tasks','task')}</div><details class="ops-attention-list" ${open}><summary><span>${esc(label)}<span class="ops-attention-count">${filtered.length}</span></span></summary><div class="ops-attention-list-body">${state.homeAttentionFilter!=='all'?`<div class="ops-section-title"><span></span><button type="button" class="ops-btn ghost" onclick="SWOperationsV4.openAppAttention('all')">Clear filter</button></div>`:''}${rows}</div></details>`;
   }
@@ -803,6 +829,7 @@
   function openAttentionItem(kind,taskId){
     if(kind==='task'){ state.currentModule='tasks'; state.currentView='app-tasks'; state.taskQuickFilter='open'; state.openTaskId=taskId||''; return showOperations('app-tasks'); }
     if(kind==='maintenance-schedule'){ state.currentModule='ops-management'; state.scheduleQuickFilter='overdue'; return showOperations('schedules'); }
+    if(kind==='vehicle-check-due'){ state.prefillVehicleCheckId=taskId||''; return openVehicleChecksModule(); }
     if(kind==='qualification'){ openHeightModule(); return setTimeout(()=>openHeightQualifications(),160); }
     openHeightModule();
     const type=kind==='height-failed'?'failed':kind==='height-soon'?'dueSoon':kind==='height-no-inspection'?'noInspection':'overdue';
@@ -1038,7 +1065,9 @@
       || {};
   }
   function periodicVehicleChecksHtml(){
-    if(!canSubmit()) return `<div class="ops-card"><h3>Vehicle Inspection Checklist</h3><p>Your role can view Operations, but cannot submit vehicle checks.</p></div>`;
+    const reminders = vehicleCheckDueItems();
+    const reminderHtml = vehicleCheckReminderHtml(reminders);
+    if(!canSubmit()) return `${reminderHtml}<div class="ops-card"><h3>Vehicle Inspection Checklist</h3><p>Your role can view Operations, but cannot submit vehicle checks.</p></div>`;
     const template = vehicleChecklistTemplate();
     const myRecent = state.inspections
       .filter(i => i.submitted_by === state.user?.id || i.submitted_by_email === state.user?.email)
@@ -1049,6 +1078,7 @@
       )
       .slice(0,5);
     return `
+      ${reminderHtml}
       <div class="ops-card">
         <h3>Vehicle Inspection Checklist</h3>
         ${inspectionFormHtml(template.id || '')}
@@ -1057,6 +1087,25 @@
         <h3>My recent checks</h3>
         ${myRecent.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Date</th><th>Vehicle</th><th>Result</th><th>Notes</th></tr>${myRecent.map(i=>`<tr><td>${nzDate(i.inspection_date)}</td><td>${esc(targetName(i))}</td><td>${statusPill(i.overall_result)}</td><td>${esc(i.notes||'')}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No recent checks submitted by you yet.</p>'}
       </div>`;
+  }
+  function vehicleCheckDueItems(){
+    const template=vehicleChecklistTemplate();
+    const frequency=Math.max(1,Number(template.frequency_days)||14);
+    const lead=typeof REGRESSION_RULES.vehicleCheckDueSoonLeadDays==='function' ? REGRESSION_RULES.vehicleCheckDueSoonLeadDays(frequency) : Math.min(7,frequency);
+    return state.vehicles.filter(vehicle=>vehicle.status==='Active').flatMap(vehicle=>{
+      const latest=state.inspections.filter(inspection=>String(inspection.template_id)===String(template.id)&&String(inspection.vehicle_id)===String(vehicle.id))
+        .sort((a,b)=>String(b.inspection_date||b.created_at||'').localeCompare(String(a.inspection_date||a.created_at||'')))[0];
+      const anchor=String(latest?.inspection_date||vehicle.created_at||'').slice(0,10);
+      if(!anchor) return [];
+      const dueDate=addDays(anchor,frequency);
+      const days=daysUntil(dueDate);
+      if(days===null || !(typeof REGRESSION_RULES.vehicleCheckNeedsAttention==='function' ? REGRESSION_RULES.vehicleCheckNeedsAttention(days, frequency) : days<=lead)) return [];
+      return [{vehicle,latest,dueDate,days,note:latest?`Last completed ${nzDate(latest.inspection_date)}`:'No completed vehicle check recorded'}];
+    }).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)));
+  }
+  function vehicleCheckReminderHtml(rows){
+    if(!rows.length) return '';
+    return `<div class="ops-card" style="margin-bottom:1rem"><div class="ops-section-title"><div><h3>Vehicle checks needing attention</h3><p class="ops-subtle">A check is due every ${Number(vehicleChecklistTemplate().frequency_days)||14} days. Passing a check does not create a task; reported issues create one task per issue.</p></div></div><div class="ops-table-wrap"><table class="ops-table"><tr><th>Vehicle</th><th>Due</th><th>Status</th><th>Action</th></tr>${rows.map(row=>{const status=row.days<0?`${Math.abs(row.days)} day${Math.abs(row.days)===1?'':'s'} overdue`:row.days===0?'Due today':`Due in ${row.days} day${row.days===1?'':'s'}`;return `<tr><td><strong>${esc(row.vehicle.rego||row.vehicle.name||'Vehicle')}</strong><br><span class="ops-subtle">${esc(row.note)}</span></td><td>${nzDate(row.dueDate)}</td><td><span class="ops-pill ${row.days<0?'ops-bad':'ops-warn'}">${esc(status)}</span></td><td>${canSubmit()?`<button type="button" class="ops-btn ghost" data-ops-start-vehicle-check="${esc(row.vehicle.id)}">Start check</button>`:'—'}</td></tr>`;}).join('')}</table></div></div>`;
   }
 
   function dashboardHtml(){
@@ -1244,7 +1293,7 @@
       <input type="hidden" id="opsInspectionTemplate" value="${esc(template.id || '')}">
       <label>Inspection date *<input id="opsInspectionDate" type="date" value="${today()}" required></label>
       <label>Inspector<input id="opsInspectorName" value="${esc(inspectorDisplayName())}" readonly></label>
-      ${['vehicle','combined'].includes(type) ? `<label>Vehicle *<select id="opsInspectionVehicle" required><option value="">Select vehicle</option>${state.vehicles.filter(v=>v.status==='Active').map(v=>`<option value="${v.id}">${esc(v.rego || v.name)}</option>`).join('')}</select></label>` : ''}
+      ${['vehicle','combined'].includes(type) ? `<label>Vehicle *<select id="opsInspectionVehicle" required><option value="">Select vehicle</option>${state.vehicles.filter(v=>v.status==='Active').map(v=>`<option value="${v.id}" ${String(v.id)===String(state.prefillVehicleCheckId)?'selected':''}>${esc(v.rego || v.name)}</option>`).join('')}</select></label>` : ''}
       ${['washing_equipment','combined'].includes(type) ? `<label>Machinery<select id="opsInspectionWash"><option value="">Select machinery</option>${state.washEquipment.filter(w=>['Active','Quarantined'].includes(w.status)).map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))}</option>`).join('')}</select></label>` : ''}
       <label>Odometer / mileage<input id="opsInspectionOdo" type="number" step="0.1"></label>
       <label class="ops-span-2">General notes<textarea id="opsInspectionNotes"></textarea></label>
@@ -1379,17 +1428,19 @@
     return state.procedures.filter(p => p.is_active !== false && names.includes(p.name));
   }
   function standardMaintenanceHtml(){
+    const selected=state.washEquipment[0];
     return `<details open><summary><strong>Standard maintenance templates</strong></summary><div class="ops-form" style="margin-top:.8rem">
       <label>Machinery<select id="opsStdWash">${state.washEquipment.map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))} (${esc(machineryTypeLabel(w))})</option>`).join('')}</select></label>
       <label>Default next due date<input id="opsStdNextDate" type="date" value="${addDays(today(), 30)}"></label>
-      <div class="ops-span-2"><div class="ops-subtle">These procedure templates will be attached as date-based schedules. Adding a new Water Blaster item also automatically receives these templates.</div>${standardProcedures().map(p=>`<label class="ops-check"><input type="checkbox" class="ops-std-proc" value="${p.id}" checked> ${esc(p.name)} ${p.frequency_days?`(${p.frequency_days} days)`:''}</label>`).join('') || '<p class="ops-subtle">No standard procedures found. Run the V4.0.4 migration.</p>'}</div>
+      <div class="ops-span-2"><div class="ops-subtle">Only procedures compatible with the selected machinery can be scheduled. New machinery receives only its compatible templates.</div>${standardProcedures().map(p=>`<label class="ops-check"><input type="checkbox" class="ops-std-proc" value="${p.id}" ${scheduleProcedureMatchesMachinery(p,selected)?'checked':''} ${scheduleProcedureMatchesMachinery(p,selected)?'':'disabled'}> ${esc(p.name)} ${p.frequency_days?`(${p.frequency_days} days)`:''}</label>`).join('') || '<p class="ops-subtle">No standard procedures found. Run the V4.0.4 migration.</p>'}</div>
       <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="button" data-ops-action="applyStdSelected">Apply to selected machinery</button><button class="ops-btn ghost" type="button" data-ops-action="applyStdSameType">Apply to all machinery of same type</button></div>
     </div></details>`;
   }
   function scheduleFormHtml(){
+    const selected=state.washEquipment[0];
     return `<details><summary><strong>Add standalone maintenance schedule</strong></summary><form id="opsScheduleForm" class="ops-form" style="margin-top:.8rem">
       <label>Machinery<select id="opsScheduleWash" required>${state.washEquipment.map(w=>`<option value="${w.id}">${esc(machineryIdentifier(w))}</option>`).join('')}</select></label>
-      <label>Procedure<select id="opsScheduleProcedure" required>${state.procedures.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>
+      <label>Procedure<select id="opsScheduleProcedure" required>${state.procedures.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}" ${scheduleProcedureMatchesMachinery(p,selected)?'':'disabled'}>${esc(p.name)}</option>`).join('')}</select></label>
       <label>Frequency days<input id="opsScheduleFreqDays" type="number" min="1" placeholder="e.g. 180"></label>
       <label>Next due date<input id="opsScheduleNextDate" type="date"></label>
       <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save standalone schedule</button></div>
@@ -1408,8 +1459,7 @@
 
   async function applyDefaultSchedulesForEquipment(wash){
     const w = typeof wash === 'string' ? (state.washEquipment.find(x=>x.id===wash) || {id:wash, equipment_type:''}) : (wash || {});
-    if(!/water\s*blaster|engine|gearbox|pump/i.test(String(w.equipment_type || ''))) return;
-    const procs = standardProcedures();
+    const procs = compatibleProceduresForMachinery(w,standardProcedures());
     if(procs.length) await upsertSchedulesForWashIds([w.id], procs.map(p=>p.id), addDays(today(), 30));
   }
   async function applyStandardSchedules(scope){
@@ -1423,22 +1473,27 @@
       const base = state.washEquipment.find(w=>w.id===washId);
       if(base) washIds = state.washEquipment.filter(w=>w.equipment_type === base.equipment_type).map(w=>w.id);
     }
-    await upsertSchedulesForWashIds(washIds, selectedProcIds, byId('opsStdNextDate')?.value || addDays(today(),30));
-    alert(`Applied ${selectedProcIds.length} template${selectedProcIds.length===1?'':'s'} to ${washIds.length} machinery item${washIds.length===1?'':'s'}.`);
+    const applied=await upsertSchedulesForWashIds(washIds, selectedProcIds, byId('opsStdNextDate')?.value || addDays(today(),30));
+    alert(`Applied ${applied} compatible template${applied===1?'':'s'} to ${washIds.length} machinery item${washIds.length===1?'':'s'}.`);
     await loadAll();
   }
   async function upsertSchedulesForWashIds(washIds, procedureIds, nextDate){
     const rows = [];
+    let applied=0;
     for(const washId of washIds){
+      const machinery=state.washEquipment.find(w=>String(w.id)===String(washId));
       for(const procId of procedureIds){
         const p = state.procedures.find(x=>x.id===procId) || {};
+        if(!machinery || !scheduleProcedureMatchesMachinery(p,machinery)) continue;
         const existing = state.schedules.find(s=>s.washing_equipment_id===washId && s.procedure_id===procId);
         const row = { washing_equipment_id:washId, procedure_id:procId, frequency_days:p.frequency_days || 90, next_due_at:nextDate || addDays(today(), p.frequency_days || 90), is_active:true, created_by:state.user.id };
         if(existing) await state.sb.from('operations_equipment_maintenance_schedules').update(row).eq('id', existing.id);
         else rows.push(row);
+        applied++;
       }
     }
     if(rows.length) await state.sb.from('operations_equipment_maintenance_schedules').insert(rows);
+    return applied;
   }
 
 
@@ -1650,6 +1705,7 @@
   }
 
   function itemIsProblem(item, answer){
+    if(typeof REGRESSION_RULES.itemIsProblem==='function') return REGRESSION_RULES.itemIsProblem(item, answer);
     if(/(?:Record reading from TDS Meter|Measure pure water system)/i.test(String(item?.question_text||''))){
       const reading=Number(answer);
       return Number.isFinite(reading) && reading>10;
@@ -1693,9 +1749,10 @@
       if(ans.error){await state.sb.from('operations_inspections').delete().eq('id',inspectionId);return alert('Inspection was not completed because its answers failed to save: '+ans.error.message);}
       if((ans.data||[]).length!==answerInserts.length)return alert('Inspection verification failed: not all checklist answers were returned after save.');
       const taskRows=[];
+      const issueItemIds=new Set((typeof REGRESSION_RULES.issueAnswerRows==='function' ? REGRESSION_RULES.issueAnswerRows(answerRows) : answerRows.filter(row=>row.problem)).map(row=>String(row.item.id)));
       (ans.data||[]).forEach(answerRecord=>{
         const source=answerRows.find(a=>a.item.id===answerRecord.checklist_item_id);
-        if(!source||!source.problem)return;
+        if(!source || !issueItemIds.has(String(source.item.id)))return;
         taskRows.push({source_type:'Inspection',source_module:'vehicle_checks',source_record_type:'inspection_answer',source_record_id:answerRecord.id,source_inspection_id:inspectionId,source_answer_id:answerRecord.id,target_type:washId?'washing_equipment':'vehicle',target_record_id:washId||vehicleId,target_label:targetName({vehicle_id:vehicleId,washing_equipment_id:washId}),vehicle_id:vehicleId,washing_equipment_id:washId,title:source.item.default_task_title||source.item.question_text,description:`${source.item.question_text}\nAnswer: ${source.answer}${source.notes?'\nNotes: '+source.notes:''}`,status:'Open',priority:source.item.default_severity||'Medium',created_by:state.user.id,due_date:today(),assigned_role:'Maintenance manager',automatic_key:`vehicle_check_answer:${answerRecord.id}`});
       });
       if(taskRows.length){
@@ -1804,6 +1861,9 @@
     e.preventDefault(); if(!canMaintain()) return alert('Only Admin or Maintenance manager users can save maintenance schedules.');
     const washId = byId('opsScheduleWash').value;
     const procId = byId('opsScheduleProcedure').value;
+    const machinery=state.washEquipment.find(w=>String(w.id)===String(washId));
+    const procedure=state.procedures.find(p=>String(p.id)===String(procId));
+    if(!scheduleProcedureMatchesMachinery(procedure,machinery)) return alert('That procedure is not compatible with the selected machinery. Choose a matching maintenance item.');
     const existing = state.schedules.find(s=>s.washing_equipment_id===washId && s.procedure_id===procId);
     const row = {
       washing_equipment_id: washId,
@@ -2878,11 +2938,7 @@
     return `<div class="ops-grid four" style="margin:.8rem 0"><div class="ops-card ops-dashboard-stat ops-stat-amber"><span>Due / overdue</span><div class="ops-stat">${due.length}</div><small>Service intervals that need attention</small></div><div class="ops-card ops-dashboard-stat ops-stat-total"><span>Due soon</span><div class="ops-stat">${soon.length}</div><small>Due within 14 days</small></div><div class="ops-card ops-dashboard-stat ops-stat-green"><span>Active schedules</span><div class="ops-stat">${state.schedules.filter(s=>s.is_active!==false).length}</div><small>Current scheduled items</small></div><div class="ops-card ops-dashboard-stat ops-stat-blue"><span>Completed this month</span><div class="ops-stat">${completedServiceRows().length}</div><small>Completed service records</small></div></div>${due.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Asset</th><th>Service item</th><th>Due</th><th>Action</th></tr>${due.map(s=>{ const w=state.washEquipment.find(x=>x.id===s.washing_equipment_id); const p=state.procedures.find(x=>x.id===s.procedure_id); return `<tr><td>${esc(w ? machineryIdentifier(w) : 'Unknown')}</td><td><strong>${esc(p?.name || 'Unknown')}</strong><br><span class="ops-subtle">${esc(p?.category || '')}</span></td><td>${nzDate(s.next_due_at)} ${targetDueStatus(daysUntil(s.next_due_at))}</td><td>${canMaintain()?`<button class="ops-btn primary" data-ops-pm-view="service" onclick="SWOperationsV4.state.serviceRunAssetId='${esc(w?.id||'')}';">Record service</button>`:''}</td></tr>`; }).join('')}</table></div>` : '<p class="ops-subtle">No preventive service items are due right now.</p>'}<div class="ops-actions"><button class="ops-btn primary" data-ops-pm-view="service">Record a service</button><button class="ops-btn ghost" data-ops-pm-view="items">Manage service items</button></div>`;
   }
   function serviceItemAppliesTo(proc, asset){
-    if(!proc || !asset) return false;
-    const cat = certNorm(proc.category || 'General');
-    const type = certNorm(asset.equipment_type || asset.type || '');
-    if(!cat || cat === 'general' || cat === 'all' || cat === 'washing equipment' || cat === 'machinery') return true;
-    return cat === type || type.includes(cat) || cat.includes(type);
+    return scheduleProcedureMatchesMachinery(proc, asset);
   }
   function applicableServiceItemsForAsset(assetId){
     const asset = state.washEquipment.find(w=>String(w.id)===String(assetId));
@@ -3082,6 +3138,22 @@
     byId('opsTaskCompleteForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsTaskSimpleForm')?.addEventListener('submit', saveTaskUpdate);
     byId('opsScheduleForm')?.addEventListener('submit', saveSchedule);
+    const refreshProcedureChoices = (machineryId, selector) => {
+      const machinery=state.washEquipment.find(w=>String(w.id)===String(machineryId));
+      document.querySelectorAll(selector).forEach(control=>{
+        const procedure=state.procedures.find(p=>String(p.id)===String(control.value));
+        const allowed=scheduleProcedureMatchesMachinery(procedure,machinery);
+        control.disabled=!allowed;
+        if(control.matches('input')) control.checked=allowed;
+      });
+    };
+    byId('opsStdWash')?.addEventListener('change', e=>refreshProcedureChoices(e.target.value,'.ops-std-proc'));
+    byId('opsScheduleWash')?.addEventListener('change', e=>{
+      refreshProcedureChoices(e.target.value,'#opsScheduleProcedure option');
+      const select=byId('opsScheduleProcedure');
+      if(select?.selectedOptions[0]?.disabled){ const first=Array.from(select.options).find(option=>!option.disabled); if(first) select.value=first.value; }
+    });
+    document.querySelectorAll('[data-ops-start-vehicle-check]').forEach(button=>button.addEventListener('click',()=>{state.prefillVehicleCheckId=button.dataset.opsStartVehicleCheck||'';render();byId('opsInspectionForm')?.scrollIntoView({behavior:'smooth',block:'start'});}));
     byId('opsPreventiveMaintenanceSearch')?.addEventListener('change', e => { state.preventiveMaintenanceSearch=e.target.value;render(); });
     byId('opsPreventiveMaintenanceAsset')?.addEventListener('change', e => { state.preventiveMaintenanceAsset=e.target.value;render(); });
     byId('opsPreventiveMaintenanceFrequency')?.addEventListener('change', e => { state.preventiveMaintenanceFrequency=e.target.value;render(); });
