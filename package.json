@@ -9,7 +9,8 @@
     "test:ui:headed": "playwright test --headed",
     "test:ui:report": "playwright show-report",
     "test:staging:preflight": "playwright test --config=playwright.staging.config.cjs",
-    "test:staging:vehicle-review": "playwright test --config=playwright.staging.review.config.cjs"
+    "test:staging:vehicle-review": "playwright test --config=playwright.staging.review.config.cjs",
+    "test:staging:maintenance-review": "playwright test --config=playwright.staging.maintenance.review.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

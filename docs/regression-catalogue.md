@@ -61,10 +61,10 @@ On failure, Playwright keeps an HTML report, screenshot, video, and execution tr
 
 | ID | Confirmed regression | Expected behaviour | Coverage target | Status |
 | --- | --- | --- | --- | --- |
-| REG-016 | Valid maintenance types were rejected by the maintenance-log database constraint. | Every approved UI/RPC type persists successfully. | Staging database matrix | Pending |
-| REG-017 | Compatibility mapping changed valid maintenance types into generic/legacy values. | Stored `maintenance_done` exactly matches the selected legitimate type. | Staging database integration | Pending |
-| REG-018 | Generated follow-up task descriptions contained a verbose/duplicated maintenance prefix. | Task description is exactly the entered follow-up requirement. | Staging RPC integration | Pending |
-| REG-019 | A maintenance save depended on a browser-side task update that normal permissions rejected. | The security-definer RPC creates the final correct task without a client PATCH/UPDATE. | Staging permission integration | Pending |
+| REG-016 | Valid maintenance types were rejected by the maintenance-log database constraint. | Every approved UI/RPC type persists successfully. | Staging database matrix | Automated for `Other maintenance`; broader matrix pending |
+| REG-017 | Compatibility mapping changed valid maintenance types into generic/legacy values. | Stored `maintenance_done` exactly matches the selected legitimate type. | Staging database integration | Automated for `Other maintenance`; broader matrix pending |
+| REG-018 | Generated follow-up task descriptions contained a verbose/duplicated maintenance prefix. | Task description is exactly the entered follow-up requirement. | Staging RPC integration | Automated; first staging review run pending |
+| REG-019 | A maintenance save depended on a browser-side task update that normal permissions rejected. | The security-definer RPC creates the final correct task without a client PATCH/UPDATE. | Staging permission integration | Automated; first staging review run pending |
 | REG-020 | A custom on-demand maintenance item could not be saved without a positive frequency. | Blank frequency means on-demand, with no date-driven alert or task. | Browser/database integration | Pending |
 | REG-021 | Task status could save while steps/parts failed, and retrying could duplicate detail rows. | Task, steps, and parts save atomically and retries are idempotent. | Transaction/database test | Pending |
 | REG-022 | A passing Height inspection could close unrelated or newer Height tasks. | Close only the qualifying earlier failure task; never manual or newer failures. | SQL trigger test | Pending |
@@ -140,7 +140,7 @@ This map covers the normal operational journeys in every app module. It compleme
 | Vehicle Checks | Complete a check with all pass/N/A answers | Check saves, produces no maintenance tasks, and updates due/overdue attention | Staging browser + Review | Rule automated; end-to-end pending |
 | Vehicle Checks | Report one or more issues | Exactly one follow-up task is created per issue; passes create none | Staging browser + Review | Rule automated; end-to-end pending |
 | Maintenance | Add/edit vehicle and compatible machinery/sub-assets | Only compatible maintenance procedures can be assigned; active schedules appear in the appropriate attention list | Staging browser | Pending |
-| Maintenance | Record routine/other maintenance with parts and a follow-up | One valid maintenance log record; required task is created by the approved RPC with correct text | Staging browser + Review | Pending |
+| Maintenance | Record vehicle-only `Other maintenance` with parts and a follow-up | One valid maintenance log item; required task is created by the approved RPC with exact text; no schedules or sub-assets are seeded | Controlled staging browser review | Automated; first staging review run pending |
 | Maintenance | Open, update and complete tasks | Status, steps, parts, responsible role and completion evidence save atomically without duplicates | Staging browser | Pending |
 | Maintenance | Filter/export maintenance history | Filters match exported CSV/PDF; print/PDF is readable and has no browser chrome | CI + Staging browser + Device/PDF | Pending |
 | Admin | Create/edit users and roles | Canonical roles display once; edits retain the working page and never remove the final active Admin | Disposable staging role matrix + Review | Pending |
