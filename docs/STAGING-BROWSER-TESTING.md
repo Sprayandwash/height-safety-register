@@ -5,6 +5,7 @@ The automated browser tests are split deliberately:
 - `npm run test:ui` is the safe local browser suite. It never signs in or writes data.
 - `npm run test:staging:preflight` is a manually triggered staging-only access check. It verifies the staging banner and a dedicated staging test-account sign-in. It does not create, change, or remove app records.
 - **Create staging Vehicle Checks review records** is a separately confirmed review run. It creates two temporary records beginning with `E2E REVIEW —` and leaves them in place until the Operations manager has refreshed their already-open staging tab and confirmed the result.
+- **Create staging Maintenance review record** is a separately confirmed review run. It creates one labelled maintenance log record and one linked task in staging only, and leaves them in place for review.
 
 ## One-time GitHub setup
 
@@ -42,3 +43,11 @@ It deliberately retains two labelled records so they can be inspected after refr
 - one check with a single reported issue, verified to create **exactly one** task.
 
 This write journey runs on one desktop browser only. Mobile coverage will be added separately without duplicating staging review records.
+
+## Maintenance browser review journey
+
+Use **Actions → Create staging Maintenance review record** only when fresh visible Maintenance evidence is wanted. It requires the exact confirmation `CREATE STAGING MAINTENANCE REVIEW RECORD` and runs only against the isolated staging bundle.
+
+It first creates an active vehicle with registration `E2E-MAINT-TEST` if that target does not already exist. The workflow creates **no schedules, machinery, sub-assets, or future maintenance attention** for that vehicle.
+
+It then retains one labelled `E2E REVIEW —` **Other maintenance** record on the vehicle itself, with parts, notes, and a further-maintenance requirement. The test verifies that the record has exactly one linked open task whose description is exactly the follow-up requirement. Review it in **Maintenance → Log** and **Maintenance → Tasks** after opening the current staging bundle and refreshing the page.
