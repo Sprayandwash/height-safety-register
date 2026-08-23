@@ -1,6 +1,9 @@
 name: Build staging app
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       confirmation:
@@ -25,14 +28,22 @@ jobs:
       PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
 
     steps:
-      - name: Validate confirmation and token
+      - name: Validate trigger and token
         shell: bash
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          if [ "$CONFIRMATION" != "BUILD STAGING APP" ]; then
-            echo "Confirmation did not match BUILD STAGING APP." >&2
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$CONFIRMATION" != "BUILD STAGING APP" ]; then
+              echo "Confirmation did not match BUILD STAGING APP." >&2
+              exit 1
+            fi
+            echo "Manual staging build confirmed."
+          elif [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "Automatic staging build authorised by a push to main."
+          else
+            echo "SAFETY STOP: unsupported trigger or branch: $GITHUB_EVENT_NAME / $GITHUB_REF" >&2
             exit 1
           fi
           if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then

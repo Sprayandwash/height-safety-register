@@ -30,3 +30,16 @@ test('STAGING-SAFETY-003: the read-only preflight cannot collect data-creating r
   assert.match(reviewConfig, /testMatch:\s*'\*\*\/vehicle-check-review\.spec\.cjs'/);
   assert.doesNotMatch(preflightConfig, /vehicle-check-review/);
 });
+
+test('STAGING-AUTOMATION-001: a main merge builds staging, then starts only the read-only preflight', () => {
+  const buildWorkflow = fs.readFileSync(path.resolve(__dirname, '../../.github/workflows/build-staging-app.yml'), 'utf8');
+  const preflightWorkflow = fs.readFileSync(path.resolve(__dirname, '../../.github/workflows/staging-browser-review.yml'), 'utf8');
+
+  assert.match(buildWorkflow, /push:\s*\n\s*branches:\s*\n\s*- main/);
+  assert.match(buildWorkflow, /Automatic staging build authorised by a push to main/);
+  assert.match(preflightWorkflow, /workflow_run:/);
+  assert.match(preflightWorkflow, /- Build staging app/);
+  assert.match(preflightWorkflow, /workflow_run\.conclusion == 'success'/);
+  assert.doesNotMatch(preflightWorkflow, /vehicle-check-review/);
+  assert.doesNotMatch(preflightWorkflow, /maintenance-review/);
+});
