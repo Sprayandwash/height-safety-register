@@ -3,7 +3,7 @@
 The automated browser tests are split deliberately:
 
 - `npm run test:ui` is the safe local browser suite. It never signs in or writes data.
-- `npm run test:staging:preflight` is a manually triggered staging-only access check. It verifies the staging banner and a dedicated staging test-account sign-in. It does not create, change, or remove app records.
+- `npm run test:staging:preflight` is a staging-only read-only access check. It verifies the staging banner and a dedicated staging test-account sign-in. It does not create, change, or remove app records.
 - **Create staging Vehicle Checks review records** is a separately confirmed review run. It creates two temporary records beginning with `E2E REVIEW —` and leaves them in place until the Operations manager has refreshed their already-open staging tab and confirmed the result.
 - **Create staging Maintenance review record** is a separately confirmed review run. It creates one labelled maintenance log record and one linked task in staging only, and leaves them in place for review.
 
@@ -20,9 +20,13 @@ In the repository's `staging` GitHub Environment, add these secrets:
 
 The preflight retrieves the staging project ref and temporary browser URL itself from the latest `spray-wash-staging-app` artifact. Do not add a local `127.0.0.1` URL as a GitHub secret: that address only exists on your own computer.
 
-## Running the access preflight
+## Automatic build and access preflight
 
-First run **Build staging app** to create a current `spray-wash-staging-app` artifact. Then open **Actions** → **Staging browser review preflight** → **Run workflow**. A successful run confirms that the test harness can safely serve the isolated staging bundle and sign in. A missing secret, absent bundle, production ref/configuration, or absent staging banner stops the run.
+When an approved change is merged to the repository's `main` branch, GitHub automatically runs **Build staging app**. A successful build automatically starts **Staging browser review preflight**. The preflight uses the newly built isolated staging bundle and verifies that the test harness can safely serve it and sign in.
+
+Both runs are read-only with respect to the staging database: the build creates an artifact only, and the preflight creates, changes, and removes no app records. A missing secret, absent bundle, production ref/configuration, or absent staging banner stops the process.
+
+The two workflows can still be started manually from **Actions** when a recheck is needed without merging another change. Manual builds require the existing exact confirmation `BUILD STAGING APP`.
 
 ## Review workflow contract
 

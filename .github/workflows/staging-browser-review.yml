@@ -1,6 +1,13 @@
 name: Staging browser review preflight
 
 on:
+  workflow_run:
+    workflows:
+      - Build staging app
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -9,6 +16,10 @@ permissions:
 jobs:
   preflight:
     name: Verify staging browser test access
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging
