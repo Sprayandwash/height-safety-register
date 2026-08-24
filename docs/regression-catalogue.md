@@ -16,7 +16,7 @@ The first Playwright browser checks live in `tests/e2e/` and run in the **Browse
 | --- | --- | --- |
 | REG-UI-001 | A visitor can load the application and see the sign-in form. | Automated in Chromium |
 | REG-UI-002 | The PWA manifest and the approved 192px/512px app icons load. | Automated in Chromium |
-| REG-UI-003 | A Height Equipment Manager can browse the register, filters, item detail, inspection history and certificate view without making a write. | Automated in desktop and mobile Chromium; first staging run pending |
+| REG-UI-003 | A Height Equipment Manager can browse the register, filters, item detail, inspection history and certificate view without making a write. | Automated in desktop and mobile Chromium; requires the single controlled `E2E-HEIGHT-TEST` staging fixture |
 
 Run locally after installing the test dependencies and Chromium:
 

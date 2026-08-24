@@ -11,7 +11,8 @@
     "test:staging:preflight": "playwright test --config=playwright.staging.config.cjs",
     "test:staging:vehicle-review": "playwright test --config=playwright.staging.review.config.cjs",
     "test:staging:maintenance-review": "playwright test --config=playwright.staging.maintenance.review.config.cjs",
-    "test:staging:height-review": "playwright test --config=playwright.staging.height.review.config.cjs"
+    "test:staging:height-review": "playwright test --config=playwright.staging.height.review.config.cjs",
+    "test:staging:height-fixture": "playwright test --config=playwright.staging.height.fixture.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
