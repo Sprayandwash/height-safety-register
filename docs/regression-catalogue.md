@@ -94,6 +94,7 @@ On failure, Playwright keeps an HTML report, screenshot, video, and execution tr
 | REG-040 | Height dashboard could show duplicate or transiently different Start Inspection cards. | One canonical card from first paint through settled state. | DOM mutation/browser test | Pending |
 | REG-041 | Certificate item rows were not consistently left aligned. | Rows use the canonical left-aligned list layout. | CSS/browser visual baseline | Pending |
 | REG-042 | Certificate photo provenance and pagination were wrong. | Equipment photo remains distinct; only latest inspection photos appear in their intended output section. | Generated-document + manual visual test | Pending |
+| REG-057 | The Height Equipment **+ Add item** action left the register visible because its JavaScript referred to superseded form field IDs. | A Height Equipment Manager can open the Add Equipment form, set its current fields, and save a valid item. | Static form-ID integrity guard + controlled staging fixture journey | Automated static guard; controlled staging rerun pending |
 
 ### Admin, permissions, and security
 

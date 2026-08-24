@@ -557,29 +557,27 @@ async function renderPhotoGallery(equipmentId,targetId){
   let parts=[]; for(const p of rows){let signed=await sb.storage.from("equipment-photos").createSignedUrl(p.file_path,3600); if(signed.error){parts.push(`<div class="warning">Could not load ${esc(p.file_name||"photo")}</div>`);continue;} parts.push(`<div class="photoCard"><img src="${signed.data.signedUrl}" alt="${esc(p.file_name||"Equipment photo")}">${canAddPhotos()?`<button class="danger" onclick="deleteEquipmentPhoto('${p.id}','${escAttr(p.file_path)}')">Delete</button>`:""}</div>`);} target.innerHTML=`<div class="photoGrid">${parts.join("")}</div>`;
 }
 function newEquipment(){if(!requirePerm(canEditEquipment(),"Only Admin or Height equipment manager users can add equipment."))return;clearEquipmentForm();equipmentFormTitle.textContent="Add Equipment";showTab("editEquipment");}
-function editEquipment(id){if(!requirePerm(canEditEquipment(),"Only Admin or Height equipment manager users can edit equipment."))return;let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";setDateParts("eqMade",e.date_manufactured||"");setDateParts("eqFirstUsed",e.date_first_used||"");setDateParts("eqRetire",e.retirement_date||"");eqFreq.value=e.inspection_frequency||appSettingValue("default_inspection_frequency","6 monthly");eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";eqServiceLifeYears.value=eqServiceLifeYears.value||"10";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
-function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqNotes","eqRopeLength"].forEach(id=>document.getElementById(id).value="");setDateParts("eqMade","");setDateParts("eqFirstUsed","");setDateParts("eqRetire","");eqServiceLifeYears.value="10";eqRetireBasis.value="manufactured";eqAutoRetire.checked=true;eqType.value="Harness";eqFreq.value=appSettingValue("default_inspection_frequency","6 monthly");eqStatus.value="In Service";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();}
+function editEquipment(id){if(!requirePerm(canEditEquipment(),"Only Admin or Height equipment manager users can edit equipment."))return;let e=equipment.find(x=>x.id===id);if(!e)return;equipmentFormTitle.textContent="Edit Equipment";eqId.value=e.id;eqSerial.value=e.serial;eqType.value=e.type;eqMaker.value=e.manufacturer||"";eqModel.value=e.model||"";setDateParts("eqMade",e.date_manufactured||"");setDateParts("eqFirst",e.date_first_used||"");setDateParts("eqRetired",e.retirement_date||"");eqFrequency.value=e.inspection_frequency||appSettingValue("default_inspection_frequency","6 monthly");eqStatus.value=e.status||"In Service";eqNotes.value=e.notes||"";eqRopeLength.value=e.rope_length_m||"";eqServiceLife.value="10";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();showTab("editEquipment");}
+function clearEquipmentForm(){["eqId","eqSerial","eqMaker","eqModel","eqNotes","eqRopeLength"].forEach(id=>document.getElementById(id).value="");setDateParts("eqMade","");setDateParts("eqFirst","");setDateParts("eqRetired","");eqServiceLife.value="10";eqRetireBasis.value="manufacture";eqType.value="Harness";eqFrequency.value=appSettingValue("default_inspection_frequency","6 monthly");eqStatus.value="In Service";pendingEquipmentPhotos=[];renderPendingPhotos();toggleRopeLengthField();}
 function toggleRopeLengthField(){ropeLengthWrap.classList.toggle("hidden",!typeNeedsLength(eqType.value));}
 
 function initDateParts(){
-  ["eqMade","eqFirstUsed","eqRetire"].forEach(prefix=>{
+  ["eqMade","eqFirst","eqRetired"].forEach(prefix=>{
     ["Day","Month","Year"].forEach(part=>{
       const el=document.getElementById(prefix+part);
       if(!el)return;
       el.addEventListener("input",()=>{
         syncHiddenDate(prefix);
-        if(prefix==="eqMade"||prefix==="eqFirstUsed") maybeAutoCalculateRetire();
-        if(prefix==="eqRetire" && document.activeElement===el && window.eqAutoRetire) eqAutoRetire.checked=false;
+        if(prefix==="eqMade"||prefix==="eqFirst") maybeAutoCalculateRetire();
       });
       el.addEventListener("change",()=>{
         syncHiddenDate(prefix);
-        if(prefix==="eqMade"||prefix==="eqFirstUsed") maybeAutoCalculateRetire();
+        if(prefix==="eqMade"||prefix==="eqFirst") maybeAutoCalculateRetire();
       });
     });
   });
-  if(window.eqServiceLifeYears) eqServiceLifeYears.addEventListener("input",maybeAutoCalculateRetire);
+  if(window.eqServiceLife) eqServiceLife.addEventListener("change",maybeAutoCalculateRetire);
   if(window.eqRetireBasis) eqRetireBasis.addEventListener("change",maybeAutoCalculateRetire);
-  if(window.eqAutoRetire) eqAutoRetire.addEventListener("change",maybeAutoCalculateRetire);
 }
 function syncHiddenDate(prefix){
   const dayEl=document.getElementById(prefix+"Day"),monthEl=document.getElementById(prefix+"Month"),yearEl=document.getElementById(prefix+"Year"),hidden=document.getElementById(prefix);
@@ -601,19 +599,20 @@ function addYearsIso(iso,years){
   d.setFullYear(d.getFullYear()+Number(years));
   return d.toISOString().slice(0,10);
 }
-function maybeAutoCalculateRetire(){if(window.eqAutoRetire && eqAutoRetire.checked) calculateRetirementDate();}
+function maybeAutoCalculateRetire(){calculateRetirementDate();}
+function autoCalculateRetirementDate(){calculateRetirementDate();}
 function calculateRetirementDate(){
-  const years=Number(eqServiceLifeYears?.value||0);
+  const years=Number(eqServiceLife?.value||0);
   if(!years)return;
-  const base=eqRetireBasis.value==="first_used"?eqFirstUsed.value:eqMade.value;
+  const base=eqRetireBasis.value==="first_use"?eqFirst.value:eqMade.value;
   const result=addYearsIso(base,years);
-  if(result)setDateParts("eqRetire",result);
+  if(result)setDateParts("eqRetired",result);
 }
 
 async function saveEquipment(){
   if(!requirePerm(canEditEquipment(),"Only Admin or Height equipment manager users can save equipment."))return;
   let serial=eqSerial.value.trim();if(!serial)return alert("Serial number required.");
-  let row={serial,type:eqType.value,manufacturer:eqMaker.value.trim(),model:eqModel.value.trim(),date_manufactured:eqMade.value||null,date_first_used:eqFirstUsed.value||null,retirement_date:eqRetire.value||null,inspection_frequency:eqFreq.value,status:eqStatus.value,notes:eqNotes.value.trim(),rope_length_m:typeNeedsLength(eqType.value)&&(eqRopeLength.value!=="")?Number(eqRopeLength.value):null};
+  let row={serial,type:eqType.value,manufacturer:eqMaker.value.trim(),model:eqModel.value.trim(),date_manufactured:eqMade.value||null,date_first_used:eqFirst.value||null,retirement_date:eqRetired.value||null,inspection_frequency:eqFrequency.value,status:eqStatus.value,notes:eqNotes.value.trim(),rope_length_m:typeNeedsLength(eqType.value)&&(eqRopeLength.value!=="")?Number(eqRopeLength.value):null};
   let savedId=eqId.value;
   const wasNew=!savedId;
   if(savedId){let r=await sb.from("equipment").update(row).eq("id",savedId).select().single();if(r.error)return alert(r.error.message);}
