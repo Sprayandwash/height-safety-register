@@ -145,7 +145,14 @@ test('STAGING-MAINT-001: other maintenance retains its log and creates exactly o
   await page.getByRole('button', { name: 'Record Maintenance', exact: true }).click();
   await expect(page.locator('#opsMaintenanceLogForm')).toBeVisible();
   await chooseVehicleMaintenanceTarget(page, vehicle.id);
-  await page.locator('.ops-maintenance-repeatable-toggle[data-maintenance-repeatable="Other maintenance"]').check();
+  // Target selection regenerates this group. Click its visible label rather
+  // than the transient checkbox node itself, then confirm the detail item
+  // has been created before filling it in.
+  const otherMaintenanceChoice = page.locator('.ops-maintenance-choice', { hasText: 'Other maintenance' });
+  await expect(otherMaintenanceChoice).toBeVisible();
+  await otherMaintenanceChoice.click();
+  await expect(otherMaintenanceChoice.locator('.ops-maintenance-repeatable-toggle')).toBeChecked();
+  await expect(page.locator('.ops-maintenance-detail-item')).toHaveCount(1);
   await page.locator('.ops-maintenance-detail-item').first().locator('.ops-maintenance-item-description').fill(otherDescription);
   await page.locator('.ops-maintenance-detail-item').first().locator('.ops-maintenance-item-parts').fill(itemParts);
   await page.locator('#opsLogEntryParts').fill(generalParts);
