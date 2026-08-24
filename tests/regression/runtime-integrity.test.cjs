@@ -66,3 +66,17 @@ test('REG-053: the index loads one coherent versioned entry-script set',()=>{
   });
   assert.equal(new Set(versions).size,1,`entry scripts use mixed versions: ${versions.join(', ')}`);
 });
+
+test('REG-054: Height Equipment Add Item code uses the current form field IDs',()=>{
+  const index=read('index.html');
+  const app=read('app.js');
+  for(const id of ['eqFirst','eqRetired','eqServiceLife','eqFrequency']){
+    assert.match(index,new RegExp(`id=["']${id}["']`),`missing Height Equipment form field: ${id}`);
+    assert.match(app,new RegExp(`\\b${id}\\b`),`Height Equipment code does not use ${id}`);
+  }
+  for(const staleId of ['eqFirstUsed','eqRetire','eqServiceLifeYears','eqFreq','eqAutoRetire']){
+    assert.doesNotMatch(app,new RegExp(`\\b${staleId}\\b`),`stale Height Equipment form ID remains: ${staleId}`);
+  }
+  assert.match(app,/function newEquipment\(\).*showTab\("editEquipment"\)/);
+  assert.match(app,/function autoCalculateRetirementDate\(\)/);
+});
