@@ -62,17 +62,17 @@ On failure, Playwright keeps an HTML report, screenshot, video, and execution tr
 
 | ID | Confirmed regression | Expected behaviour | Coverage target | Status |
 | --- | --- | --- | --- | --- |
-| REG-016 | Valid maintenance types were rejected by the maintenance-log database constraint. | Every approved UI/RPC type persists successfully. | Staging database matrix | Automated for `Other maintenance`; broader matrix pending |
-| REG-017 | Compatibility mapping changed valid maintenance types into generic/legacy values. | Stored `maintenance_done` exactly matches the selected legitimate type. | Staging database integration | Automated for `Other maintenance`; broader matrix pending |
-| REG-018 | Generated follow-up task descriptions contained a verbose/duplicated maintenance prefix. | Task description is exactly the entered follow-up requirement. | Staging RPC integration | Automated; first staging review run pending |
-| REG-019 | A maintenance save depended on a browser-side task update that normal permissions rejected. | The security-definer RPC creates the final correct task without a client PATCH/UPDATE. | Staging permission integration | Automated; first staging review run pending |
-| REG-020 | A custom on-demand maintenance item could not be saved without a positive frequency. | Blank frequency means on-demand, with no date-driven alert or task. | Browser/database integration | Pending |
+| REG-016 | Valid maintenance types were rejected by the maintenance-log database constraint. | Every approved UI/RPC type persists successfully. | Static UI matrix + controlled staging integration | Automated static matrix; controlled staging covers `Other maintenance` and `Engine oil changed`; broader database matrix pending |
+| REG-017 | Compatibility mapping changed valid maintenance types into generic/legacy values. | Stored `maintenance_done` exactly matches the selected legitimate type. | Static RPC guard + staging integration | Automated static guard; controlled staging covers `Other maintenance` and `Engine oil changed`; broader matrix pending |
+| REG-018 | Generated follow-up task descriptions contained a verbose/duplicated maintenance prefix. | Task description is exactly the entered follow-up requirement. | Staging RPC integration | Automated; controlled staging review passed (24 Aug 2026) |
+| REG-019 | A maintenance save depended on a browser-side task update that normal permissions rejected. | The security-definer RPC creates the final correct task without a client PATCH/UPDATE. | Staging permission integration | Automated; controlled staging review passed (24 Aug 2026) |
+| REG-020 | A custom on-demand maintenance item could not be saved without a positive frequency. | Blank frequency means on-demand, with no date-driven alert or task. | Static browser guard + controlled database integration | Automated static guard; controlled database integration pending |
 | REG-021 | Task status could save while steps/parts failed, and retrying could duplicate detail rows. | Task, steps, and parts save atomically and retries are idempotent. | Transaction/database test | Pending |
 | REG-022 | A passing Height inspection could close unrelated or newer Height tasks. | Close only the qualifying earlier failure task; never manual or newer failures. | SQL trigger test | Pending |
-| REG-023 | Due-soon maintenance attention navigated to overdue results. | Due-soon opens due-soon; overdue opens overdue. | Browser routing test | Pending |
+| REG-023 | Due-soon maintenance attention navigated to overdue results. | Due-soon opens due-soon; overdue opens overdue. | Shared-rule + browser routing test | Automated shared-rule guard; staging browser routing check pending |
 | REG-024 | Height overdue attention could show a blank due date. | Every dated alert displays its formatted due date. | Unit/browser test | Pending |
-| REG-025 | Historic maintenance report records were misleadingly labelled after compatibility fixes. | CSV/PDF presentation normalises known legacy forms without changing source data. | CSV integration + PDF spot check | Pending |
-| REG-026 | Maintenance print/PDF output contained browser URL/date/page chrome. | Reports have only intended report content, clean margins, and readable pagination. | Print CSS test + manual browser/PDF check | Pending |
+| REG-025 | Historic maintenance report records were misleadingly labelled after compatibility fixes. | CSV/PDF presentation normalises known legacy forms without changing source data. | Static CSV normalisation + PDF spot check | Automated static guard; manual browser/PDF check pending |
+| REG-026 | Maintenance print/PDF output contained browser URL/date/page chrome. | Reports have only intended report content, clean margins, and readable pagination. | Static print CSS + manual browser/PDF check | Automated static guard; manual browser/PDF check pending |
 
 ### Certificates, qualifications, and Height Equipment
 

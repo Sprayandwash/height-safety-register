@@ -67,4 +67,5 @@ test('REG-008: the browser app loads and uses the tested shared rules',()=>{
   assert.match(app, /REGRESSION_RULES\.scheduleProcedureMatchesMachinery/);
   assert.match(app, /REGRESSION_RULES\.issueAnswerRows/);
   assert.match(app, /REGRESSION_RULES\.taskIsOpen/);
+  assert.match(app, /REGRESSION_RULES\.maintenanceScheduleAttentionFilter/);
 });
