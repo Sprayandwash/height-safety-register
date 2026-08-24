@@ -43,3 +43,14 @@ test('STAGING-AUTOMATION-001: a main merge builds staging, then starts only the 
   assert.doesNotMatch(preflightWorkflow, /vehicle-check-review/);
   assert.doesNotMatch(preflightWorkflow, /maintenance-review/);
 });
+
+test('RELEASE-SAFETY-001: production Pages deployment is manual and protected', () => {
+  const productionWorkflow = fs.readFileSync(path.resolve(__dirname, '../../.github/workflows/deploy-production-pages.yml'), 'utf8');
+
+  assert.match(productionWorkflow, /workflow_dispatch:/);
+  assert.doesNotMatch(productionWorkflow, /\n\s*push:/);
+  assert.match(productionWorkflow, /RELEASE PRODUCTION APP/);
+  assert.match(productionWorkflow, /production releases must run from main/);
+  assert.match(productionWorkflow, /name:\s*production/);
+  assert.match(productionWorkflow, /actions\/deploy-pages@v4/);
+});

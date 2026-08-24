@@ -1,0 +1,116 @@
+name: Deploy production app
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RELEASE PRODUCTION APP to confirm this production deployment
+        required: true
+        type: string
+
+# Production deployment is deliberately manual. Merging to main runs CI and
+# produces a staging build, but cannot publish the live GitHub Pages site.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: production-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Prepare approved production Pages artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate production release confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || {
+            echo 'SAFETY STOP: production releases must run from main.' >&2
+            exit 1
+          }
+          test "$CONFIRMATION" = 'RELEASE PRODUCTION APP' || {
+            echo 'Confirmation must be exactly: RELEASE PRODUCTION APP' >&2
+            exit 1
+          }
+
+      - uses: actions/checkout@v4
+
+      - name: Verify production source is not a staging bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f config.js
+          ! grep -F 'STAGING — TEST DATA ONLY — NOT PRODUCTION' index.html >/dev/null || {
+            echo 'SAFETY STOP: source contains the staging environment banner.' >&2
+            exit 1
+          }
+          ! grep -F 'window.SPRAY_WASH_ENV = "staging"' config.js >/dev/null || {
+            echo 'SAFETY STOP: source config identifies itself as staging.' >&2
+            exit 1
+          }
+
+      - name: Assemble static production site
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir production-site
+          rsync -a ./ production-site/ \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'node_modules/' \
+            --exclude 'test-results/' \
+            --exclude 'playwright-report/' \
+            --exclude 'staging-build/' \
+            --exclude 'production-site/' \
+            --exclude '*.zip'
+          test -f production-site/index.html
+          test -f production-site/config.js
+          test -f production-site/app.js
+
+      - name: Upload approved Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: production-site
+
+      - name: Publish build summary
+        shell: bash
+        run: |
+          {
+            echo '## Production release prepared'
+            echo
+            echo "- Source commit: \`$GITHUB_SHA\`"
+            echo '- The production Pages artifact has been assembled from `main`.'
+            echo '- No database migration or Supabase data change is included.'
+            echo '- The next job requires approval through the protected `production` environment.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy approved production Pages artifact
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Publish deployment summary
+        shell: bash
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          {
+            echo '## Production app deployed'
+            echo
+            echo "- Live URL: $PAGE_URL"
+            echo '- This deployment was manually confirmed and released through the protected `production` environment.'
+          } >> "$GITHUB_STEP_SUMMARY"
