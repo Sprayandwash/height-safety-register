@@ -38,6 +38,10 @@
     return Number.isFinite(Number(daysUntilDue)) && Number(daysUntilDue)<=vehicleCheckDueSoonLeadDays(frequencyDays);
   }
 
+  function maintenanceScheduleAttentionFilter(group){
+    return String(group)==='soon' ? 'upcoming' : 'overdue';
+  }
+
   function itemIsProblem(item, answer){
     if(/(?:Record reading from TDS Meter|Measure pure water system)/i.test(String(item?.question_text || ''))){
       const reading=Number(answer);
@@ -56,6 +60,7 @@
     scheduleProcedureMatchesMachinery,
     vehicleCheckDueSoonLeadDays,
     vehicleCheckNeedsAttention,
+    maintenanceScheduleAttentionFilter,
     itemIsProblem,
     issueAnswerRows,
     taskIsOpen

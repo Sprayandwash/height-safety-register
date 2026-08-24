@@ -80,6 +80,7 @@ jobs:
           echo '- It creates no machinery, sub-assets, schedules, or future maintenance attention.' >> "$GITHUB_STEP_SUMMARY"
           echo '- It creates one labelled **Other maintenance** log item and verifies retained parts, notes, and follow-up text.' >> "$GITHUB_STEP_SUMMARY"
           echo '- It verifies exactly one linked open task with the exact follow-up description.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- It also records one approved routine vehicle maintenance type and verifies its exact stored label creates no task.' >> "$GITHUB_STEP_SUMMARY"
           echo '- Review data is retained in isolated staging with the `E2E REVIEW —` prefix. Production was not accessed.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Playwright failure evidence
         if: ${{ failure() }}

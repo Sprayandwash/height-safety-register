@@ -169,3 +169,32 @@ test('STAGING-MAINT-001: other maintenance retains its log and creates exactly o
   });
   expect(evidence.log.generated_task_id).toBe(evidence.tasks[0].id);
 });
+
+test('STAGING-MAINT-002: an approved routine vehicle type retains its exact label and creates no task', async ({ page }) => {
+  const staging = getStagingConfig();
+  const note = reviewLabel('routine vehicle');
+
+  await signInAndOpenMaintenance(page, staging);
+  const vehicle = await ensureDedicatedTestVehicle(page);
+  expect(await machineryForVehicle(page, vehicle.id)).toEqual([]);
+
+  await page.getByRole('button', { name: 'Log', exact: true }).click();
+  await page.getByRole('button', { name: 'Record Maintenance', exact: true }).click();
+  await expect(page.locator('#opsMaintenanceLogForm')).toBeVisible();
+  await page.locator('#opsLogEntryVehicle').selectOption(vehicle.id);
+  await page.locator('#opsLogEntryTarget').selectOption('vehicle');
+  await page.locator('.ops-maintenance-routine[value="Engine oil changed"]').check();
+  await page.locator('#opsLogEntryNotes').fill(note);
+  expect(await submitAndReadAlert(page)).toContain('Maintenance record saved');
+
+  const evidence = await maintenanceEvidence(page, note);
+  expect(evidence.log).toMatchObject({
+    vehicle_id: vehicle.id,
+    washing_equipment_id: null,
+    notes: note,
+    further_maintenance_required: null,
+    generated_task_id: null
+  });
+  expect(evidence.items).toEqual([{ maintenance_done: 'Engine oil changed', description: null, parts_used: null }]);
+  expect(evidence.tasks).toEqual([]);
+});
