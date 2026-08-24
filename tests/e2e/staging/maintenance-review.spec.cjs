@@ -76,6 +76,17 @@ async function submitAndReadAlert(page) {
   return message;
 }
 
+async function chooseVehicleMaintenanceTarget(page, vehicleId) {
+  const vehicle = page.locator('#opsLogEntryVehicle');
+  const target = page.locator('#opsLogEntryTarget');
+
+  await vehicle.selectOption(vehicleId);
+  await expect(vehicle).toHaveValue(vehicleId);
+  await expect(target).toBeEnabled();
+  await target.selectOption('vehicle');
+  await expect(target).toHaveValue('vehicle');
+}
+
 async function maintenanceEvidence(page, note) {
   return page.evaluate(async reviewNote => {
     const client = window.SWOperationsV4?.state?.sb;
@@ -133,8 +144,7 @@ test('STAGING-MAINT-001: other maintenance retains its log and creates exactly o
   await page.getByRole('button', { name: 'Log', exact: true }).click();
   await page.getByRole('button', { name: 'Record Maintenance', exact: true }).click();
   await expect(page.locator('#opsMaintenanceLogForm')).toBeVisible();
-  await page.locator('#opsLogEntryVehicle').selectOption(vehicle.id);
-  await page.locator('#opsLogEntryTarget').selectOption('vehicle');
+  await chooseVehicleMaintenanceTarget(page, vehicle.id);
   await page.locator('.ops-maintenance-repeatable-toggle[data-maintenance-repeatable="Other maintenance"]').check();
   await page.locator('.ops-maintenance-detail-item').first().locator('.ops-maintenance-item-description').fill(otherDescription);
   await page.locator('.ops-maintenance-detail-item').first().locator('.ops-maintenance-item-parts').fill(itemParts);
@@ -181,9 +191,13 @@ test('STAGING-MAINT-002: an approved routine vehicle type retains its exact labe
   await page.getByRole('button', { name: 'Log', exact: true }).click();
   await page.getByRole('button', { name: 'Record Maintenance', exact: true }).click();
   await expect(page.locator('#opsMaintenanceLogForm')).toBeVisible();
-  await page.locator('#opsLogEntryVehicle').selectOption(vehicle.id);
-  await page.locator('#opsLogEntryTarget').selectOption('vehicle');
-  await page.locator('.ops-maintenance-routine[value="Engine oil changed"]').check();
+  await chooseVehicleMaintenanceTarget(page, vehicle.id);
+  const routineChoice = page.locator('.ops-maintenance-choice', { hasText: 'Engine oil changed' });
+  await expect(routineChoice).toBeVisible();
+  // Target selection regenerates this group. Click its visible label rather
+  // than the transient checkbox node itself.
+  await routineChoice.click();
+  await expect(routineChoice.locator('.ops-maintenance-routine')).toBeChecked();
   await page.locator('#opsLogEntryNotes').fill(note);
   expect(await submitAndReadAlert(page)).toContain('Maintenance record saved');
 
