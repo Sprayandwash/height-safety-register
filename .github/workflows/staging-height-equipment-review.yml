@@ -1,0 +1,78 @@
+name: Staging Height Equipment read-only review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Verify staging Height Equipment browse-only journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: staging
+    env:
+      E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
+      E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install locked test tooling
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Download latest isolated staging app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          if [ -z "$artifact_id" ]; then
+            echo 'No current spray-wash-staging-app artifact exists. Run Build staging app first.' >&2
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app
+          unzip -q staging-app.zip -d staging-app
+          test -f staging-app/index.html
+          test -f staging-app/config.js
+          test -f staging-app/STAGING-README.txt
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test -n "$ref" || { echo 'Staging artifact has no project ref.' >&2; exit 1; }
+          test "$ref" != 'twkgfmctuffmkvkmdkct' || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
+          ! grep -F 'twkgfmctuffmkvkmdkct' staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+      - name: Serve and review the isolated staging Height Equipment module
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:height-review
+      - name: Publish review-run status
+        run: |
+          echo '## Staging Height Equipment read-only review passed' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo 'This run signs in with the dedicated staging account and opens the Height Equipment register, filters, item detail, inspection history and certificate view.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'It does not submit inspections, edit equipment, generate certificates, upload files, or create/change/remove app records.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Playwright failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-height-equipment-read-only-review-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+            staging-http-server.log
+          if-no-files-found: warn
+          retention-days: 14

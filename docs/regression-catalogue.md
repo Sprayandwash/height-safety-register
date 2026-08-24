@@ -16,6 +16,7 @@ The first Playwright browser checks live in `tests/e2e/` and run in the **Browse
 | --- | --- | --- |
 | REG-UI-001 | A visitor can load the application and see the sign-in form. | Automated in Chromium |
 | REG-UI-002 | The PWA manifest and the approved 192px/512px app icons load. | Automated in Chromium |
+| REG-UI-003 | A Height Equipment Manager can browse the register, filters, item detail, inspection history and certificate view without making a write. | Automated in desktop and mobile Chromium; first staging run pending |
 
 Run locally after installing the test dependencies and Chromium:
 
@@ -87,9 +88,9 @@ On failure, Playwright keeps an HTML report, screenshot, video, and execution tr
 | REG-034 | Saved Inspectors had the wrong initial expanded/collapsed state. | Saved Inspectors and Add Inspector begin collapsed. | Browser test | Pending |
 | REG-035 | Recent Inspection History ignored the selected 10/20/30/50 record limit. | The requested number of rows is loaded into a scrollable list. | Seeded browser test | Pending |
 | REG-036 | Recent Inspection History changes caused whole-page twitching. | Only the history list updates; no module replacement, scroll jump, or layout shift. | DOM/layout-shift + manual visual test | Pending |
-| REG-037 | Equipment had duplicate/missing filter controls, including a missing Inspection Result filter. | One filter panel with every canonical field; Clear Filters works. | Browser test | Pending |
+| REG-037 | Equipment had duplicate/missing filter controls, including a missing Inspection Result filter. | One filter panel with every canonical field; Clear Filters works. | Browser test | Automated read-only filter coverage; full control matrix pending |
 | REG-038 | Equipment filtering transiently showed wrong records or re-rendered the tab. | Only the results list updates and unrelated records never become visible. | Delayed-response browser mutation test | Pending |
-| REG-039 | Equipment filtering or item navigation reset page scroll. | Filter and record return preserve relevant scroll position and filter state. | Browser test | Pending |
+| REG-039 | Equipment filtering or item navigation reset page scroll. | Filter and record return preserve relevant scroll position and filter state. | Browser test | Automated read-only filter-state coverage; scroll preservation pending |
 | REG-040 | Height dashboard could show duplicate or transiently different Start Inspection cards. | One canonical card from first paint through settled state. | DOM mutation/browser test | Pending |
 | REG-041 | Certificate item rows were not consistently left aligned. | Rows use the canonical left-aligned list layout. | CSS/browser visual baseline | Pending |
 | REG-042 | Certificate photo provenance and pagination were wrong. | Equipment photo remains distinct; only latest inspection photos appear in their intended output section. | Generated-document + manual visual test | Pending |
@@ -133,8 +134,8 @@ This map covers the normal operational journeys in every app module. It compleme
 | --- | --- | --- | --- | --- |
 | Global / Home | Sign in, role landing, Home navigation, dashboard attention counts | User reaches only permitted modules; Home counts match the underlying visible records | CI + Staging browser | CI sign-in shell only; integration pending |
 | Global / Home | Staging identity and cache/update behaviour | Persistent staging banner; no production configuration; new release assets install correctly | CI + Device | Banner/static checks automated; device update pending |
-| Height Equipment | Find an asset, open it, record an inspection, return to preserved filters/history | Correct record is saved; list, scroll position and filters remain stable | Staging browser + Review | Pending |
-| Height Equipment | Certificates and Inspector Details | Eligible selections, counts and generated documents match selected records and evidence | Staging browser + Review + Device/PDF | Pending |
+| Height Equipment | Find an asset, open it, record an inspection, return to preserved filters/history | Correct record is saved; list, scroll position and filters remain stable | Staging browser + Review | Read-only browse/filter/detail coverage automated; controlled inspection review pending |
+| Height Equipment | Certificates and Inspector Details | Eligible selections, counts and generated documents match selected records and evidence | Staging browser + Review + Device/PDF | Read-only certificate view automated; generation and Inspector Details pending |
 | Height Equipment | Qualification upload/replacement | Valid evidence is readable and retained; bad files are rejected | Isolated staging Storage + Review | Pending |
 | Vehicle Checks | See due/overdue attention and start the correct vehicle check | Alert opens one usable preselected check; completion advances its next due date | Staging browser + Review | Alert routing manually passed; lifecycle pending |
 | Vehicle Checks | Complete a check with all pass/N/A answers | Check saves, produces no maintenance tasks, and updates due/overdue attention | Staging browser + Review | Rule automated; end-to-end pending |
