@@ -48,7 +48,7 @@ test('STAGING-PREFLIGHT-002: dedicated account can browse every permitted module
   await expect(page.locator('#opsShell')).toContainText('Standalone machinery');
 
   await page.locator('[data-ops-view="schedules"]').click();
-  await expect(page.locator('#opsShell')).toContainText('Preventive maintenance');
+  await expect(page.locator('#opsShell')).toContainText('Maintenance items');
 
   await page.locator('[data-ops-view="history"]').click();
   await expect(page.locator('#opsShell')).toContainText('Maintenance Log');
