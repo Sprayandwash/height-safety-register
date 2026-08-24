@@ -85,6 +85,20 @@ async function chooseVehicleMaintenanceTarget(page, vehicleId) {
   await expect(target).toBeEnabled();
   await target.selectOption('vehicle');
   await expect(target).toHaveValue('vehicle');
+  await expect(page.locator('#opsMaintenanceChoices .ops-maintenance-routine')).toHaveCount(7);
+
+  // The target change rebuilds the choices. Confirm the selected values
+  // persist after that DOM work before interacting with a regenerated input.
+  await page.waitForTimeout(250);
+  await expect(vehicle).toHaveValue(vehicleId);
+  await expect(target).toHaveValue('vehicle');
+}
+
+async function chooseRoutineMaintenanceType(page, type) {
+  const routineInput = page.locator(`#opsMaintenanceChoices .ops-maintenance-routine[value="${type}"]`);
+  await expect(routineInput).toBeVisible();
+  await routineInput.check();
+  await expect(routineInput).toBeChecked();
 }
 
 async function maintenanceEvidence(page, note) {
@@ -199,12 +213,7 @@ test('STAGING-MAINT-002: an approved routine vehicle type retains its exact labe
   await page.getByRole('button', { name: 'Record Maintenance', exact: true }).click();
   await expect(page.locator('#opsMaintenanceLogForm')).toBeVisible();
   await chooseVehicleMaintenanceTarget(page, vehicle.id);
-  const routineChoice = page.locator('.ops-maintenance-choice', { hasText: 'Engine oil changed' });
-  await expect(routineChoice).toBeVisible();
-  // Target selection regenerates this group. Click its visible label rather
-  // than the transient checkbox node itself.
-  await routineChoice.click();
-  await expect(routineChoice.locator('.ops-maintenance-routine')).toBeChecked();
+  await chooseRoutineMaintenanceType(page, 'Engine oil changed');
   await page.locator('#opsLogEntryNotes').fill(note);
   expect(await submitAndReadAlert(page)).toContain('Maintenance record saved');
 
