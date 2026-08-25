@@ -20,6 +20,7 @@ const CHECKLISTS={
 };
 
 let sb,currentUser=null,equipment=[],inspections=[],photos=[],inspectionPhotos=[],certificates=[],auditLogs=[],appSettings={};
+let heightEquipmentDataState="idle";
 let currentRoles=[],userProfiles=[],roleAssignments=[];
 const ROLE_DEFS=["Admin","Height equipment manager","Height equipment user","Maintenance manager","Vehicle inspector"];
 let activeFilter={mode:"active",value:"active"};
@@ -289,7 +290,7 @@ function fillTypes(){let opts=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>
 function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||""; if(window.userRolesText) userRolesText.textContent=currentRoleText(); applyPermissions();}
 async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await ensureCurrentProfile();await loadRoles();await loadAppSettings();await loadData();await refreshAuditLogs();}
 async function signUp(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signUp({email,password});if(error)return alert(error.message);alert("Account created. If email confirmation is enabled, check your email before signing in.");}
-async function signOut(){await sb.auth.signOut();currentUser=null;currentRoles=[];userProfiles=[];roleAssignments=[];equipment=[];inspections=[];photos=[];updateAuthUI();renderAll();}
+async function signOut(){await sb.auth.signOut();currentUser=null;currentRoles=[];userProfiles=[];roleAssignments=[];equipment=[];inspections=[];photos=[];heightEquipmentDataState="idle";updateAuthUI();renderAll();}
 
 async function ensureCurrentProfile(){
   if(!currentUser)return;
@@ -362,14 +363,18 @@ async function toggleUserRole(userId,role,checked,el){
 }
 
 async function loadData(){
-  let eq=await sb.from("equipment").select("*").order("serial"); if(eq.error)return alert(eq.error.message);
-  let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false}); if(ins.error)return alert(ins.error.message);
+  heightEquipmentDataState="loading";
+  renderEquipmentResults();
+  let eq=await sb.from("equipment").select("*").order("serial");
+  if(eq.error){heightEquipmentDataState="error";renderEquipmentResults();return alert(eq.error.message);}
+  let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false});
+  if(ins.error){heightEquipmentDataState="error";renderEquipmentResults();return alert(ins.error.message);}
   let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false}); if(ph.error) console.warn(ph.error.message);
   let iph=await sb.from("inspection_photos").select("*").order("created_at",{ascending:false}); if(iph.error) console.warn("Inspection photo table issue: "+iph.error.message);
   let cert=await sb.from("certificates").select("*").order("created_at",{ascending:false}); if(cert.error) console.warn("Certificate table issue: "+cert.error.message);
   await loadAppSettings();
   try{let al=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(250); if(!al.error) auditLogs=al.data||[];}catch(e){console.warn("Audit log skipped",e);}
-  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
+  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; heightEquipmentDataState="ready"; renderAll(); renderSuggestions();
 }
 function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory();if(window.certMode) updateCertificateUI();}
 function showTab(id){if(id==="certificates")window.SWOperationsV4?.installCertificatesV424?.();document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));const pane=document.getElementById(id);if(!pane)return;pane.classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export")renderReportsHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
@@ -481,6 +486,16 @@ function filteredEquipment(){
 function renderEquipmentResults(){
   const el=equipmentFilterEls();
   if(!el.list)return;
+  if(heightEquipmentDataState==="loading"){
+    if(el.count) el.count.textContent="Loading equipment…";
+    el.list.innerHTML=`<p class="muted" role="status" aria-live="polite">Loading equipment…</p>`;
+    return;
+  }
+  if(heightEquipmentDataState==="error"){
+    if(el.count) el.count.textContent="Equipment could not be loaded.";
+    el.list.innerHTML=`<p class="warning" role="alert">Equipment could not be loaded. Please try again.</p>`;
+    return;
+  }
   const rows=filteredEquipment();
   if(el.count) el.count.textContent=`${rows.length} item${rows.length===1?"":"s"} shown.`;
   el.list.innerHTML=rows.map(e=>{let l=latest(e.serial), count=photos.filter(p=>p.equipment_id===e.id).length;return `<div class="listItem" onclick="openItem('${e.id}')"><div class="listItemTop"><div><b>${esc(e.serial)}</b> ${pill(isArchived(e)?"Archived":e.status)}<div class="muted">${esc(e.type)} • ${esc(e.manufacturer||"")} ${esc(e.model||"")}</div></div><span class="badge">${count} photos</span></div><div class="muted">Last: ${l?esc(l.inspection_date+" - "+l.result):"None"} ${l?.next_due?"• Next due: "+esc(l.next_due):""}</div></div>`;}).join("") || `<p class="muted">No equipment found.</p>`;
