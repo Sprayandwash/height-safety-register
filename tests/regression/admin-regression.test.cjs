@@ -98,7 +98,25 @@ test('REG-049: pre-loaded permissions are explicit, claimed once, and never rest
   assert.match(migration, /array\[\]::text\[\]/);
 });
 
+test('REG-049 controlled staging claim review refuses production and removes its own temporary identities',()=>{
+  const config=read('tests/e2e/support/staging-preloaded-claim-config.cjs');
+  const workflow=read('.github/workflows/staging-preloaded-user-claim-review.yml');
+  const spec=read('tests/e2e/staging/preloaded-user-claim-review.spec.cjs');
+  assert.match(config, /E2E_REG049_CLAIM_EMAIL/);
+  assert.match(config, /E2E_REG049_SELF_SIGNUP_EMAIL/);
+  assert.match(config, /@example\.test/);
+  assert.match(workflow, /VERIFY STAGING PRELOADED CLAIM TEST/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
+  assert.match(workflow, /SUPABASE_ACCESS_TOKEN/);
+  assert.match(workflow, /twkgfmctuffmkvkmdkct/);
+  assert.match(spec, /SAFETY STOP: REG-049 will never run database commands against production/);
+  assert.match(spec, /disable trigger operations_preloaded_users_protect_claimed/);
+  assert.match(spec, /delete from auth\.users/);
+  assert.match(spec, /'Vehicle inspector'/);
+  assert.match(spec, /toEqual\(\[\]\)/);
+});
+
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
 test.todo('REG-047: run the controlled staging Height read-only role-matrix verification after its separate account is configured');
 test.todo('REG-048: browser review records no delayed Admin layout shift after opening the module');
-test.todo('REG-049: controlled staging test verifies a Height-only pre-load claims exactly once, survives an Admin role edit, and leaves a self-sign-up with no roles');

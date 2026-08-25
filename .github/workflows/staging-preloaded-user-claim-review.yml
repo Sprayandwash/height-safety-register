@@ -1,0 +1,138 @@
+name: Verify staging pre-loaded account claims
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type VERIFY STAGING PRELOADED CLAIM TEST to create and remove two temporary staging accounts'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preloaded-user-claim-review:
+    name: Verify staging pre-loaded account claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
+      E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate confirmation and staging credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = 'VERIFY STAGING PRELOADED CLAIM TEST' || {
+            echo 'Confirmation must be exactly: VERIFY STAGING PRELOADED CLAIM TEST' >&2
+            exit 1
+          }
+          test -n "${E2E_STAGING_TEST_EMAIL:-}" || { echo 'Missing staging test account email.' >&2; exit 1; }
+          test -n "${E2E_STAGING_TEST_PASSWORD:-}" || { echo 'Missing staging test account password.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing Supabase access token.' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install locked test tooling
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Download latest isolated staging app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          test -n "$artifact_id" || { echo 'No current spray-wash-staging-app artifact exists. Run Build staging app first.' >&2; exit 1; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app
+          unzip -q staging-app.zip -d staging-app
+          test -f staging-app/index.html
+          test -f staging-app/config.js
+          test -f staging-app/STAGING-README.txt
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test -n "$ref" || { echo 'Staging artifact has no project ref.' >&2; exit 1; }
+          test "$ref" != 'twkgfmctuffmkvkmdkct' || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
+          ! grep -F 'twkgfmctuffmkvkmdkct' staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+      - name: Generate isolated temporary identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          nonce="$(date -u +%Y%m%d%H%M%S)-$(openssl rand -hex 8)"
+          echo "E2E_REG049_CLAIM_EMAIL=e2e-reg049-claim-${nonce}@example.test" >> "$GITHUB_ENV"
+          echo "E2E_REG049_SELF_SIGNUP_EMAIL=e2e-reg049-self-${nonce}@example.test" >> "$GITHUB_ENV"
+          echo "E2E_REG049_MARKER=E2E REG-049 — ${nonce}" >> "$GITHUB_ENV"
+      - name: Create, verify, and remove temporary staging identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:preloaded-claim
+      - name: Remove temporary staging identities if a test is interrupted
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${E2E_STAGING_PROJECT_REF:-}" != 'twkgfmctuffmkvkmdkct' || {
+            echo 'SAFETY STOP: cleanup refused because the project ref is production.' >&2
+            exit 1
+          }
+          test -n "${E2E_REG049_CLAIM_EMAIL:-}" || { echo 'No temporary claim email was generated; nothing to clean.'; exit 0; }
+          test -n "${E2E_REG049_SELF_SIGNUP_EMAIL:-}" || { echo 'No temporary self-sign-up email was generated; nothing to clean.'; exit 0; }
+          test -n "${E2E_REG049_MARKER:-}" || { echo 'No temporary marker was generated; nothing to clean.'; exit 0; }
+          cat > cleanup.sql <<SQL
+          begin;
+          alter table public.operations_preloaded_users disable trigger operations_preloaded_users_protect_claimed;
+          delete from public.operations_preloaded_users
+           where email in ('${E2E_REG049_CLAIM_EMAIL}', '${E2E_REG049_SELF_SIGNUP_EMAIL}')
+              or notes = '${E2E_REG049_MARKER}';
+          alter table public.operations_preloaded_users enable trigger operations_preloaded_users_protect_claimed;
+          delete from public.user_roles
+           where user_id in (select id from auth.users where email in ('${E2E_REG049_CLAIM_EMAIL}', '${E2E_REG049_SELF_SIGNUP_EMAIL}'));
+          delete from auth.users where email in ('${E2E_REG049_CLAIM_EMAIL}', '${E2E_REG049_SELF_SIGNUP_EMAIL}');
+          commit;
+          SQL
+          jq -n --rawfile query cleanup.sql '{query:$query}' > cleanup.json
+          http_code="$(curl -sS -o cleanup-result.json -w '%{http_code}' \
+            -X POST "https://api.supabase.com/v1/projects/${E2E_STAGING_PROJECT_REF}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' --data @cleanup.json)"
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ] || jq -e 'type=="object" and has("error")' cleanup-result.json >/dev/null 2>&1; then
+            echo 'Temporary REG-049 identity cleanup failed; inspect this workflow run before retrying.' >&2
+            exit 1
+          fi
+      - name: Publish controlled-test status
+        if: ${{ success() }}
+        run: |
+          echo '## Staging pre-loaded account claim verification passed' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '- A temporary pre-loaded account claimed exactly its assigned roles.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- A simulated Admin removal of Vehicle inspector persisted after a later sign-in.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- A separate self-sign-up received no roles.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- The workflow removed both temporary Auth identities, role rows, profiles, and the tagged pre-load audit row; an independent cleanup step also runs after interruption.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Production was refused and not accessed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Playwright failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-preloaded-claim-review-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+            staging-http-server.log
+          if-no-files-found: warn
+          retention-days: 14
