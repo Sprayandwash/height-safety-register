@@ -13,7 +13,8 @@
     "test:staging:maintenance-review": "playwright test --config=playwright.staging.maintenance.review.config.cjs",
     "test:staging:height-review": "playwright test --config=playwright.staging.height.review.config.cjs",
     "test:staging:height-readonly-security": "playwright test --config=playwright.staging.height.readonly-security.config.cjs",
-    "test:staging:height-fixture": "playwright test --config=playwright.staging.height.fixture.config.cjs"
+    "test:staging:height-fixture": "playwright test --config=playwright.staging.height.fixture.config.cjs",
+    "test:staging:preloaded-claim": "playwright test --config=playwright.staging.preloaded-claim.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
