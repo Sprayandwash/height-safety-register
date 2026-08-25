@@ -59,6 +59,17 @@ values
 `);
 }
 
+async function confirmTemporaryEmail(email) {
+  // Staging has email confirmation enabled.  The browser must perform the
+  // registration itself; this narrowly confirms only the generated test
+  // identity so the rest of the test can exercise its normal sign-in flow.
+  await runStagingSql(`
+update auth.users
+set email_confirmed_at = coalesce(email_confirmed_at, now())
+where email = ${sqlLiteral(email)};
+`);
+}
+
 async function removeVehicleInspectorRole() {
   await runStagingSql(`
 delete from public.user_roles
@@ -108,6 +119,7 @@ test('REG-049: a claimed pre-load keeps an Admin role edit and a self-sign-up re
   await expect(page.locator('#stagingEnvironmentBanner')).toContainText('NOT PRODUCTION');
 
   await createAccountThroughUi(page, config.claimEmail);
+  await confirmTemporaryEmail(config.claimEmail);
   await signOut(page);
   await signIn(page, config.claimEmail);
   await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toEqual([
@@ -122,6 +134,7 @@ test('REG-049: a claimed pre-load keeps an Admin role edit and a self-sign-up re
 
   await signOut(page);
   await createAccountThroughUi(page, config.selfSignupEmail);
+  await confirmTemporaryEmail(config.selfSignupEmail);
   await signOut(page);
   await signIn(page, config.selfSignupEmail);
   await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toEqual([]);
