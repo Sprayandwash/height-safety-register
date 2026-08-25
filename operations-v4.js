@@ -41,6 +41,7 @@
     actualUsers: [],
     actualUserRoles: [],
     editingActualUserId: '',
+    editingPreloadedUserId: '',
     qualifications: [],
     certFilterType: '',
     certFilterStatus: '',
@@ -1583,34 +1584,6 @@
     }).join('');
   }
 
-  function usersHtml(){
-    if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
-    const rows = state.pendingUsers || [];
-    const defaultRoles = ['Vehicle inspector'];
-    return `<div class="ops-card">
-      <h3>Users & permissions</h3>
-      <p class="ops-subtle">One clean permissions list is used across the app. Tick the roles each user needs, then save.</p>
-      <form id="opsPreloadUserForm" class="ops-form">
-        <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
-        <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
-        <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
-        <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
-        <div class="ops-span-2"><strong>Permissions for pre-loaded user</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(defaultRoles)}</div></div>
-        <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
-        <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Pre-load user</button></div>
-      </form>
-    </div>
-    <div class="ops-card">
-      <h3>Signed-in users</h3>
-      <p class="ops-subtle">Manage the same standard role checkboxes for each signed-in user.</p>
-      ${actualUsersHtml()}
-    </div>
-    <div class="ops-card">
-      <h3>Pre-loaded users</h3>
-      ${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
-    </div>`;
-  }
-
   function updatePreloadRolePreview(){ /* Permission presets removed in V4.0.30. */ }
 
   async function saveActualUserRoles(userId){
@@ -1671,11 +1644,33 @@
     const roles = Array.from(document.querySelectorAll('input[data-ops-preload-role]:checked')).map(i => i.value);
     if(!first || !last || !email) return alert('First name, last name and email are required.');
     if(!roles.length) return alert('Select at least one permission for this user.');
-    const row = { first_name:first, last_name:last, display_name:`${first} ${last}`, email, role_preset:null, roles, active: byId('opsPreloadActive')?.value !== 'false', notes: byId('opsPreloadNotes')?.value || null, created_by: state.user.id };
-    const r = await state.sb.from('operations_preloaded_users').upsert(row, { onConflict:'email' }).select().single();
+    const row = { first_name:first, last_name:last, display_name:`${first} ${last}`, email, role_preset:null, roles, active: byId('opsPreloadActive')?.value !== 'false', notes: byId('opsPreloadNotes')?.value || null };
+    const editing = (state.pendingUsers || []).find(u => String(u.id) === String(state.editingPreloadedUserId));
+    if(editing && preloadedUserIsClaimed(editing)) return alert('This pre-loaded user has already been claimed. Manage their live permissions under Current Users instead.');
+    const r = editing
+      ? await state.sb.from('operations_preloaded_users').update(row).eq('id', editing.id).is('claimed_user_id', null).select().single()
+      : await state.sb.from('operations_preloaded_users').insert({...row, created_by:state.user.id}).select().single();
     if(r.error) return alert(r.error.message);
-    alert('User pre-loaded. When they sign in with this email, their profile and roles will be applied.');
+    state.editingPreloadedUserId='';
+    alert(editing ? 'Pre-loaded user updated.' : 'User pre-loaded. Their selected permissions will be applied once, when they first sign in with this email.');
     state.currentView = 'admin-users';
+    await loadAll();
+  }
+
+  function preloadedUserIsClaimed(user){
+    return Boolean(user?.claimed_user_id || user?.claimed_at || String(user?.status || '').toLowerCase() === 'claimed');
+  }
+
+  async function deletePreloadedUser(id){
+    if(!isAdmin()) return alert('Only Admin users can delete pre-loaded users.');
+    const user=(state.pendingUsers || []).find(row=>String(row.id)===String(id));
+    if(!user) return alert('That pre-loaded user could not be found. Refresh and try again.');
+    if(preloadedUserIsClaimed(user)) return alert('This pre-loaded user has already been claimed and is retained as an audit record. Manage their live permissions under Current Users instead.');
+    if(!window.confirm(`Delete the unclaimed pre-loaded user for ${user.email}?`)) return;
+    const r=await state.sb.from('operations_preloaded_users').delete().eq('id',id).is('claimed_user_id',null);
+    if(r.error) return alert(r.error.message);
+    if(String(state.editingPreloadedUserId)===String(id)) state.editingPreloadedUserId='';
+    alert('Unclaimed pre-loaded user deleted.');
     await loadAll();
   }
 
@@ -3110,21 +3105,24 @@
   function usersHtml(){
     if(!isAdmin()) return `<div class="ops-card"><h3>Users & permissions</h3><p>Only Admin users can pre-load and manage users.</p></div>`;
     const rows = state.pendingUsers || [];
+    const editingPreload=rows.find(u=>String(u.id)===String(state.editingPreloadedUserId));
+    const preloadName=editingPreload?.display_name || [editingPreload?.first_name,editingPreload?.last_name].filter(Boolean).join(' ');
     return `<div class="ops-admin-users"><h3>Users & Permissions</h3>
-      <details><summary>Add User</summary><div class="ops-admin-users-body">
+      <details ${editingPreload?'open':''}><summary>${editingPreload ? 'Edit pre-loaded user' : 'Add User'}</summary><div class="ops-admin-users-body">
         <form id="opsPreloadUserForm" class="ops-form">
-          <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie"></label>
-          <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni"></label>
-          <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com"></label>
-          <label>Status<select id="opsPreloadActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
-          <div class="ops-span-2"><strong>Permissions</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(['Vehicle inspector'])}</div></div>
-          <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes"></textarea></label>
-          <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Save pre-loaded user</button></div>
+          <p class="ops-subtle ops-span-2">${editingPreload ? `Editing ${esc(preloadName || editingPreload.email)}. These permissions are applied only at first sign-in.` : 'Choose every permission deliberately. Nothing is selected by default; the selected permissions are applied once at the person’s first sign-in.'}</p>
+          <label>First name<input id="opsPreloadFirst" required placeholder="e.g. Jamie" value="${esc(editingPreload?.first_name || '')}"></label>
+          <label>Last name<input id="opsPreloadLast" required placeholder="e.g. Benioni" value="${esc(editingPreload?.last_name || '')}"></label>
+          <label>Email<input id="opsPreloadEmail" type="email" required placeholder="name@example.com" value="${esc(editingPreload?.email || '')}"></label>
+          <label>Status<select id="opsPreloadActive"><option value="true" ${editingPreload?.active===false?'':'selected'}>Active</option><option value="false" ${editingPreload?.active===false?'selected':''}>Inactive</option></select></label>
+          <div class="ops-span-2"><strong>Permissions</strong><div class="ops-permission-grid">${roleCheckboxGridForPreload(editingPreload?.roles || [])}</div></div>
+          <label class="ops-span-2">Notes<textarea id="opsPreloadNotes" placeholder="Optional setup notes">${esc(editingPreload?.notes || '')}</textarea></label>
+          <div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">${editingPreload ? 'Save pre-loaded user' : 'Pre-load user'}</button>${editingPreload?'<button class="ops-btn ghost" type="button" data-ops-cancel-preload-edit>Cancel</button>':''}</div>
         </form>
       </div></details>
       <details ${state.editingActualUserId?'open':''}><summary>Current Users</summary><div class="ops-admin-users-body">
         <h3>Current signed-in users</h3><p class="ops-subtle">Edit roles directly here. These are the live permissions used by the app.</p>${actualUsersHtml()}
-        <h3>Pre-loaded users</h3>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th></tr>${rows.map(u=>`<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td></tr>`).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
+        <h3>Pre-loaded users</h3><p class="ops-subtle">Unclaimed entries can be edited or deleted. Claimed entries are an audit record; manage their permissions above.</p>${rows.length ? `<div class="ops-table-wrap"><table class="ops-table"><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Claimed</th><th>Actions</th></tr>${rows.map(u=>{const claimed=preloadedUserIsClaimed(u);return `<tr><td>${esc(u.display_name || [u.first_name,u.last_name].filter(Boolean).join(' '))}</td><td>${esc(u.email)}</td><td>${roleChips(u.roles||[])}</td><td>${u.active ? statusPill('Active') : statusPill('Inactive')}</td><td>${u.claimed_at ? nzDate(u.claimed_at) : 'Not yet'}</td><td>${claimed?'<span class="ops-subtle">Manage under Current Users</span>':`<button class="ops-btn" type="button" data-ops-edit-preload-user="${esc(u.id)}">Edit</button> <button class="ops-btn ghost" type="button" data-ops-delete-preload-user="${esc(u.id)}">Delete</button>`}</td></tr>`;}).join('')}</table></div>` : '<p class="ops-subtle">No pre-loaded users yet.</p>'}
       </div></details>
     </div>`;
   }
@@ -3171,6 +3169,9 @@
     document.querySelectorAll('.ops-item-photo').forEach(input=>input.addEventListener('change',()=>updateInspectionPhotoCount(input)));
     byId('opsAppSettingsForm')?.addEventListener('submit',event=>window.saveAdminSettingsFromOperations?.(event));
     byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
+    document.querySelectorAll('[data-ops-edit-preload-user]').forEach(b => b.addEventListener('click', () => { state.editingPreloadedUserId=b.dataset.opsEditPreloadUser; render(); }));
+    document.querySelectorAll('[data-ops-delete-preload-user]').forEach(b => b.addEventListener('click', () => deletePreloadedUser(b.dataset.opsDeletePreloadUser)));
+    document.querySelectorAll('[data-ops-cancel-preload-edit]').forEach(b => b.addEventListener('click', () => { state.editingPreloadedUserId=''; render(); }));
     document.querySelectorAll('[data-ops-edit-user]').forEach(b => b.addEventListener('click', () => { state.editingActualUserId=b.dataset.opsEditUser; render(); }));
     document.querySelectorAll('[data-ops-save-user]').forEach(b => b.addEventListener('click', () => saveActualUser(b.dataset.opsSaveUser)));
     document.querySelectorAll('[data-ops-cancel-user-edit]').forEach(b => b.addEventListener('click', () => { state.editingActualUserId=''; render(); }));
