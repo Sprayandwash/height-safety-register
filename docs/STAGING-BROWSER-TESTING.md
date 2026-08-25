@@ -17,6 +17,8 @@ In the repository's `staging` GitHub Environment, add these secrets:
 | --- | --- |
 | `E2E_STAGING_TEST_EMAIL` | The dedicated staging test-account email. |
 | `E2E_STAGING_TEST_PASSWORD` | Its password. |
+| `E2E_STAGING_HEIGHT_READONLY_EMAIL` | A separate staging account with **only** the `Height equipment user` role. |
+| `E2E_STAGING_HEIGHT_READONLY_PASSWORD` | That account's password. |
 
 The preflight retrieves the staging project ref and temporary browser URL itself from the latest `spray-wash-staging-app` artifact. Do not add a local `127.0.0.1` URL as a GitHub secret: that address only exists on your own computer.
 
@@ -27,6 +29,14 @@ When an approved change is merged to the repository's `main` branch, GitHub auto
 Both runs are read-only with respect to the staging database: the build creates an artifact only, and the preflight creates, changes, and removes no app records. A missing secret, absent bundle, production ref/configuration, or absent staging banner stops the process.
 
 The two workflows can still be started manually from **Actions** when a recheck is needed without merging another change. Manual builds require the existing exact confirmation `BUILD STAGING APP`.
+
+## Height read-only security verification
+
+**Verify staging Height read-only security** is a separate manually confirmed staging test. It requires the exact confirmation `VERIFY STAGING HEIGHT READONLY SECURITY` and signs in with the dedicated **Height equipment user-only** account—not the manager-level staging test account.
+
+It attempts two fully-labelled direct writes through the authenticated Supabase client: one new Height Equipment record and one tiny equipment-photo upload. Both requests must be rejected by Row Level Security (RLS), and the test then confirms that neither record nor file exists. It does not modify production.
+
+If either request is accepted, the run fails and retains clear `E2E SECURITY — HEIGHT READONLY —` evidence in isolated staging for investigation; it does not silently clean up a security failure.
 
 ## Review workflow contract
 

@@ -12,6 +12,7 @@
     "test:staging:vehicle-review": "playwright test --config=playwright.staging.review.config.cjs",
     "test:staging:maintenance-review": "playwright test --config=playwright.staging.maintenance.review.config.cjs",
     "test:staging:height-review": "playwright test --config=playwright.staging.height.review.config.cjs",
+    "test:staging:height-readonly-security": "playwright test --config=playwright.staging.height.readonly-security.config.cjs",
     "test:staging:height-fixture": "playwright test --config=playwright.staging.height.fixture.config.cjs"
   },
   "devDependencies": {
