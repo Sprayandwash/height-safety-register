@@ -72,6 +72,33 @@ test('REG-047: Height read-only security test requires a separate account and re
   assert.match(spec, /retained equipment insert must not create a record|a denied equipment insert must not create a record/);
 });
 
+test('REG-049: pre-loaded permissions are explicit, claimed once, and never restored on a later login',()=>{
+  const users=functionSource('usersHtml');
+  const save=functionSource('savePreloadedUser');
+  const remove=functionSource('deletePreloadedUser');
+  const migration=read('supabase/migrations/20260825_secure_preloaded_user_claims.sql');
+
+  assert.equal((app.match(/function usersHtml\(/g)||[]).length,1,'Admin user-management markup must have one active definition');
+  assert.doesNotMatch(users, /roleCheckboxGridForPreload\(\['Vehicle inspector'\]\)/);
+  assert.match(users, /roleCheckboxGridForPreload\(editingPreload\?\.roles \|\| \[\]\)/);
+  assert.match(users, /Nothing is selected by default/);
+  assert.match(users, /data-ops-edit-preload-user=/);
+  assert.match(users, /data-ops-delete-preload-user=/);
+  assert.match(users, /Manage under Current Users/);
+  assert.doesNotMatch(save, /\.upsert\(/);
+  assert.match(save, /\.is\('claimed_user_id', null\)/);
+  assert.match(remove, /preloadedUserIsClaimed\(user\)/);
+
+  assert.match(migration, /status = 'Pending'/);
+  assert.match(migration, /claimed_user_id is null/);
+  assert.match(migration, /claimed_at is null/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /Claimed pre-loaded users are audit records and cannot be changed/);
+  assert.match(migration, /Claimed pre-loaded users are audit records and cannot be deleted/);
+  assert.match(migration, /array\[\]::text\[\]/);
+});
+
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
 test.todo('REG-047: run the controlled staging Height read-only role-matrix verification after its separate account is configured');
 test.todo('REG-048: browser review records no delayed Admin layout shift after opening the module');
+test.todo('REG-049: controlled staging test verifies a Height-only pre-load claims exactly once, survives an Admin role edit, and leaves a self-sign-up with no roles');
