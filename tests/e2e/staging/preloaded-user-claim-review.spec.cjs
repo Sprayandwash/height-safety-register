@@ -70,6 +70,15 @@ where email = ${sqlLiteral(email)};
 `);
 }
 
+async function temporaryIdentityCount(email) {
+  const rows = await runStagingSql(`
+select count(*)::int as user_count
+from auth.users
+where email = ${sqlLiteral(email)};
+`);
+  return Number(rows?.[0]?.user_count ?? 0);
+}
+
 async function removeVehicleInspectorRole() {
   await runStagingSql(`
 delete from public.user_roles
@@ -101,8 +110,13 @@ async function signIn(page, email) {
 async function createAccountThroughUi(page, email) {
   await page.locator('#loginEmail').fill(email);
   await page.locator('#loginPassword').fill(config.password);
-  page.once('dialog', dialog => dialog.accept());
+  const dialogPromise = page.waitForEvent('dialog');
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  const dialog = await dialogPromise;
+  const message = dialog.message();
+  await dialog.accept();
+  expect(message).toMatch(/^Account created\./);
+  await expect.poll(() => temporaryIdentityCount(email), { timeout: 15_000 }).toBe(1);
   await expect.poll(async () => page.evaluate(() => Boolean(window.SWOperationsV4?.state?.sb)), { timeout: 5_000 }).toBe(true);
 }
 

@@ -104,7 +104,7 @@ test('REG-049 controlled staging claim review refuses production and removes its
   const spec=read('tests/e2e/staging/preloaded-user-claim-review.spec.cjs');
   assert.match(config, /E2E_REG049_CLAIM_EMAIL/);
   assert.match(config, /E2E_REG049_SELF_SIGNUP_EMAIL/);
-  assert.match(config, /@example\.test/);
+  assert.match(config, /@sprayandwash\.co\.nz/);
   assert.match(workflow, /VERIFY STAGING PRELOADED CLAIM TEST/);
   assert.match(workflow, /environment: staging/);
   assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
@@ -115,6 +115,8 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /delete from auth\.users/);
   assert.match(spec, /'Vehicle inspector'/);
   assert.match(spec, /toEqual\(\[\]\)/);
+  assert.match(spec, /Account created/);
+  assert.match(spec, /temporaryIdentityCount/);
 });
 
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
