@@ -93,9 +93,10 @@ async function currentOperationRoles(page) {
 
 async function signOut(page) {
   await page.evaluate(async () => {
-    const client = window.SWOperationsV4?.state?.sb;
-    if (!client) throw new Error('Staging Supabase client is unavailable.');
-    await client.auth.signOut();
+    if (typeof window.signOut !== 'function') {
+      throw new Error('Staging app signOut function is unavailable.');
+    }
+    await window.signOut();
   });
   await expect(page.locator('#signedOut')).toBeVisible({ timeout: 15_000 });
 }

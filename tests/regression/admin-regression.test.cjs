@@ -117,6 +117,7 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /toEqual\(\[\]\)/);
   assert.match(spec, /Account created/);
   assert.match(spec, /temporaryIdentityCount/);
+  assert.match(spec, /window\.signOut/);
 });
 
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
