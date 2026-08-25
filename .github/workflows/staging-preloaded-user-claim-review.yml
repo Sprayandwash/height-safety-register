@@ -66,8 +66,11 @@ jobs:
         run: |
           set -euo pipefail
           nonce="$(date -u +%Y%m%d%H%M%S)-$(openssl rand -hex 8)"
-          echo "E2E_REG049_CLAIM_EMAIL=e2e-reg049-claim-${nonce}@example.test" >> "$GITHUB_ENV"
-          echo "E2E_REG049_SELF_SIGNUP_EMAIL=e2e-reg049-self-${nonce}@example.test" >> "$GITHUB_ENV"
+          # Supabase Auth rejects generated addresses on the reserved .test
+          # TLD. This is an approved controlled company domain; identities are
+          # unique and are removed by the test's cleanup steps.
+          echo "E2E_REG049_CLAIM_EMAIL=e2e-reg049-claim-${nonce}@sprayandwash.co.nz" >> "$GITHUB_ENV"
+          echo "E2E_REG049_SELF_SIGNUP_EMAIL=e2e-reg049-self-${nonce}@sprayandwash.co.nz" >> "$GITHUB_ENV"
           echo "E2E_REG049_MARKER=E2E REG-049 — ${nonce}" >> "$GITHUB_ENV"
       - name: Create, verify, and remove temporary staging identities
         shell: bash
