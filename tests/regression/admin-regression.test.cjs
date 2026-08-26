@@ -119,7 +119,13 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /disable trigger operations_preloaded_users_protect_claimed/);
   assert.match(spec, /delete from auth\.users/);
   assert.match(spec, /'Vehicle inspector'/);
-  assert.match(spec, /toEqual\(\[\]\)/);
+  assert.match(spec, /removeVehicleInspectorThroughAdminUi/);
+  assert.match(spec, /ops-home-admin/);
+  assert.match(spec, /data-ops-edit-user/);
+  assert.match(spec, /data-ops-save-user/);
+  assert.doesNotMatch(spec, /async function removeVehicleInspectorRole/);
+  assert.match(workflow, /real Admin → Current Users removal/);
+  assert.match(spec, /expectCurrentRoles\(page, \[\]\)/);
   assert.match(spec, /Account created/);
   assert.match(spec, /temporaryIdentityCount/);
   assert.match(spec, /window\.signOut/);

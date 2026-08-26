@@ -129,7 +129,7 @@ jobs:
           echo '## Staging pre-loaded account claim verification passed' >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
           echo '- A temporary pre-loaded account claimed exactly its assigned roles.' >> "$GITHUB_STEP_SUMMARY"
-          echo '- A simulated Admin removal of Vehicle inspector persisted after a later sign-in.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- A real Admin → Current Users removal of Vehicle inspector persisted after a later sign-in.' >> "$GITHUB_STEP_SUMMARY"
           echo '- A separate self-sign-up received no roles.' >> "$GITHUB_STEP_SUMMARY"
           echo '- The workflow used the two configured, real Staging test mailboxes; it does not generate email addresses.' >> "$GITHUB_STEP_SUMMARY"
           echo '- The workflow removed both temporary Auth identities, role rows, profiles, and the tagged pre-load audit row; an independent cleanup step also runs after interruption.' >> "$GITHUB_STEP_SUMMARY"
