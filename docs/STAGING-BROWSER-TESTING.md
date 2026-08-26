@@ -19,6 +19,8 @@ In the repository's `staging` GitHub Environment, add these secrets:
 | `E2E_STAGING_TEST_PASSWORD` | Its password. |
 | `E2E_STAGING_HEIGHT_READONLY_EMAIL` | A separate staging account with **only** the `Height equipment user` role. |
 | `E2E_STAGING_HEIGHT_READONLY_PASSWORD` | That account's password. |
+| `E2E_REG049_CLAIM_EMAIL` | A real, monitored Staging-only mailbox for the controlled pre-loaded-account claim test. It must be distinct from the normal test account. |
+| `E2E_REG049_SELF_SIGNUP_EMAIL` | A second real, monitored Staging-only mailbox for the controlled self-sign-up part of REG-049. It must be distinct from both other addresses. |
 
 The preflight retrieves the staging project ref and temporary browser URL itself from the latest `spray-wash-staging-app` artifact. Do not add a local `127.0.0.1` URL as a GitHub secret: that address only exists on your own computer.
 
@@ -29,6 +31,12 @@ When an approved change is merged to the repository's `main` branch, GitHub auto
 Both runs are read-only with respect to the staging database: the build creates an artifact only, and the preflight creates, changes, and removes no app records. A missing secret, absent bundle, production ref/configuration, or absent staging banner stops the process.
 
 The two workflows can still be started manually from **Actions** when a recheck is needed without merging another change. Manual builds require the existing exact confirmation `BUILD STAGING APP`.
+
+## Controlled pre-loaded-account claim review (REG-049)
+
+**Verify staging pre-loaded account claims** is an explicitly confirmed, write-capable Staging test. It creates and removes two temporary Auth identities so it can check that a claimed pre-load receives only its assigned roles, an Admin role edit persists after a later sign-in, and a self-sign-up receives no roles.
+
+Because Staging email confirmation sends an Auth email before the test confirms the account through its controlled database step, this workflow uses the two real monitored mailbox secrets above. It must never generate email addresses. If either secret is absent, duplicated, or the normal test account, the workflow stops before it creates an account or sends an email.
 
 ## Height read-only security verification
 

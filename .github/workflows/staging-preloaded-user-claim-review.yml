@@ -21,6 +21,8 @@ jobs:
     env:
       E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
       E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      E2E_REG049_CLAIM_EMAIL: ${{ secrets.E2E_REG049_CLAIM_EMAIL }}
+      E2E_REG049_SELF_SIGNUP_EMAIL: ${{ secrets.E2E_REG049_SELF_SIGNUP_EMAIL }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -34,6 +36,11 @@ jobs:
           }
           test -n "${E2E_STAGING_TEST_EMAIL:-}" || { echo 'Missing staging test account email.' >&2; exit 1; }
           test -n "${E2E_STAGING_TEST_PASSWORD:-}" || { echo 'Missing staging test account password.' >&2; exit 1; }
+          test -n "${E2E_REG049_CLAIM_EMAIL:-}" || { echo 'Missing E2E_REG049_CLAIM_EMAIL: configure a real, dedicated staging test mailbox.' >&2; exit 1; }
+          test -n "${E2E_REG049_SELF_SIGNUP_EMAIL:-}" || { echo 'Missing E2E_REG049_SELF_SIGNUP_EMAIL: configure a second real, dedicated staging test mailbox.' >&2; exit 1; }
+          test "${E2E_REG049_CLAIM_EMAIL,,}" != "${E2E_REG049_SELF_SIGNUP_EMAIL,,}" || { echo 'REG-049 requires two distinct dedicated staging test mailboxes.' >&2; exit 1; }
+          test "${E2E_REG049_CLAIM_EMAIL,,}" != "${E2E_STAGING_TEST_EMAIL,,}" || { echo 'REG-049 claim mailbox must be separate from the normal staging test account.' >&2; exit 1; }
+          test "${E2E_REG049_SELF_SIGNUP_EMAIL,,}" != "${E2E_STAGING_TEST_EMAIL,,}" || { echo 'REG-049 self-sign-up mailbox must be separate from the normal staging test account.' >&2; exit 1; }
           test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing Supabase access token.' >&2; exit 1; }
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -61,16 +68,14 @@ jobs:
           test "$ref" != 'twkgfmctuffmkvkmdkct' || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
           ! grep -F 'twkgfmctuffmkvkmdkct' staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
           echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
-      - name: Generate isolated temporary identities
+      - name: Label the controlled temporary identities
         shell: bash
         run: |
           set -euo pipefail
           nonce="$(date -u +%Y%m%d%H%M%S)-$(openssl rand -hex 8)"
-          # Supabase Auth rejects generated addresses on the reserved .test
-          # TLD. This is an approved controlled company domain; identities are
-          # unique and are removed by the test's cleanup steps.
-          echo "E2E_REG049_CLAIM_EMAIL=e2e-reg049-claim-${nonce}@sprayandwash.co.nz" >> "$GITHUB_ENV"
-          echo "E2E_REG049_SELF_SIGNUP_EMAIL=e2e-reg049-self-${nonce}@sprayandwash.co.nz" >> "$GITHUB_ENV"
+          # The two email addresses are supplied as Staging environment
+          # secrets. They must be real monitored mailboxes; this workflow must
+          # never manufacture addresses that could bounce.
           echo "E2E_REG049_MARKER=E2E REG-049 — ${nonce}" >> "$GITHUB_ENV"
       - name: Create, verify, and remove temporary staging identities
         shell: bash
@@ -126,6 +131,7 @@ jobs:
           echo '- A temporary pre-loaded account claimed exactly its assigned roles.' >> "$GITHUB_STEP_SUMMARY"
           echo '- A simulated Admin removal of Vehicle inspector persisted after a later sign-in.' >> "$GITHUB_STEP_SUMMARY"
           echo '- A separate self-sign-up received no roles.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- The workflow used the two configured, real Staging test mailboxes; it does not generate email addresses.' >> "$GITHUB_STEP_SUMMARY"
           echo '- The workflow removed both temporary Auth identities, role rows, profiles, and the tagged pre-load audit row; an independent cleanup step also runs after interruption.' >> "$GITHUB_STEP_SUMMARY"
           echo '- Production was refused and not accessed.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Playwright failure evidence
