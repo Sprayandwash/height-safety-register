@@ -17,6 +17,8 @@ In the repository's `staging` GitHub Environment, add these secrets:
 | --- | --- |
 | `E2E_STAGING_TEST_EMAIL` | The dedicated staging test-account email. |
 | `E2E_STAGING_TEST_PASSWORD` | Its password. |
+| `E2E_STAGING_ADMIN_EMAIL` | A separate, dedicated Staging-only account with the **Admin** role. |
+| `E2E_STAGING_ADMIN_PASSWORD` | That dedicated Admin account's password. |
 | `E2E_STAGING_HEIGHT_READONLY_EMAIL` | A separate staging account with **only** the `Height equipment user` role. |
 | `E2E_STAGING_HEIGHT_READONLY_PASSWORD` | That account's password. |
 | `E2E_REG049_CLAIM_EMAIL` | A real, monitored Staging-only mailbox for the controlled pre-loaded-account claim test. It must be distinct from the normal test account. |
@@ -36,7 +38,7 @@ The two workflows can still be started manually from **Actions** when a recheck 
 
 **Verify staging pre-loaded account claims** is an explicitly confirmed, write-capable Staging test. It creates and removes two temporary Auth identities so it can check that a claimed pre-load receives only its assigned roles, a role edit made through the real **Admin → Current Users** screen persists after a later sign-in, and a self-sign-up receives no roles.
 
-The existing `E2E_STAGING_TEST_EMAIL` account must have the **Admin** role in Staging. The workflow stops with a clear setup failure before changing permissions if that account cannot open the Admin screen. The test never edits that Admin account's own roles.
+The workflow uses a dedicated `E2E_STAGING_ADMIN_EMAIL` account for the **Admin → Current Users** edit. It must be separate from the normal test account and both temporary REG-049 mailboxes. The workflow stops before it creates temporary identities if any required secret is missing; it stops without editing a role if the dedicated Admin account cannot open the Admin screen. The test never edits that Admin account's own roles.
 
 Because Staging email confirmation sends an Auth email before the test confirms the account through its controlled database step, this workflow uses the two real monitored mailbox secrets above. It must never generate email addresses. If either secret is absent, duplicated, or the normal test account, the workflow stops before it creates an account or sends an email.
 
