@@ -125,6 +125,39 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /window\.signOut/);
 });
 
+test('REG-043/046/048: Admin read-only browser review covers desktop and mobile without write actions',()=>{
+  const config=read('tests/e2e/support/staging-admin-readonly-config.cjs');
+  const browserConfig=read('playwright.staging.admin.readonly.config.cjs');
+  const workflow=read('.github/workflows/staging-admin-readonly-review.yml');
+  const spec=read('tests/e2e/staging/admin-readonly-review.spec.cjs');
+
+  assert.match(config, /E2E_STAGING_ADMIN_EMAIL/);
+  assert.match(config, /E2E_STAGING_ADMIN_PASSWORD/);
+  assert.match(browserConfig, /Desktop Chrome/);
+  assert.match(browserConfig, /Pixel 7/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /E2E_STAGING_ADMIN_EMAIL/);
+  assert.match(workflow, /twkgfmctuffmkvkmdkct/);
+  assert.match(spec, /ops-home-admin/);
+  assert.match(spec, /ownRoleInputs\).*toBeDisabled/);
+  assert.match(spec, /input\[data-ops-preload-role\]:checked/);
+  assert.match(spec, /Save app settings/);
+  assert.match(spec, /Full JSON backup/);
+  assert.doesNotMatch(spec, /\.click\(\).*Save app settings/);
+  assert.doesNotMatch(spec, /\.click\(\).*Full JSON backup/);
+});
+
+test('Admin controlled-test design prohibits unsafe normal-user, production, and real-backup actions',()=>{
+  const plan=read('docs/admin-controlled-staging-test-plan.md');
+  assert.match(plan, /not an executable workflow/);
+  assert.match(plan, /twkgfmctuffmkvkmdkct/);
+  assert.match(plan, /must never manufacture email addresses that could bounce/);
+  assert.match(plan, /must never edit, delete, demote, or depend on a normal staff account/);
+  assert.match(plan, /must never download a real backup, upload a logo, or save App Settings/);
+  assert.match(plan, /separate Stage 9B approval/);
+});
+
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
 test.todo('REG-047: run the controlled staging Height read-only role-matrix verification after its separate account is configured');
 test.todo('REG-048: browser review records no delayed Admin layout shift after opening the module');
