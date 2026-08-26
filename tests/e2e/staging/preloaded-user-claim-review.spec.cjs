@@ -112,9 +112,9 @@ async function signOut(page) {
   await expect(page.locator('#signedOut')).toBeVisible({ timeout: 15_000 });
 }
 
-async function signIn(page, email) {
+async function signIn(page, email, password = config.password) {
   await page.locator('#loginEmail').fill(email);
-  await page.locator('#loginPassword').fill(config.password);
+  await page.locator('#loginPassword').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.locator('#signedIn')).toBeVisible({ timeout: 15_000 });
 }
@@ -130,11 +130,11 @@ async function expectCurrentRoles(page, roles) {
 }
 
 async function removeVehicleInspectorThroughAdminUi(page) {
-  await signIn(page, config.email);
+  await signIn(page, config.adminEmail, config.adminPassword);
   await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toContain('Admin');
 
   const adminCard = page.locator('.ops-home-admin');
-  await expect(adminCard, 'E2E_STAGING_TEST_EMAIL must be assigned the Admin role for REG-049.').toBeVisible({ timeout: 15_000 });
+  await expect(adminCard, 'E2E_STAGING_ADMIN_EMAIL must be assigned the Admin role for REG-049.').toBeVisible({ timeout: 15_000 });
   await adminCard.click();
   await expect(page.locator('#opsShell h2')).toHaveText('Admin');
 

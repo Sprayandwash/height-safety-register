@@ -104,11 +104,14 @@ test('REG-049 controlled staging claim review refuses production and removes its
   const spec=read('tests/e2e/staging/preloaded-user-claim-review.spec.cjs');
   assert.match(config, /E2E_REG049_CLAIM_EMAIL/);
   assert.match(config, /E2E_REG049_SELF_SIGNUP_EMAIL/);
-  assert.match(config, /two valid controlled test email addresses/);
-  assert.match(config, /two distinct dedicated identities/);
+  assert.match(config, /E2E_STAGING_ADMIN_EMAIL/);
+  assert.match(config, /E2E_STAGING_ADMIN_PASSWORD/);
+  assert.match(config, /dedicated Admin account and two distinct temporary mailboxes/);
   assert.match(workflow, /VERIFY STAGING PRELOADED CLAIM TEST/);
   assert.match(workflow, /E2E_REG049_CLAIM_EMAIL: \$\{\{ secrets\.E2E_REG049_CLAIM_EMAIL \}\}/);
   assert.match(workflow, /E2E_REG049_SELF_SIGNUP_EMAIL: \$\{\{ secrets\.E2E_REG049_SELF_SIGNUP_EMAIL \}\}/);
+  assert.match(workflow, /E2E_STAGING_ADMIN_EMAIL: \$\{\{ secrets\.E2E_STAGING_ADMIN_EMAIL \}\}/);
+  assert.match(workflow, /E2E_STAGING_ADMIN_PASSWORD: \$\{\{ secrets\.E2E_STAGING_ADMIN_PASSWORD \}\}/);
   assert.doesNotMatch(workflow, /e2e-reg049-claim-\$\{nonce\}@sprayandwash\.co\.nz/);
   assert.doesNotMatch(workflow, /e2e-reg049-self-\$\{nonce\}@sprayandwash\.co\.nz/);
   assert.match(workflow, /environment: staging/);
@@ -119,6 +122,7 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /disable trigger operations_preloaded_users_protect_claimed/);
   assert.match(spec, /delete from auth\.users/);
   assert.match(spec, /'Vehicle inspector'/);
+  assert.match(spec, /signIn\(page, config\.adminEmail, config\.adminPassword\)/);
   assert.match(spec, /removeVehicleInspectorThroughAdminUi/);
   assert.match(spec, /ops-home-admin/);
   assert.match(spec, /data-ops-edit-user/);

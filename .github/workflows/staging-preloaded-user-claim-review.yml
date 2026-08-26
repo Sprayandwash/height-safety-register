@@ -21,6 +21,8 @@ jobs:
     env:
       E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
       E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
+      E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
       E2E_REG049_CLAIM_EMAIL: ${{ secrets.E2E_REG049_CLAIM_EMAIL }}
       E2E_REG049_SELF_SIGNUP_EMAIL: ${{ secrets.E2E_REG049_SELF_SIGNUP_EMAIL }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -36,11 +38,16 @@ jobs:
           }
           test -n "${E2E_STAGING_TEST_EMAIL:-}" || { echo 'Missing staging test account email.' >&2; exit 1; }
           test -n "${E2E_STAGING_TEST_PASSWORD:-}" || { echo 'Missing staging test account password.' >&2; exit 1; }
+          test -n "${E2E_STAGING_ADMIN_EMAIL:-}" || { echo 'Missing E2E_STAGING_ADMIN_EMAIL: configure a dedicated Staging Admin test account.' >&2; exit 1; }
+          test -n "${E2E_STAGING_ADMIN_PASSWORD:-}" || { echo 'Missing E2E_STAGING_ADMIN_PASSWORD: configure the dedicated Staging Admin test account password.' >&2; exit 1; }
           test -n "${E2E_REG049_CLAIM_EMAIL:-}" || { echo 'Missing E2E_REG049_CLAIM_EMAIL: configure a real, dedicated staging test mailbox.' >&2; exit 1; }
           test -n "${E2E_REG049_SELF_SIGNUP_EMAIL:-}" || { echo 'Missing E2E_REG049_SELF_SIGNUP_EMAIL: configure a second real, dedicated staging test mailbox.' >&2; exit 1; }
           test "${E2E_REG049_CLAIM_EMAIL,,}" != "${E2E_REG049_SELF_SIGNUP_EMAIL,,}" || { echo 'REG-049 requires two distinct dedicated staging test mailboxes.' >&2; exit 1; }
           test "${E2E_REG049_CLAIM_EMAIL,,}" != "${E2E_STAGING_TEST_EMAIL,,}" || { echo 'REG-049 claim mailbox must be separate from the normal staging test account.' >&2; exit 1; }
           test "${E2E_REG049_SELF_SIGNUP_EMAIL,,}" != "${E2E_STAGING_TEST_EMAIL,,}" || { echo 'REG-049 self-sign-up mailbox must be separate from the normal staging test account.' >&2; exit 1; }
+          test "${E2E_STAGING_ADMIN_EMAIL,,}" != "${E2E_STAGING_TEST_EMAIL,,}" || { echo 'REG-049 Admin account must be separate from the normal staging test account.' >&2; exit 1; }
+          test "${E2E_STAGING_ADMIN_EMAIL,,}" != "${E2E_REG049_CLAIM_EMAIL,,}" || { echo 'REG-049 Admin account must be separate from the temporary claim mailbox.' >&2; exit 1; }
+          test "${E2E_STAGING_ADMIN_EMAIL,,}" != "${E2E_REG049_SELF_SIGNUP_EMAIL,,}" || { echo 'REG-049 Admin account must be separate from the temporary self-sign-up mailbox.' >&2; exit 1; }
           test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing Supabase access token.' >&2; exit 1; }
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
