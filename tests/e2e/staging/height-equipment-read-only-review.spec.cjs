@@ -41,7 +41,16 @@ test('STAGING-HEIGHT-READ-ONLY-001: Height Equipment register filters, detail an
   await expect(register.locator('.listItem')).toHaveCount(1);
   const selectedItem = register.locator('.listItem').first();
   await search.evaluate(input=>input.blur());
-  await selectedItem.evaluate(node => node.scrollIntoView({ block: 'end', inline: 'nearest' }));
+  // On a narrow viewport the filters and tabs are sticky. Position the card
+  // in the safe centre of the viewport so the following click is a normal
+  // user tap, rather than asking Playwright to click through an overlay.
+  await selectedItem.evaluate(node => {
+    const rect=node.getBoundingClientRect();
+    const stickyTop=170;
+    const safeHeight=window.innerHeight-stickyTop-24;
+    const target=window.scrollY+rect.top-stickyTop-Math.max(0,(safeHeight-rect.height)/2);
+    window.scrollTo({top:Math.max(0,target),behavior:'instant'});
+  });
   await expect(selectedItem).toBeInViewport();
   await selectedItem.click();
 
