@@ -365,16 +365,24 @@ async function toggleUserRole(userId,role,checked,el){
 async function loadData(){
   heightEquipmentDataState="loading";
   renderEquipmentResults();
-  let eq=await sb.from("equipment").select("*").order("serial");
+  const [eq,ins]=await Promise.all([
+    sb.from("equipment").select("*").order("serial"),
+    sb.from("inspections").select("*").order("inspection_date",{ascending:false})
+  ]);
   if(eq.error){heightEquipmentDataState="error";renderEquipmentResults();return alert(eq.error.message);}
-  let ins=await sb.from("inspections").select("*").order("inspection_date",{ascending:false});
   if(ins.error){heightEquipmentDataState="error";renderEquipmentResults();return alert(ins.error.message);}
+
+  // The register needs only equipment and inspection history. Show it as soon
+  // as those essential queries arrive instead of holding the whole screen for
+  // photos, certificates, settings, and audit history.
+  equipment=eq.data||[]; inspections=ins.data||[]; heightEquipmentDataState="ready"; renderAll(); renderSuggestions();
+
   let ph=await sb.from("equipment_photos").select("*").order("created_at",{ascending:false}); if(ph.error) console.warn(ph.error.message);
   let iph=await sb.from("inspection_photos").select("*").order("created_at",{ascending:false}); if(iph.error) console.warn("Inspection photo table issue: "+iph.error.message);
   let cert=await sb.from("certificates").select("*").order("created_at",{ascending:false}); if(cert.error) console.warn("Certificate table issue: "+cert.error.message);
   await loadAppSettings();
   try{let al=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(250); if(!al.error) auditLogs=al.data||[];}catch(e){console.warn("Audit log skipped",e);}
-  equipment=eq.data||[]; inspections=ins.data||[]; photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; heightEquipmentDataState="ready"; renderAll(); renderSuggestions();
+  photos=ph.data||[]; inspectionPhotos=iph.data||[]; certificates=cert.data||[]; renderAll(); renderSuggestions();
 }
 function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory();if(window.certMode) updateCertificateUI();}
 function showTab(id){if(id==="certificates")window.SWOperationsV4?.installCertificatesV424?.();document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));const pane=document.getElementById(id);if(!pane)return;pane.classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export")renderReportsHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}

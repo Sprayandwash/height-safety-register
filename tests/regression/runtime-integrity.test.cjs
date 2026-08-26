@@ -89,8 +89,11 @@ test('REG-057: Height Equipment register distinguishes loading from an empty reg
   assert.match(app,/heightEquipmentDataState="loading";/);
   assert.match(app,/Loading equipment…/);
   assert.match(app,/heightEquipmentDataState="ready";/);
+  assert.match(app,/equipment=eq\.data\|\|\[\]; inspections=ins\.data\|\|\[\]; heightEquipmentDataState="ready"; renderAll\(\); renderSuggestions\(\);[\s\S]*let ph=await sb\.from\("equipment_photos"\)/);
   assert.match(index,/#equipmentList \.listItem\{scroll-margin-block:150px 18px\}/);
-  assert.match(review,/locator\('#equipmentFilterCount'\)\)\.not\.toHaveText\('Loading equipment…'/);
+  assert.match(review,/locator\('#equipmentFilterCount'\)\)\.toHaveText\(/);
+  assert.match(review,/input=>input\.blur\(\)/);
+  assert.doesNotMatch(review,/search\.press\('Escape'\)/);
   assert.match(review,/scrollIntoView\(\{ block: 'end', inline: 'nearest' \}\)/);
   assert.match(review,/await selectedItem\.click\(\);/);
 });
