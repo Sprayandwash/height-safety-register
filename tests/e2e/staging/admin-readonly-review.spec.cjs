@@ -37,6 +37,10 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Backup', exact: true })).toBeVisible();
 
+  // Select the Users & Permissions view before opening Current Users. Its
+  // content is intentionally hidden while another Admin view is active.
+  await page.getByRole('button', { name: 'Users & Permissions', exact: true }).click();
+
   // Current Users is opened and inspected only. The test never presses Save.
   const currentUsers = page.locator('details').filter({ has: page.getByText('Current Users', { exact: true }) });
   await currentUsers.locator('summary').click();

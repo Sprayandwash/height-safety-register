@@ -150,6 +150,7 @@ test('REG-043/046/048: Admin read-only browser review covers desktop and mobile 
   assert.match(workflow, /E2E_STAGING_ADMIN_EMAIL/);
   assert.match(workflow, /twkgfmctuffmkvkmdkct/);
   assert.match(spec, /ops-home-admin/);
+  assert.match(spec, /Users & Permissions', exact: true \}\)\.click\(\)/);
   assert.match(spec, /ownRoleInputs\).*toBeDisabled/);
   assert.match(spec, /input\[data-ops-preload-role\]:checked/);
   assert.match(spec, /Save app settings/);
