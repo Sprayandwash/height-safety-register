@@ -42,17 +42,27 @@ test('STAGING-HEIGHT-READ-ONLY-001: Height Equipment register filters, detail an
   const selectedItem = register.locator('.listItem').first();
   await search.evaluate(input=>input.blur());
   // On a narrow viewport the filters and tabs are sticky. Position the card
-  // in the safe centre of the viewport so the following click is a normal
-  // user tap, rather than asking Playwright to click through an overlay.
-  await selectedItem.evaluate(node => {
+  // in the safe centre, prove the card owns the intended tap point, then
+  // issue an ordinary pointer click. Locator.click() performs a second
+  // automatic scroll which can place this valid card beneath the filters.
+  const tapPoint=await selectedItem.evaluate(node => {
     const rect=node.getBoundingClientRect();
     const stickyTop=170;
     const safeHeight=window.innerHeight-stickyTop-24;
     const target=window.scrollY+rect.top-stickyTop-Math.max(0,(safeHeight-rect.height)/2);
     window.scrollTo({top:Math.max(0,target),behavior:'instant'});
+    const positioned=node.getBoundingClientRect();
+    return {
+      x:positioned.left+positioned.width/2,
+      y:positioned.top+positioned.height/2
+    };
   });
   await expect(selectedItem).toBeInViewport();
-  await selectedItem.click();
+  await expect.poll(() => page.evaluate(({x,y}) => {
+    const target=document.elementFromPoint(x,y);
+    return Boolean(target && document.querySelector('#equipmentList .listItem')?.contains(target));
+  },tapPoint)).toBe(true);
+  await page.mouse.click(tapPoint.x,tapPoint.y);
 
   await expect(page.locator('#detail')).toBeVisible();
   await expect(page.locator('#detailContent')).toContainText(serial);

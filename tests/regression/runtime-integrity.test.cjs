@@ -96,6 +96,8 @@ test('REG-057: Height Equipment register distinguishes loading from an empty reg
   assert.doesNotMatch(review,/search\.press\('Escape'\)/);
   assert.match(review,/const stickyTop=170;/);
   assert.match(review,/window\.scrollTo\(\{top:Math\.max\(0,target\),behavior:'instant'\}\)/);
+  assert.match(review,/document\.elementFromPoint\(x,y\)/);
+  assert.match(review,/await page\.mouse\.click\(tapPoint\.x,tapPoint\.y\);/);
   assert.doesNotMatch(review,/force\s*:\s*true/);
-  assert.match(review,/await selectedItem\.click\(\);/);
+  assert.doesNotMatch(review,/await selectedItem\.click\(\);/);
 });
