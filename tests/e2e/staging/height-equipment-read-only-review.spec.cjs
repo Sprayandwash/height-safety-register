@@ -20,7 +20,7 @@ async function signInAndOpenHeightEquipment(page) {
   await expect(page.locator('#heightModuleHeader')).toContainText('Height Equipment');
   await page.locator('.tab[data-tab="equipment"]').click();
   await expect(page.locator('#equipmentFilterSearch')).toBeVisible();
-  await expect(page.locator('#equipmentFilterCount')).not.toHaveText('Loading equipment…', { timeout: 30_000 });
+  await expect(page.locator('#equipmentFilterCount')).toHaveText(/\d+ items? shown\./, { timeout: 30_000 });
 }
 
 test('STAGING-HEIGHT-READ-ONLY-001: Height Equipment register filters, detail and certificate view are browseable without writes', async ({ page }) => {
@@ -40,7 +40,7 @@ test('STAGING-HEIGHT-READ-ONLY-001: Height Equipment register filters, detail an
   await expect(register).toContainText(serial);
   await expect(register.locator('.listItem')).toHaveCount(1);
   const selectedItem = register.locator('.listItem').first();
-  await search.press('Escape');
+  await search.evaluate(input=>input.blur());
   await selectedItem.evaluate(node => node.scrollIntoView({ block: 'end', inline: 'nearest' }));
   await expect(selectedItem).toBeInViewport();
   await selectedItem.click();
