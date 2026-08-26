@@ -80,3 +80,17 @@ test('REG-054: Height Equipment Add Item code uses the current form field IDs',(
   assert.match(app,/function newEquipment\(\).*showTab\("editEquipment"\)/);
   assert.match(app,/function autoCalculateRetirementDate\(\)/);
 });
+
+test('REG-057: Height Equipment register distinguishes loading from an empty register and the mobile review uses a visible card tap',()=>{
+  const index=read('index.html');
+  const app=read('app.js');
+  const review=read('tests/e2e/staging/height-equipment-read-only-review.spec.cjs');
+  assert.match(app,/let heightEquipmentDataState="idle";/);
+  assert.match(app,/heightEquipmentDataState="loading";/);
+  assert.match(app,/Loading equipment…/);
+  assert.match(app,/heightEquipmentDataState="ready";/);
+  assert.match(index,/#equipmentList \.listItem\{scroll-margin-block:150px 18px\}/);
+  assert.match(review,/locator\('#equipmentFilterCount'\)\)\.not\.toHaveText\('Loading equipment…'/);
+  assert.match(review,/scrollIntoView\(\{ block: 'end', inline: 'nearest' \}\)/);
+  assert.match(review,/await selectedItem\.click\(\);/);
+});
