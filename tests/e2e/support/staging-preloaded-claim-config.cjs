@@ -13,10 +13,11 @@ function getStagingPreloadedClaimConfig(env = process.env) {
   const selfSignupEmail = required(env, 'E2E_REG049_SELF_SIGNUP_EMAIL').toLowerCase();
   const marker = required(env, 'E2E_REG049_MARKER');
 
-  // Supabase Auth rejects the reserved .test TLD at sign-up. These generated
-  // addresses use the approved, controlled Spray & Wash domain instead.
-  if (!claimEmail.endsWith('@sprayandwash.co.nz') || !selfSignupEmail.endsWith('@sprayandwash.co.nz')) {
-    throw new Error('SAFETY STOP: REG-049 may only use generated @sprayandwash.co.nz identities.');
+  if (!/^\S+@\S+\.\S+$/.test(claimEmail) || !/^\S+@\S+\.\S+$/.test(selfSignupEmail)) {
+    throw new Error('SAFETY STOP: REG-049 requires two valid controlled test email addresses.');
+  }
+  if (claimEmail === selfSignupEmail || claimEmail === staging.email.toLowerCase() || selfSignupEmail === staging.email.toLowerCase()) {
+    throw new Error('SAFETY STOP: REG-049 requires two distinct dedicated identities, separate from the normal staging test account.');
   }
   if (!marker.startsWith('E2E REG-049 — ')) {
     throw new Error('SAFETY STOP: REG-049 marker is invalid.');

@@ -104,8 +104,13 @@ test('REG-049 controlled staging claim review refuses production and removes its
   const spec=read('tests/e2e/staging/preloaded-user-claim-review.spec.cjs');
   assert.match(config, /E2E_REG049_CLAIM_EMAIL/);
   assert.match(config, /E2E_REG049_SELF_SIGNUP_EMAIL/);
-  assert.match(config, /@sprayandwash\.co\.nz/);
+  assert.match(config, /two valid controlled test email addresses/);
+  assert.match(config, /two distinct dedicated identities/);
   assert.match(workflow, /VERIFY STAGING PRELOADED CLAIM TEST/);
+  assert.match(workflow, /E2E_REG049_CLAIM_EMAIL: \$\{\{ secrets\.E2E_REG049_CLAIM_EMAIL \}\}/);
+  assert.match(workflow, /E2E_REG049_SELF_SIGNUP_EMAIL: \$\{\{ secrets\.E2E_REG049_SELF_SIGNUP_EMAIL \}\}/);
+  assert.doesNotMatch(workflow, /e2e-reg049-claim-\$\{nonce\}@sprayandwash\.co\.nz/);
+  assert.doesNotMatch(workflow, /e2e-reg049-self-\$\{nonce\}@sprayandwash\.co\.nz/);
   assert.match(workflow, /environment: staging/);
   assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN/);
