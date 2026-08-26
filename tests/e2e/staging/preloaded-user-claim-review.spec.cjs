@@ -79,16 +79,27 @@ where email = ${sqlLiteral(email)};
   return Number(rows?.[0]?.user_count ?? 0);
 }
 
-async function removeVehicleInspectorRole() {
-  await runStagingSql(`
-delete from public.user_roles
-where user_id = (select id from auth.users where email = ${sqlLiteral(config.claimEmail)})
-  and role = 'Vehicle inspector';
-`);
-}
-
 async function currentOperationRoles(page) {
   return page.evaluate(() => [...(window.SWOperationsV4?.state?.roles || [])].sort());
+}
+
+async function currentOperationRoleState(page) {
+  return page.evaluate(async () => {
+    const state = window.SWOperationsV4?.state;
+    if (!state?.sb || !state.user) {
+      return { stateRoles: [], queryRoles: [], queryError: 'No authenticated V4 session.' };
+    }
+    const result = await state.sb
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', state.user.id)
+      .order('role');
+    return {
+      stateRoles: [...(state.roles || [])].sort(),
+      queryRoles: (result.data || []).map(row => row.role).filter(Boolean).sort(),
+      queryError: result.error?.message || ''
+    };
+  });
 }
 
 async function signOut(page) {
@@ -108,6 +119,54 @@ async function signIn(page, email) {
   await expect(page.locator('#signedIn')).toBeVisible({ timeout: 15_000 });
 }
 
+async function expectCurrentRoles(page, roles) {
+  await expect.poll(async () => (await currentOperationRoleState(page)).queryError, {
+    timeout: 15_000
+  }).toBe('');
+  await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toEqual(roles);
+  await expect.poll(async () => (await currentOperationRoleState(page)).queryRoles, {
+    timeout: 15_000
+  }).toEqual(roles);
+}
+
+async function removeVehicleInspectorThroughAdminUi(page) {
+  await signIn(page, config.email);
+  await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toContain('Admin');
+
+  const adminCard = page.locator('.ops-home-admin');
+  await expect(adminCard, 'E2E_STAGING_TEST_EMAIL must be assigned the Admin role for REG-049.').toBeVisible({ timeout: 15_000 });
+  await adminCard.click();
+  await expect(page.locator('#opsShell h2')).toHaveText('Admin');
+
+  const currentUsers = page.locator('details').filter({
+    has: page.getByText('Current Users', { exact: true })
+  });
+  if (!(await currentUsers.evaluate(details => details.open))) {
+    await currentUsers.locator('summary').click();
+  }
+
+  const claimedUser = currentUsers.locator('.ops-user-row').filter({ hasText: config.claimEmail });
+  await expect(claimedUser).toHaveCount(1, { timeout: 15_000 });
+  const editButton = claimedUser.locator('[data-ops-edit-user]');
+  const claimedUserId = await editButton.getAttribute('data-ops-edit-user');
+  expect(claimedUserId, 'The claimed temporary account must appear in Current Users.').toBeTruthy();
+  await editButton.click();
+
+  const vehicleInspector = page.locator(`input[data-ops-role-user="${claimedUserId}"][value="Vehicle inspector"]`);
+  await expect(vehicleInspector).toBeChecked({ timeout: 15_000 });
+  await vehicleInspector.uncheck();
+
+  const saved = page.waitForEvent('dialog');
+  await page.locator(`[data-ops-save-user="${claimedUserId}"]`).click();
+  const dialog = await saved;
+  expect(dialog.message()).toBe('User saved. The full name will now be used in Performed by.');
+  await dialog.accept();
+
+  await expect(claimedUser).toContainText('Height equipment user', { timeout: 15_000 });
+  await expect(claimedUser).not.toContainText('Vehicle inspector', { timeout: 15_000 });
+  await signOut(page);
+}
+
 async function createAccountThroughUi(page, email) {
   await page.locator('#loginEmail').fill(email);
   await page.locator('#loginPassword').fill(config.password);
@@ -125,7 +184,7 @@ test.afterEach(async () => {
   await cleanupTemporaryIdentities();
 });
 
-test('REG-049: a claimed pre-load keeps an Admin role edit and a self-sign-up receives no roles', async ({ page }) => {
+test('REG-049: a claimed pre-load keeps a real Admin UI role edit and a self-sign-up receives no roles', async ({ page }) => {
   await cleanupTemporaryIdentities();
   await createPendingPreload();
 
@@ -137,20 +196,20 @@ test('REG-049: a claimed pre-load keeps an Admin role edit and a self-sign-up re
   await confirmTemporaryEmail(config.claimEmail);
   await signOut(page);
   await signIn(page, config.claimEmail);
-  await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toEqual([
+  await expectCurrentRoles(page, [
     'Height equipment user',
     'Vehicle inspector'
   ]);
 
-  await removeVehicleInspectorRole();
   await signOut(page);
+  await removeVehicleInspectorThroughAdminUi(page);
   await signIn(page, config.claimEmail);
-  await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toEqual(['Height equipment user']);
+  await expectCurrentRoles(page, ['Height equipment user']);
 
   await signOut(page);
   await createAccountThroughUi(page, config.selfSignupEmail);
   await confirmTemporaryEmail(config.selfSignupEmail);
   await signOut(page);
   await signIn(page, config.selfSignupEmail);
-  await expect.poll(() => currentOperationRoles(page), { timeout: 15_000 }).toEqual([]);
+  await expectCurrentRoles(page, []);
 });

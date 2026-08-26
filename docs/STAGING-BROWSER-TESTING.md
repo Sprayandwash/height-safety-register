@@ -34,7 +34,9 @@ The two workflows can still be started manually from **Actions** when a recheck 
 
 ## Controlled pre-loaded-account claim review (REG-049)
 
-**Verify staging pre-loaded account claims** is an explicitly confirmed, write-capable Staging test. It creates and removes two temporary Auth identities so it can check that a claimed pre-load receives only its assigned roles, an Admin role edit persists after a later sign-in, and a self-sign-up receives no roles.
+**Verify staging pre-loaded account claims** is an explicitly confirmed, write-capable Staging test. It creates and removes two temporary Auth identities so it can check that a claimed pre-load receives only its assigned roles, a role edit made through the real **Admin → Current Users** screen persists after a later sign-in, and a self-sign-up receives no roles.
+
+The existing `E2E_STAGING_TEST_EMAIL` account must have the **Admin** role in Staging. The workflow stops with a clear setup failure before changing permissions if that account cannot open the Admin screen. The test never edits that Admin account's own roles.
 
 Because Staging email confirmation sends an Auth email before the test confirms the account through its controlled database step, this workflow uses the two real monitored mailbox secrets above. It must never generate email addresses. If either secret is absent, duplicated, or the normal test account, the workflow stops before it creates an account or sends an email.
 
