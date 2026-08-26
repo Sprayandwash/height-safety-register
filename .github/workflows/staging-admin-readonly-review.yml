@@ -1,0 +1,84 @@
+name: Staging Admin read-only review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-readonly-review:
+    name: Verify Staging Admin browser journey without writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: staging
+    env:
+      E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
+      E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Validate dedicated Staging Admin credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${E2E_STAGING_ADMIN_EMAIL:-}" || { echo 'Missing E2E_STAGING_ADMIN_EMAIL in the staging environment.' >&2; exit 1; }
+          test -n "${E2E_STAGING_ADMIN_PASSWORD:-}" || { echo 'Missing E2E_STAGING_ADMIN_PASSWORD in the staging environment.' >&2; exit 1; }
+      - name: Install locked test tooling
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Download latest isolated Staging app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          test -n "$artifact_id" || { echo 'No current spray-wash-staging-app artifact exists. Run Build staging app first.' >&2; exit 1; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app
+          unzip -q staging-app.zip -d staging-app
+          test -f staging-app/index.html
+          test -f staging-app/config.js
+          test -f staging-app/STAGING-README.txt
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test -n "$ref" || { echo 'Staging artifact has no project ref.' >&2; exit 1; }
+          test "$ref" != 'twkgfmctuffmkvkmdkct' || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
+          ! grep -F 'twkgfmctuffmkvkmdkct' staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+      - name: Serve and browse the isolated Staging app without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:admin-readonly
+      - name: Publish read-only review status
+        if: ${{ success() }}
+        run: |
+          echo '## Staging Admin read-only review passed' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '- Desktop and phone-size views opened Admin, Current Users, pre-load form, Settings and Backup.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- The review verified the signed-in Admin cannot alter its own role selection.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- No form was submitted, no setting was saved, no backup was downloaded, and no record was created, changed, or removed.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Production was refused and not accessed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Playwright failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-admin-readonly-review-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+            staging-http-server.log
+          if-no-files-found: warn
+          retention-days: 14
