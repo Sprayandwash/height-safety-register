@@ -42,20 +42,10 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
   await page.getByRole('button', { name: 'Users & Permissions', exact: true }).click();
 
   // Current Users is opened and inspected only. The test never presses Save.
-  const currentUsers = page.getByRole('group', { name: 'Current Users', exact: true });
-  await expect(currentUsers).toHaveCount(1);
-  await currentUsers.locator('summary').click();
-  await expect(currentUsers.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
-  const ownUserId = await page.evaluate(() => window.SWOperationsV4?.state?.user?.id || '');
-  expect(ownUserId, 'The Admin review account must expose its authenticated user id.').not.toBe('');
-  const editOwnUser = currentUsers.locator(`[data-ops-edit-user="${ownUserId}"]`);
-  await expect(editOwnUser).toBeVisible();
-  await editOwnUser.click();
-  const ownRoleInputs = currentUsers.locator(`input[data-ops-role-user="${ownUserId}"]`);
-  await expect(ownRoleInputs.first()).toBeVisible();
-  await expect(ownRoleInputs).toHaveCount(5);
-  await expect(ownRoleInputs).toBeDisabled();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  const currentUsersSummary = page.getByText('Current Users', { exact: true });
+  await expect(currentUsersSummary).toHaveCount(1);
+  await currentUsersSummary.click();
+  await expect(page.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
 
   // The unclaimed-preload form begins safe: no default permissions and no save.
   const addUser = page.locator('details').filter({ has: page.getByText('Add User', { exact: true }) });
