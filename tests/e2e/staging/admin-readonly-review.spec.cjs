@@ -42,12 +42,9 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
   await page.getByRole('button', { name: 'Users & Permissions', exact: true }).click();
 
   // Current Users is opened and inspected only. The test never presses Save.
-  const currentUsersSummary = page.locator('summary:visible', { hasText: /^Current Users$/ });
-  await expect(currentUsersSummary).toHaveCount(1);
-  const currentUsers = currentUsersSummary.locator('xpath=..');
-  if (!(await currentUsers.evaluate((panel) => panel.open))) {
-    await currentUsers.locator('summary').click();
-  }
+  const currentUsers = page.getByRole('group', { name: 'Current Users', exact: true });
+  await expect(currentUsers).toHaveCount(1);
+  await currentUsers.locator('summary').click();
   await expect(currentUsers.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
   const ownUserId = await page.evaluate(() => window.SWOperationsV4?.state?.user?.id || '');
   expect(ownUserId, 'The Admin review account must expose its authenticated user id.').not.toBe('');
