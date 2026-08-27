@@ -138,21 +138,22 @@ async function removeVehicleInspectorThroughAdminUi(page) {
   await adminCard.click();
   await expect(page.locator('#opsShell h2')).toHaveText('Admin');
 
-  // Open the visible summary and wait for its content. Targeting the summary
-  // avoids attempting to click an Edit user button while the details panel is
-  // still closed.
-  const currentUsersSummary = page.getByText('Current Users', { exact: true });
-  await expect(currentUsersSummary).toHaveCount(1);
-  await currentUsersSummary.click();
-  await expect(page.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
-
   const currentUsers = page.locator('details').filter({
     has: page.getByText('Current Users', { exact: true })
   });
-
+  // Wait for the async user list to finish loading before opening the panel.
+  // Otherwise its final render can replace an open details element with a
+  // closed one, leaving the Edit user button hidden.
   const claimedUser = currentUsers.locator('.ops-user-row').filter({ hasText: config.claimEmail });
   await expect(claimedUser).toHaveCount(1, { timeout: 15_000 });
   const editButton = claimedUser.locator('[data-ops-edit-user]');
+
+  const currentUsersSummary = page.getByText('Current Users', { exact: true });
+  await expect(currentUsersSummary).toHaveCount(1);
+  await currentUsersSummary.click();
+  await expect(currentUsers).toHaveAttribute('open', '');
+  await expect(editButton).toBeVisible();
+
   const claimedUserId = await editButton.getAttribute('data-ops-edit-user');
   expect(claimedUserId, 'The claimed temporary account must appear in Current Users.').toBeTruthy();
   await editButton.click();

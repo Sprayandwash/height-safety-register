@@ -128,7 +128,11 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /data-ops-edit-user/);
   assert.match(spec, /data-ops-save-user/);
   assert.match(spec, /currentUsersSummary\.click\(\)/);
-  assert.match(spec, /Current signed-in users/);
+  assert.match(spec, /await expect\(editButton\)\.toBeVisible\(\)/);
+  assert.ok(
+    spec.indexOf('await expect(claimedUser).toHaveCount(1') < spec.indexOf('await currentUsersSummary.click()'),
+    'the controlled test must wait for users to load before opening Current Users'
+  );
   assert.doesNotMatch(spec, /async function removeVehicleInspectorRole/);
   assert.match(workflow, /real Admin → Current Users removal/);
   assert.match(spec, /expectCurrentRoles\(page, \[\]\)/);
