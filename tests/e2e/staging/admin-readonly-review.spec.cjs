@@ -62,7 +62,7 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
 
   await page.getByRole('button', { name: 'Backup', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Backup', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Full JSON backup', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create Complete Backup', exact: true })).toBeVisible();
 
   // A phone viewport may horizontally scroll an intentionally wide table only
   // within its table wrapper; it must not create page-wide horizontal overflow.
