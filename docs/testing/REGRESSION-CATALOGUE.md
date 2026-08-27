@@ -9,7 +9,7 @@ The permanent, complete catalogue is [../regression-catalogue.md](../regression-
 | Height Equipment | Agreed regression testing completed for this programme phase. | Existing browser/read-only and controlled test evidence is retained in the master catalogue and workflows. |
 | Vehicle Checks | Agreed regression testing completed for this programme phase. | Existing browser/read-only and controlled test evidence is retained in the master catalogue and workflows. |
 | Maintenance | Agreed regression testing completed for this programme phase. | Existing browser/read-only and controlled test evidence is retained in the master catalogue and workflows. |
-| Admin | Read-only desktop/mobile review passed; controlled claim-and-role test awaits a successful run. | Run `33060709477` passed. Latest controlled attempt `33061479194` was blocked by the email rate limit and cleaned up. |
+| Admin | Agreed Admin regression testing completed. | Read-only run `33060709477` passed; controlled claim-and-role run `33105862362` passed with cleanup and automatic history archive. |
 
 ## Naming note
 
@@ -21,5 +21,4 @@ The executable controlled Admin workflow and test use the historic label `REG-04
 - **Controlled:** A real temporary pre-load is claimed; its initial roles are verified; the Admin UI removes the temporary user's Vehicle inspector role; the account signs in again and verifies the changed role; a separate self-sign-up verifies it receives no roles.
 - **Cleanup:** The workflow removes its tagged pre-load data, roles and temporary identities regardless of test result.
 
-The controlled coverage is useful only after a complete passing run. See [RUN-LEDGER.md](RUN-LEDGER.md) for the current state.
-
+The controlled coverage completed successfully in run `33105862362`. See [RUN-LEDGER.md](RUN-LEDGER.md) for the full sequence, including earlier failed attempts and their cleanup results.

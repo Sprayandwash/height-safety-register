@@ -15,8 +15,8 @@ This is a compact, append-only index of meaningful Admin test runs and fixes. It
 | 27 Aug 2026 | Staging build `33060604851` | 7 | Passed | Built the PR #48 revision for isolated Staging. |
 | 27 Aug 2026 | Admin read-only review `33060709477` | 8–9A | Passed | Desktop and phone-size Admin browser review completed without writes. |
 | 27 Aug 2026 | Controlled run `33061479194` | 9B | Failed; cleanup passed | First temporary signup showed `email rate limit exceeded`; the 120-second timing correction was not reached. See [detailed record](history/step-9b/2026-08-27-run-33061479194.md). |
+| 27 Aug 2026 | Controlled run `33105862362` | 9B | Passed; cleanup and automatic archive passed | Temporary claim, Admin role edit, persisted re-sign-in role and self-sign-up-with-no-roles checks passed. [Automated history record](https://github.com/Sprayandwash/height-safety-register/blob/testing-history/docs/testing/history/step-9b/2026-08-27-run-33105862362-attempt-1.md). |
 
 ## Recording rule
 
 Add one short row for each meaningful controlled run, staging build, read-only review, PR merge, or confirmed new defect. Add a detailed file under `history/step-9b/` only for Step 9B runs.
-
