@@ -138,12 +138,17 @@ async function removeVehicleInspectorThroughAdminUi(page) {
   await adminCard.click();
   await expect(page.locator('#opsShell h2')).toHaveText('Admin');
 
+  // Open the visible summary and wait for its content. Targeting the summary
+  // avoids attempting to click an Edit user button while the details panel is
+  // still closed.
+  const currentUsersSummary = page.getByText('Current Users', { exact: true });
+  await expect(currentUsersSummary).toHaveCount(1);
+  await currentUsersSummary.click();
+  await expect(page.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
+
   const currentUsers = page.locator('details').filter({
     has: page.getByText('Current Users', { exact: true })
   });
-  if (!(await currentUsers.evaluate(details => details.open))) {
-    await currentUsers.locator('summary').click();
-  }
 
   const claimedUser = currentUsers.locator('.ops-user-row').filter({ hasText: config.claimEmail });
   await expect(claimedUser).toHaveCount(1, { timeout: 15_000 });
