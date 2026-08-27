@@ -12,12 +12,19 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: staging-preloaded-claim-review
+  cancel-in-progress: false
+
 jobs:
   preloaded-user-claim-review:
     name: Verify staging pre-loaded account claims
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: staging
+    outputs:
+      controlled_test_result: ${{ steps.controlled_test.outcome }}
+      cleanup_result: ${{ steps.cleanup.outcome }}
     env:
       E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
       E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
@@ -85,6 +92,7 @@ jobs:
           # never manufacture addresses that could bounce.
           echo "E2E_REG049_MARKER=E2E REG-049 — ${nonce}" >> "$GITHUB_ENV"
       - name: Create, verify, and remove temporary staging identities
+        id: controlled_test
         shell: bash
         run: |
           set -euo pipefail
@@ -98,6 +106,7 @@ jobs:
           curl -fsS http://127.0.0.1:4174/ >/dev/null
           E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:preloaded-claim
       - name: Remove temporary staging identities if a test is interrupted
+        id: cleanup
         if: ${{ always() }}
         shell: bash
         run: |
@@ -152,3 +161,49 @@ jobs:
             staging-http-server.log
           if-no-files-found: warn
           retention-days: 14
+
+  record-controlled-run:
+    name: Archive controlled-run result
+    needs: preloaded-user-claim-review
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the isolated testing-history branch
+        uses: actions/checkout@v4
+        with:
+          ref: testing-history
+          fetch-depth: 0
+      - name: Write secret-free Step 9B record
+        shell: bash
+        env:
+          OVERALL_RESULT: ${{ needs.preloaded-user-claim-review.result }}
+          CONTROLLED_TEST_RESULT: ${{ needs.preloaded-user-claim-review.outputs.controlled_test_result }}
+          CLEANUP_RESULT: ${{ needs.preloaded-user-claim-review.outputs.cleanup_result }}
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin testing-history
+          record_dir='docs/testing/history/step-9b'
+          mkdir -p "$record_dir"
+          record_file="$record_dir/$(date -u +%Y-%m-%d)-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.md"
+          {
+            echo "# Step 9B record — $(date -u +%Y-%m-%d) — run ${GITHUB_RUN_ID}"
+            echo
+            echo '## Automated archive'
+            echo
+            echo "- Workflow: ${GITHUB_WORKFLOW}"
+            echo "- Tested commit: ${GITHUB_SHA}"
+            echo "- Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Overall workflow result: ${OVERALL_RESULT}"
+            echo "- Controlled test step: ${CONTROLLED_TEST_RESULT:-not reached}"
+            echo "- Mandatory cleanup step: ${CLEANUP_RESULT:-not reached}"
+            echo
+            echo 'This automated record deliberately excludes credentials, tokens, passwords, raw mailbox addresses and test-log contents.'
+            echo 'For the exact assertion outcome or failure evidence, use the linked GitHub Actions run.'
+          } > "$record_file"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$record_file"
+          git commit -m "Archive Step 9B run ${GITHUB_RUN_ID}"
+          git push origin HEAD:testing-history
