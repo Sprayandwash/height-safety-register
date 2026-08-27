@@ -46,7 +46,9 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
     has: page.getByText('Current Users', { exact: true }),
     visible: true
   });
-  await currentUsers.locator('summary').click();
+  if (!(await currentUsers.evaluate((panel) => panel.open))) {
+    await currentUsers.locator('summary').click();
+  }
   await expect(currentUsers.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
   const ownUserId = await page.evaluate(() => window.SWOperationsV4?.state?.user?.id || '');
   expect(ownUserId, 'The Admin review account must expose its authenticated user id.').not.toBe('');
