@@ -3,6 +3,12 @@ const { getStagingPreloadedClaimConfig } = require('../support/staging-preloaded
 
 const config = getStagingPreloadedClaimConfig();
 
+// Supabase may take longer than Playwright's default 30 seconds to complete a
+// real confirmation-email send. This controlled journey creates two accounts,
+// so retain the normal default elsewhere and allow this one end-to-end test
+// enough time to observe the application's confirmation dialog.
+test.setTimeout(120_000);
+
 function sqlLiteral(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
