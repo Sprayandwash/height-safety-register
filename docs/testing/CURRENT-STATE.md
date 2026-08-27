@@ -10,21 +10,21 @@ This is the quickest safe starting point for a new chat or engineer. It is a sum
 
 ## Current programme position
 
-Height Equipment, Vehicle Checks and Maintenance regression testing have been completed through their agreed test journeys. The current focus is the Admin module.
+Height Equipment, Vehicle Checks, Maintenance and Admin regression testing have been completed through their agreed test journeys.
 
 The Admin read-only desktop and phone-size journey passed in GitHub Actions run `33060709477` on 27 August 2026. It opened Admin, Current Users, the pre-load form, Settings and Backup without submitting, saving, downloading or writing any data.
 
-The controlled Admin claim-and-role test is implemented and has a test-only timing correction merged in PR #48 (`11fcf512638f812353e63eef2b7e5a0d19b53488`). It has not yet completed a full successful end-to-end run.
+The controlled Admin claim-and-role test passed in GitHub Actions run `33105862362` on 27 August 2026. It verified the temporary pre-load claim, an Admin removal of the temporary user's Vehicle inspector role, the persisted post-sign-in role result, and a separate self-sign-up with no roles. Its mandatory cleanup passed.
 
-## Current blocker
+## Completed Admin test outcome
 
-The latest controlled run, `33061479194`, stopped at its first temporary signup because Supabase returned `email rate limit exceeded`. Its cleanup job passed. This confirms that the currently configured email provider rate limit applies to the dedicated real test mailboxes as well.
+The test-only 120-second allowance merged in PR #48 (`11fcf512638f812353e63eef2b7e5a0d19b53488`) accommodated the genuine confirmation-email response time. The new automatic archive job also passed and created a permanent, secret-free result record on the `testing-history` branch.
 
-Do not retry automatically. A future controlled run requires fresh, immediate **Step 9B** approval. Review `RUN-LEDGER.md` and the most recent record under `history/step-9b/` first.
+The earlier email-rate failures remain recorded in the run ledger as test-environment evidence. They do not invalidate the final passing controlled run.
 
-## Next safe action
+## Next safe action for future regression work
 
-After the email-provider window has reset and the user gives fresh immediate approval, run the existing workflow **Verify staging pre-loaded account claims** exactly once. It must be dispatched from `main` using its required confirmation value. Monitor the run to completion and confirm its cleanup result.
+For a future Admin regression run, dispatch **Verify staging pre-loaded account claims** from `main` only after fresh immediate **Step 9B** approval. Verify the controlled-test result, mandatory cleanup and automatic archive job.
 
 ## Non-negotiable safety boundaries
 

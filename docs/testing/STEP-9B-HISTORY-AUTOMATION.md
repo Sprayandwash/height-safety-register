@@ -23,5 +23,4 @@ Each execution creates a new file. Existing records are never overwritten. The n
 
 ## First-run verification
 
-The first approved Step 9B run after this automation is merged must be checked for two results: the controlled test/cleanup outcome and a successful **Archive controlled-run result** job. If the archive job cannot push, review the repository Actions setting that controls whether the `GITHUB_TOKEN` has read-and-write workflow permissions.
-
+The first approved Step 9B run after this automation was merged, `33105862362`, passed the controlled test and cleanup. Its **Archive controlled-run result** job also passed and wrote the first automated record successfully. No repository-wide Actions permission setting had to be loosened.
