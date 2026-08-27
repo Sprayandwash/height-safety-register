@@ -155,9 +155,9 @@ test('REG-043/046/048: Admin read-only browser review covers desktop and mobile 
   assert.match(spec, /currentUsersSummary\.click\(\)/);
   assert.match(spec, /input\[data-ops-preload-role\]:checked/);
   assert.match(spec, /Save app settings/);
-  assert.match(spec, /Full JSON backup/);
+  assert.match(spec, /Create Complete Backup/);
   assert.doesNotMatch(spec, /\.click\(\).*Save app settings/);
-  assert.doesNotMatch(spec, /\.click\(\).*Full JSON backup/);
+  assert.doesNotMatch(spec, /\.click\(\).*Create Complete Backup/);
 });
 
 test('Admin controlled-test design prohibits unsafe normal-user, production, and real-backup actions',()=>{
