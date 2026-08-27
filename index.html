@@ -104,7 +104,7 @@
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
-  <section id="signedOut" class="card"><h2>Sign in</h2><div class="grid two"><div><label>Email</label><input id="loginEmail" type="email"></div><div><label>Password</label><input id="loginPassword" type="password"></div></div><div class="row"><button class="primary" onclick="signIn()">Sign in</button><button onclick="signUp()">Create account</button></div></section>
+  <section id="signedOut" class="card"><h2>Sign in</h2><form id="signInForm" onsubmit="signIn(); return false;"><div class="grid two"><div><label>Email</label><input id="loginEmail" type="email"></div><div><label>Password</label><input id="loginPassword" type="password"></div></div><div class="row"><button class="primary" type="submit">Sign in</button><button type="button" onclick="signUp()">Create account</button></div></form></section>
   <section id="signedIn" class="hidden accountTray"><button class="accountBtn" onclick="toggleAccountPanel()">Account</button><div id="accountPanel" class="hidden accountPanel"><div>Signed in as <b id="userEmail"></b></div><button onclick="signOut()">Sign out</button></div></section>
   <div id="appMain" class="hidden">
     <div class="tabs"><button class="tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button><button class="tab" data-tab="equipment" onclick="showTab('equipment')">Equipment</button><button id="certificateTabButton" class="tab" data-tab="certificates" onclick="showTab('certificates')">Certificates</button><button id="exportTabButton" class="tab" data-tab="export" onclick="showTab('export')">Reports</button></div>

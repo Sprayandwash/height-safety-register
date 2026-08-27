@@ -11,6 +11,21 @@ test.describe('local application shell', () => {
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   });
 
+  test('REG-UI-004: Enter in either sign-in field submits the existing sign-in action', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      window.signIn = () => {
+        document.documentElement.dataset.signInSubmitted = 'true';
+      };
+    });
+
+    for (const selector of ['#loginEmail', '#loginPassword']) {
+      await page.evaluate(() => { delete document.documentElement.dataset.signInSubmitted; });
+      await page.locator(selector).press('Enter');
+      await expect(page.locator('html')).toHaveAttribute('data-sign-in-submitted', 'true');
+    }
+  });
+
   test('REG-UI-002: the packaged PWA manifest and app icons are available', async ({ page, request }) => {
     await page.goto('/');
 
