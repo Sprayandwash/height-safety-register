@@ -42,10 +42,9 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
   await page.getByRole('button', { name: 'Users & Permissions', exact: true }).click();
 
   // Current Users is opened and inspected only. The test never presses Save.
-  const currentUsers = page.locator('details').filter({
-    has: page.getByText('Current Users', { exact: true }),
-    visible: true
-  });
+  const currentUsersSummary = page.locator('summary:visible', { hasText: /^Current Users$/ });
+  await expect(currentUsersSummary).toHaveCount(1);
+  const currentUsers = currentUsersSummary.locator('xpath=..');
   if (!(await currentUsers.evaluate((panel) => panel.open))) {
     await currentUsers.locator('summary').click();
   }
