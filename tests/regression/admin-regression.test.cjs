@@ -127,6 +127,8 @@ test('REG-049 controlled staging claim review refuses production and removes its
   assert.match(spec, /ops-home-admin/);
   assert.match(spec, /data-ops-edit-user/);
   assert.match(spec, /data-ops-save-user/);
+  assert.match(spec, /currentUsersSummary\.click\(\)/);
+  assert.match(spec, /Current signed-in users/);
   assert.doesNotMatch(spec, /async function removeVehicleInspectorRole/);
   assert.match(workflow, /real Admin → Current Users removal/);
   assert.match(spec, /expectCurrentRoles\(page, \[\]\)/);
