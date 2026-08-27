@@ -56,4 +56,4 @@ After the email-provider window has reset and the user gives fresh immediate app
 - [Controlled Admin test plan](../admin-controlled-staging-test-plan.md)
 - [Run ledger](RUN-LEDGER.md)
 - [Recovery guide](RECOVERY-GUIDE.md)
-
+- [Step 9B history automation](STEP-9B-HISTORY-AUTOMATION.md)
