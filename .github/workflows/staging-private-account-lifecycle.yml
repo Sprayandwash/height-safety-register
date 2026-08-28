@@ -1,0 +1,38 @@
+name: Verify staging private account lifecycle
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type VERIFY STAGING PRIVATE ACCOUNT TEST to create and remove one controlled account
+        required: true
+permissions: {contents: read, actions: read}
+jobs:
+  test:
+    environment: staging
+    runs-on: ubuntu-latest
+    env:
+      E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
+      E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
+      E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
+      E2E_REG049_CLAIM_EMAIL: ${{ secrets.E2E_REG049_CLAIM_EMAIL }}
+      E2E_REG049_SELF_SIGNUP_EMAIL: ${{ secrets.E2E_REG049_SELF_SIGNUP_EMAIL }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: test "${{ inputs.confirmation }}" = 'VERIFY STAGING PRIVATE ACCOUNT TEST'
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20, cache: npm}
+      - run: npm ci && npx playwright install --with-deps chromium
+      - name: Download staging bundle and run controlled test
+        run: |
+          set -euo pipefail
+          id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[]|select(.expired|not)]|sort_by(.created_at)|last|.id')"; gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > staging.zip; unzip -q staging.zip -d staging-app
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt|head -1)"; test "$ref" != twkgfmctuffmkvkmdkct; echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+          npx --no-install http-server staging-app -p 4174 -c-1 > server.log 2>&1 & E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:private-accounts
+      - name: Emergency cleanup
+        if: ${{ always() }}
+        run: |
+          test "${E2E_STAGING_PROJECT_REF:-}" != twkgfmctuffmkvkmdkct
+          jq -n --arg q "delete from auth.users where email = '${E2E_REG049_CLAIM_EMAIL}';" '{query:$q}' | curl --fail-with-body -X POST "https://api.supabase.com/v1/projects/${E2E_STAGING_PROJECT_REF}/database/query" -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H 'Content-Type: application/json' --data @-
