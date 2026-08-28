@@ -44,15 +44,11 @@ async function acceptDialogDuring(page, action, {message, promptText}={}){
 async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();await expectOperationsSignedOut(page);}
 async function openAdmin(page){
   await signIn(page,config.adminEmail,config.adminPassword);
-  const heading=page.locator('#opsShell h2');
-  // A restored Admin session can return directly to Admin rather than Home.
-  // Either route is valid; only click the Home card when it is the active route.
-  if(await heading.isVisible().catch(()=>false)){
-    await expect(heading).toHaveText('Admin');
-    return;
-  }
+  // A new sign-in settles on Home. Wait for that route before navigating so
+  // the test cannot click Admin while the asynchronous route reset is active.
   const card=page.locator('.ops-home-admin');
   await expect(card).toBeVisible({timeout:15000});
+  const heading=page.locator('#opsShell h2');
   await card.click();
   await expect(heading).toHaveText('Admin',{timeout:15000});
 }
