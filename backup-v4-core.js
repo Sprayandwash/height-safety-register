@@ -431,6 +431,7 @@
       const viewButton = event.target.closest('[data-ops-view]');
       if (viewButton?.dataset.opsView === 'admin-settings') scheduleMount();
     }, true);
+    document.addEventListener('sw:operations-rendered', scheduleMount);
 
     scheduleMount();
   }
