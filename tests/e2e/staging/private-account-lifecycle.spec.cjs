@@ -6,6 +6,8 @@ test.setTimeout(120000);
 const literal=v=>`'${String(v).replaceAll("'","''")}'`;
 async function sql(query){if(config.projectRef==='twkgfmctuffmkvkmdkct')throw new Error('SAFETY STOP: REG-058 never writes to production.');const r=await fetch(`https://api.supabase.com/v1/projects/${config.projectRef}/database/query`,{method:'POST',headers:{Authorization:`Bearer ${config.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({query})});if(!r.ok)throw new Error(`Staging database command failed (${r.status}).`);return r.json();}
 async function cleanup(){await sql(`delete from auth.users where email=${literal(config.claimEmail)};`);}
+async function expectOperationsUser(page,email){await expect.poll(()=>page.evaluate(()=>String(window.SWOperationsV4?.state?.user?.email||'').toLowerCase()),{timeout:15000}).toBe(String(email).toLowerCase());}
+async function expectOperationsSignedOut(page){await expect.poll(()=>page.evaluate(()=>window.SWOperationsV4?.state?.user?false:true),{timeout:15000}).toBe(true);}
 async function signIn(page,email,password){
   let authDialog='';
   const captureDialog=async dialog=>{authDialog=dialog.message();await dialog.dismiss();};
@@ -16,6 +18,7 @@ async function signIn(page,email,password){
     await page.getByRole('button',{name:'Sign in',exact:true}).click();
     try{
       await expect(page.locator('#signedIn')).toBeVisible({timeout:15000});
+      await expectOperationsUser(page,email);
     }catch(error){
       const detail=authDialog?` Supabase reported: ${authDialog}`:'';
       throw new Error(`Sign-in did not complete for the controlled staging test.${detail}`,{cause:error});
@@ -38,7 +41,7 @@ async function acceptDialogDuring(page, action, {message, promptText}={}){
   });
   await Promise.all([handled,action()]);
 }
-async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();}
+async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();await expectOperationsSignedOut(page);}
 async function openAdmin(page){
   await signIn(page,config.adminEmail,config.adminPassword);
   const heading=page.locator('#opsShell h2');
@@ -62,7 +65,7 @@ test('REG-058: Admin creates, blocks, unblocks, signs out and deletes a controll
   await acceptDialogDuring(page,()=>page.getByRole('button',{name:'Create staff account',exact:true}).click(),{message:/Account created/});
   await signOut(page);await signIn(page,config.claimEmail,temporaryPassword);await expect(page.getByText('Create your own password',{exact:true})).toBeVisible();const personalPassword=`Staging!REG058Personal-${Date.now()}Aa`;await page.locator('#opsFirstPassword').fill(personalPassword);await page.locator('#opsFirstPasswordConfirm').fill(personalPassword);await page.getByRole('button',{name:'Save password and continue',exact:true}).click();await expect(page.locator('#opsFirstPassword')).toBeHidden({timeout:15000});await expect(page.locator('#opsShell')).not.toContainText('Create your own password',{timeout:15000});await signOut(page);
   await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const row=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await expect(row).toHaveCount(1);await acceptDialogDuring(page,()=>row.locator('[data-ops-account-block]').click());await expect(row).toContainText('Blocked');await signOut(page);
-  await page.locator('#loginEmail').fill(config.claimEmail);await page.locator('#loginPassword').fill(personalPassword);await acceptDialogDuring(page,()=>page.getByRole('button',{name:'Sign in',exact:true}).click(),{message:/banned|disabled|blocked/i});await expect(page.locator('#signedOut')).toBeVisible();
+  await page.locator('#loginEmail').fill(config.claimEmail);await page.locator('#loginPassword').fill(personalPassword);await acceptDialogDuring(page,()=>page.getByRole('button',{name:'Sign in',exact:true}).click(),{message:/banned|disabled|blocked/i});await expect(page.locator('#signedOut')).toBeVisible();await expectOperationsSignedOut(page);
   await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const blockedRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await acceptDialogDuring(page,()=>blockedRow.locator('[data-ops-account-unblock]').click());await signOut(page);await signIn(page,config.claimEmail,personalPassword);await expect(page.getByText('Vehicle Checks',{exact:true})).toBeVisible();await signOut(page);
   await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const deleteRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await acceptDialogDuring(page,()=>deleteRow.locator('[data-ops-account-delete]').click(),{promptText:config.claimEmail});await expect(deleteRow).toHaveCount(0,{timeout:15000});
 });
