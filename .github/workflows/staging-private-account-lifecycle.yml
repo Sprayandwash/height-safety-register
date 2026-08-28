@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[]|select(.expired|not)]|sort_by(.created_at)|last|.id')"; gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > staging.zip; unzip -q staging.zip -d staging-app
-          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt|head -1)"; test "$ref" != twkgfmctuffmkvkmdkct; echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt|head -1)"; test "$ref" != twkgfmctuffmkvkmdkct; export E2E_STAGING_PROJECT_REF="$ref"; echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
           npx --no-install http-server staging-app -p 4174 -c-1 > server.log 2>&1 & E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npm run test:staging:private-accounts
       - name: Emergency cleanup
         if: ${{ always() }}
