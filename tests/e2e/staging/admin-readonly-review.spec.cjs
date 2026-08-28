@@ -74,8 +74,9 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
   await expect(page.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
 
   // The unclaimed-preload form begins safe: no default permissions and no save.
-  const addUser = page.locator('details').filter({ has: page.getByText('Add User', { exact: true }) });
-  await addUser.locator('summary').click();
+  const addUserSummary = page.locator('details > summary').filter({ hasText: /^Add User$/ });
+  await expect(addUserSummary).toBeVisible();
+  await addUserSummary.click();
   await expect(page.locator('#opsPreloadUserForm')).toBeVisible();
   await expect(page.locator('input[data-ops-preload-role]:checked')).toHaveCount(0);
 
