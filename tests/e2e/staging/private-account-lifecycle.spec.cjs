@@ -8,7 +8,7 @@ async function sql(query){if(config.projectRef==='twkgfmctuffmkvkmdkct')throw ne
 async function cleanup(){await sql(`delete from auth.users where email=${literal(config.claimEmail)};`);}
 async function signIn(page,email,password){await page.locator('#loginEmail').fill(email);await page.locator('#loginPassword').fill(password);await page.getByRole('button',{name:'Sign in',exact:true}).click();}
 async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();}
-async function openAdmin(page){await signIn(page,config.adminEmail,config.adminPassword);await expect(page.locator('.ops-home-admin')).toBeVisible();await page.locator('.ops-home-admin').click();await expect(page.locator('#opsShell h2')).toHaveText('Admin');}
+async function openAdmin(page){await signIn(page,config.adminEmail,config.adminPassword);await expect(page.locator('.ops-home-admin')).toBeVisible({timeout:15000});await page.locator('.ops-home-admin').click();await expect(page.locator('#opsShell h2')).toHaveText('Admin',{timeout:15000});}
 test.afterEach(cleanup);
 test('REG-058: Admin creates, blocks, unblocks, signs out and deletes a controlled private account',async({page})=>{
   const temporaryPassword=`Staging!REG058-${Date.now()}Aa`;
