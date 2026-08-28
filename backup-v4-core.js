@@ -130,7 +130,10 @@
     const shell = document.getElementById('opsShell');
     const nav = shell?.querySelector('#opsNav');
     const button = nav?.querySelector('[data-ops-view="admin-settings"]');
-    if (!shell || !nav || !button?.classList.contains('active') || !isAdmin()) return false;
+    // The Backup navigation exists only within the Admin view. Keep action-level
+    // Admin enforcement, but do not let a second role read prevent the panel
+    // from rendering after Admin navigation has already been authorised.
+    if (!shell || !nav || !button?.classList.contains('active')) return false;
 
     injectStyles();
     let node = nav.nextSibling;
