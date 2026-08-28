@@ -23,7 +23,20 @@ async function signIn(page,email,password){
   }finally{page.off('dialog',captureDialog);}
 }
 async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();}
-async function openAdmin(page){await signIn(page,config.adminEmail,config.adminPassword);await expect(page.locator('.ops-home-admin')).toBeVisible({timeout:15000});await page.locator('.ops-home-admin').click();await expect(page.locator('#opsShell h2')).toHaveText('Admin',{timeout:15000});}
+async function openAdmin(page){
+  await signIn(page,config.adminEmail,config.adminPassword);
+  const heading=page.locator('#opsShell h2');
+  // A restored Admin session can return directly to Admin rather than Home.
+  // Either route is valid; only click the Home card when it is the active route.
+  if(await heading.isVisible().catch(()=>false)){
+    await expect(heading).toHaveText('Admin');
+    return;
+  }
+  const card=page.locator('.ops-home-admin');
+  await expect(card).toBeVisible({timeout:15000});
+  await card.click();
+  await expect(heading).toHaveText('Admin',{timeout:15000});
+}
 test.afterEach(cleanup);
 test('REG-058: Admin creates, blocks, unblocks, signs out and deletes a controlled private account',async({page})=>{
   const temporaryPassword=`Staging!REG058-${Date.now()}Aa`;
