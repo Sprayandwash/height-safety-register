@@ -1,0 +1,22 @@
+const {test,expect}=require('@playwright/test');
+const {getStagingPreloadedClaimConfig}=require('../support/staging-preloaded-claim-config.cjs');
+const config=getStagingPreloadedClaimConfig();
+test.setTimeout(120000);
+const literal=v=>`'${String(v).replaceAll("'","''")}'`;
+async function sql(query){if(config.projectRef==='twkgfmctuffmkvkmdkct')throw new Error('SAFETY STOP: REG-058 never writes to production.');const r=await fetch(`https://api.supabase.com/v1/projects/${config.projectRef}/database/query`,{method:'POST',headers:{Authorization:`Bearer ${config.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({query})});if(!r.ok)throw new Error(`Staging database command failed (${r.status}).`);return r.json();}
+async function cleanup(){await sql(`delete from auth.users where email=${literal(config.claimEmail)};`);}
+async function signIn(page,email,password){await page.locator('#loginEmail').fill(email);await page.locator('#loginPassword').fill(password);await page.getByRole('button',{name:'Sign in',exact:true}).click();}
+async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();}
+async function openAdmin(page){await signIn(page,config.adminEmail,config.adminPassword);await expect(page.locator('.ops-home-admin')).toBeVisible();await page.locator('.ops-home-admin').click();await expect(page.locator('#opsShell h2')).toHaveText('Admin');}
+test.afterEach(cleanup);
+test('REG-058: Admin creates, blocks, unblocks, signs out and deletes a controlled private account',async({page})=>{
+  await cleanup(); await page.goto('/'); await expect(page.locator('#stagingEnvironmentBanner')).toContainText('NOT PRODUCTION'); await expect(page.getByText('Create account',{exact:true})).toHaveCount(0);
+  await openAdmin(page); await page.getByText('Create staff account',{exact:true}).click();
+  await page.locator('#opsAccountFirst').fill('E2E');await page.locator('#opsAccountLast').fill('REG058');await page.locator('#opsAccountEmail').fill(config.claimEmail);await page.locator('#opsAccountTempPassword').fill(config.password);await page.locator('input[data-ops-account-role][value="Vehicle inspector"]').check();
+  const createDialog=page.waitForEvent('dialog');await page.getByRole('button',{name:'Create staff account',exact:true}).click();expect((await createDialog).message()).toContain('Account created');(await createDialog).accept();
+  await signOut(page);await signIn(page,config.claimEmail,config.password);await expect(page.getByText('Create your own password',{exact:true})).toBeVisible();const personalPassword=`${config.password}aA1!`;await page.locator('#opsFirstPassword').fill(personalPassword);await page.locator('#opsFirstPasswordConfirm').fill(personalPassword);await page.getByRole('button',{name:'Save password and continue',exact:true}).click();await expect(page.getByText('Vehicle Checks',{exact:true})).toBeVisible();await signOut(page);
+  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const row=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await expect(row).toHaveCount(1);const blockDialog=page.waitForEvent('dialog');await row.locator('[data-ops-account-block]').click();await (await blockDialog).accept();await expect(row).toContainText('Blocked');await signOut(page);
+  const blockedSignIn=page.waitForEvent('dialog');await signIn(page,config.claimEmail,personalPassword);expect((await blockedSignIn).message()).toMatch(/banned|disabled|blocked/i);await (await blockedSignIn).accept();await expect(page.locator('#signedOut')).toBeVisible();
+  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const blockedRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});const unblockDialog=page.waitForEvent('dialog');await blockedRow.locator('[data-ops-account-unblock]').click();await (await unblockDialog).accept();await signOut(page);await signIn(page,config.claimEmail,personalPassword);await expect(page.getByText('Vehicle Checks',{exact:true})).toBeVisible();await signOut(page);
+  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const deleteRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});const prompt=page.waitForEvent('dialog');await deleteRow.locator('[data-ops-account-delete]').click();const dialog=await prompt;expect(dialog.type()).toBe('prompt');await dialog.accept(config.claimEmail);await expect(deleteRow).toHaveCount(0,{timeout:15000});
+});

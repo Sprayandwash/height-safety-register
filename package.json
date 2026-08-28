@@ -15,7 +15,8 @@
     "test:staging:height-readonly-security": "playwright test --config=playwright.staging.height.readonly-security.config.cjs",
     "test:staging:height-fixture": "playwright test --config=playwright.staging.height.fixture.config.cjs",
     "test:staging:preloaded-claim": "playwright test --config=playwright.staging.preloaded-claim.config.cjs",
-    "test:staging:admin-readonly": "playwright test --config=playwright.staging.admin.readonly.config.cjs"
+    "test:staging:admin-readonly": "playwright test --config=playwright.staging.admin.readonly.config.cjs",
+    "test:staging:private-accounts": "playwright test --config=playwright.staging.private-accounts.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
