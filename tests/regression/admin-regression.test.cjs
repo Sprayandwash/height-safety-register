@@ -222,6 +222,16 @@ test('REG-059: Operations ignores a stale Auth event after a newer session is av
   assert.match(roles,/eq\('user_id', userId\)/);
 });
 
+test('REG-061: a newly signed-in user starts at Home instead of inheriting the previous user\'s module',()=>{
+  const init=functionSource('initSupabase');
+  const refresh=functionSource('refreshAuthAndData');
+  assert.match(app,/activeUserId: ''/);
+  assert.match(init,/const userChanged = Boolean\(nextUserId\) && nextUserId !== state\.activeUserId/);
+  assert.match(init,/refreshAuthAndData\(revision, \{resetNavigation: userChanged\}\)/);
+  assert.match(refresh,/function refreshAuthAndData\(revision=state\.authRevision,\{resetNavigation=false\}=\{\}\)/);
+  assert.match(refresh,/if\(resetNavigation\) showModuleHome\(\);/);
+});
+
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
 test.todo('REG-047: run the controlled staging Height read-only role-matrix verification after its separate account is configured');
 test.todo('REG-048: browser review records no delayed Admin layout shift after opening the module');

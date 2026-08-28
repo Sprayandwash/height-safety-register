@@ -19,6 +19,7 @@
     sb: null,
     user: null,
     authRevision: 0,
+    activeUserId: '',
     roles: [],
     profile: null,
     accountAccess: null,
@@ -892,20 +893,30 @@
       const { data } = await state.sb.auth.getSession();
       const revision=++state.authRevision;
       state.user = data?.session?.user || eventSession?.user || null;
-      await refreshAuthAndData(revision);
+      const nextUserId = state.user?.id || '';
+      const userChanged = Boolean(nextUserId) && nextUserId !== state.activeUserId;
+      state.activeUserId = nextUserId;
+      await refreshAuthAndData(revision, {resetNavigation: userChanged});
     });
     const { data } = await state.sb.auth.getSession();
     const revision=++state.authRevision;
     state.user = data?.session?.user || null;
-    await refreshAuthAndData(revision);
+    const nextUserId = state.user?.id || '';
+    const userChanged = Boolean(nextUserId) && nextUserId !== state.activeUserId;
+    state.activeUserId = nextUserId;
+    await refreshAuthAndData(revision, {resetNavigation: userChanged});
   }
 
-  async function refreshAuthAndData(revision=state.authRevision){
+  async function refreshAuthAndData(revision=state.authRevision,{resetNavigation=false}={}){
     if(!state.sb || revision!==state.authRevision) return;
     state.lastError = '';
     if(!state.user){ state.roles = []; render(); return; }
     await loadRoles(revision);
     if(revision!==state.authRevision) return;
+    // A different signed-in user must never inherit the previous user's
+    // module or view (for example, an Admin screen). Token refreshes retain
+    // the current location because resetNavigation is false for the same user.
+    if(resetNavigation) showModuleHome();
     if(canSyncAutomaticTasks()){
       try{
         const synced=await state.sb.rpc('operations_sync_automatic_tasks_v4077');
