@@ -20,6 +20,7 @@
     user: null,
     roles: [],
     profile: null,
+    accountAccess: null,
     currentModule: 'home',
     vehicles: [],
     washEquipment: [],
@@ -925,6 +926,8 @@
     if(!r.error) state.roles = (r.data || []).map(x => x.role).filter(Boolean);
     const p = await state.sb.from('profiles').select('*').eq('user_id', state.user.id).maybeSingle();
     if(!p.error) state.profile = p.data || null;
+    const access = await state.sb.from('app_user_access').select('status,must_change_password').eq('user_id', state.user.id).maybeSingle();
+    state.accountAccess = access.error ? null : access.data;
     renderModuleHome();
     refreshTopUserSummary();
   }
@@ -982,7 +985,9 @@
         catch(e){ console.warn('Profiles unavailable:', e.message); state.actualUsers = []; }
         try { state.actualUserRoles = await loadTable('user_roles','*'); }
         catch(e){ console.warn('User roles unavailable:', e.message); state.actualUserRoles = []; }
-      } else { state.actualUsers = []; state.actualUserRoles = []; }
+        try { state.actualUserAccess = await loadTable('app_user_access','*'); }
+        catch(e){ console.warn('Account access unavailable:', e.message); state.actualUserAccess = []; }
+      } else { state.actualUsers = []; state.actualUserRoles = []; state.actualUserAccess = []; }
       if(canMaintain()){
         if(isAdmin()) state.maintenanceUsers = state.actualUsers.slice();
         else {
@@ -1043,6 +1048,8 @@
 
   function bodyHtml(){
     if(!state.user) return `<div class="ops-card"><h3>Sign in required</h3><p>Use the existing sign-in area first, then open Vehicle Checks or Maintenance.</p></div>`;
+    if(state.accountAccess?.status === 'Blocked') return `<div class="ops-card"><h3>Account access is blocked</h3><p>Please contact an Administrator.</p><button class="ops-btn" type="button" data-ops-sign-out>Sign out</button></div>`;
+    if(state.accountAccess?.must_change_password) return `<div class="ops-card"><h3>Create your own password</h3><p>Your temporary password can only be used to set a personal password.</p><form id="opsFirstPasswordForm" class="ops-form"><label>New password<input id="opsFirstPassword" type="password" autocomplete="new-password" minlength="12" required></label><label>Confirm new password<input id="opsFirstPasswordConfirm" type="password" autocomplete="new-password" minlength="12" required></label><div class="ops-actions"><button class="ops-btn primary" type="submit">Save password and continue</button><button class="ops-btn ghost" type="button" data-ops-sign-out>Sign out</button></div></form></div>`;
     if(state.currentView === 'app-tasks'){
       if(!canAccessSharedTasks()) return `<div class="ops-card"><h3>No task access</h3><p>Your account does not have access to shared tasks.</p></div>`;
       return tasksHtml(true);
@@ -1577,14 +1584,17 @@
       const email = emailOfProfile(u);
       const roles = rolesForActualUser(id);
       const editing=String(state.editingActualUserId)===String(id);
+      const accessStatus=((state.actualUserAccess||[]).find(a=>String(a.user_id)===String(id))?.status||'Active');
+      const accountAction=accessStatus==='Blocked'?'unblock':'block';
+      const accountLabel=accessStatus==='Blocked'?'Unblock':'Block & sign out';
       return `<div class="ops-user-row">
         <div class="ops-user-row-head">
           <div><strong>${esc(displayNameOfProfile(u))}</strong><div class="ops-subtle">${esc(email || id)}${u.last_seen ? ' · Last seen: ' + esc(nzDate(u.last_seen)) : ''}</div></div>
-          <div>${roleChips(roles)}</div>
+          <div>${roleChips(roles)} ${statusPill(accessStatus)}</div>
         </div>
         ${editing?`<label class="ops-user-full-name">Full name<input type="text" data-ops-user-full-name="${esc(id)}" value="${esc(displayNameOfProfile(u))}" placeholder="First and last name"></label>
         <div class="ops-permission-grid" style="margin-top:.75rem">${roleCheckboxGridForUser(id, roles)}</div>
-        <div class="ops-actions"><button class="ops-btn primary" type="button" data-ops-save-user="${esc(id)}">Save user</button><button class="ops-btn ghost" type="button" data-ops-cancel-user-edit>Cancel</button></div>`:`<div class="ops-actions"><button class="ops-btn" type="button" data-ops-edit-user="${esc(id)}">Edit user</button></div>`}
+        <div class="ops-actions"><button class="ops-btn primary" type="button" data-ops-save-user="${esc(id)}">Save user</button><button class="ops-btn ghost" type="button" data-ops-cancel-user-edit>Cancel</button></div>`:`<div class="ops-actions"><button class="ops-btn" type="button" data-ops-edit-user="${esc(id)}">Edit user</button>${String(id)===String(state.user?.id)?'':`<button class="ops-btn" type="button" data-ops-account-${accountAction}="${esc(id)}">${accountLabel}</button><button class="ops-btn ghost" type="button" data-ops-account-signout="${esc(id)}">Sign out everywhere</button><button class="ops-btn danger" type="button" data-ops-account-delete="${esc(id)}" data-ops-account-email="${esc(email)}">Delete</button>`}</div>`}
       </div>`;
     }).join('');
   }
@@ -1639,6 +1649,24 @@
     }
     if(String(userId) === String(state.user?.id)) await loadRoles();
   }
+
+  async function accountAdminAction(action, payload={}){
+    if(!isAdmin()) return alert('Only Admin users can manage accounts.');
+    const r=await state.sb.functions.invoke('account-admin',{body:{action,...payload}});
+    if(r.error || r.data?.error) return alert(`Account action failed: ${r.data?.error||r.error.message}`);
+    return r.data;
+  }
+  async function createStaffAccount(e){
+    e.preventDefault();
+    const first=titleCaseName(byId('opsAccountFirst')?.value||''), last=titleCaseName(byId('opsAccountLast')?.value||''), email=String(byId('opsAccountEmail')?.value||'').trim().toLowerCase(), password=String(byId('opsAccountTempPassword')?.value||'');
+    const roles=Array.from(document.querySelectorAll('input[data-ops-account-role]:checked')).map(i=>i.value);
+    if(!first||!last||!email||password.length<12||!roles.length)return alert('Enter names, email, a temporary password of at least 12 characters, and at least one permission.');
+    const result=await accountAdminAction('create',{first_name:first,last_name:last,email,password,roles});
+    if(result){alert(`Account created for ${email}. Give the temporary password to the person directly; they must set their own password on first sign-in.`);await loadAll();}
+  }
+  async function accountActionWithConfirm(action,userId,message){if(!window.confirm(message))return;const result=await accountAdminAction(action,{user_id:userId});if(result){if(action==='delete')alert('Account permanently deleted.');await loadAll();}}
+  async function deleteAccount(userId,email){const confirmation=window.prompt(`Type ${email} exactly to permanently delete this account. Accounts with operational history cannot be deleted.`);if(confirmation!==email)return;const result=await accountAdminAction('delete',{user_id:userId,confirmation_email:confirmation});if(result){alert('Account permanently deleted.');await loadAll();}}
+  async function saveFirstPassword(e){e.preventDefault();const password=String(byId('opsFirstPassword')?.value||'');if(password.length<12||password!==String(byId('opsFirstPasswordConfirm')?.value||''))return alert('Use matching passwords of at least 12 characters.');const r=await state.sb.functions.invoke('account-admin',{body:{action:'complete_first_password',password}});if(r.error||r.data?.error)return alert(`Password could not be saved: ${r.data?.error||r.error.message}`);await loadRoles();await loadAll();}
 
   async function savePreloadedUser(e){
     e.preventDefault();
@@ -3113,6 +3141,7 @@
     const editingPreload=rows.find(u=>String(u.id)===String(state.editingPreloadedUserId));
     const preloadName=editingPreload?.display_name || [editingPreload?.first_name,editingPreload?.last_name].filter(Boolean).join(' ');
     return `<div class="ops-admin-users"><h3>Users & Permissions</h3>
+      <details><summary>Create staff account</summary><div class="ops-admin-users-body"><form id="opsCreateStaffAccountForm" class="ops-form"><p class="ops-subtle ops-span-2">Creates a private account without sending an email. Give the temporary password to the staff member directly; they must create their own password at first sign-in.</p><label>First name<input id="opsAccountFirst" required></label><label>Last name<input id="opsAccountLast" required></label><label>Email<input id="opsAccountEmail" type="email" required></label><label>Temporary password<input id="opsAccountTempPassword" type="password" minlength="12" required></label><div class="ops-span-2"><strong>Permissions</strong><div class="ops-permission-grid">${ROLE_DEFS.map(role=>`<label class="ops-permission-check"><input type="checkbox" data-ops-account-role value="${esc(role)}"> <span><strong>${esc(role)}</strong><small>${esc(roleHelpText(role))}</small></span></label>`).join('')}</div></div><div class="ops-actions ops-span-2"><button class="ops-btn primary" type="submit">Create staff account</button></div></form></div></details>
       <details ${editingPreload?'open':''}><summary>${editingPreload ? 'Edit pre-loaded user' : 'Add User'}</summary><div class="ops-admin-users-body">
         <form id="opsPreloadUserForm" class="ops-form">
           <p class="ops-subtle ops-span-2">${editingPreload ? `Editing ${esc(preloadName || editingPreload.email)}. These permissions are applied only at first sign-in.` : 'Choose every permission deliberately. Nothing is selected by default; the selected permissions are applied once at the person’s first sign-in.'}</p>
@@ -3174,6 +3203,13 @@
     document.querySelectorAll('.ops-item-photo').forEach(input=>input.addEventListener('change',()=>updateInspectionPhotoCount(input)));
     byId('opsAppSettingsForm')?.addEventListener('submit',event=>window.saveAdminSettingsFromOperations?.(event));
     byId('opsPreloadUserForm')?.addEventListener('submit', savePreloadedUser);
+    byId('opsCreateStaffAccountForm')?.addEventListener('submit', createStaffAccount);
+    byId('opsFirstPasswordForm')?.addEventListener('submit', saveFirstPassword);
+    document.querySelectorAll('[data-ops-sign-out]').forEach(b=>b.addEventListener('click',()=>window.signOut?.()));
+    document.querySelectorAll('[data-ops-account-block]').forEach(b=>b.addEventListener('click',()=>accountActionWithConfirm('block',b.dataset.opsAccountBlock,'Block this account and sign it out everywhere?')));
+    document.querySelectorAll('[data-ops-account-unblock]').forEach(b=>b.addEventListener('click',()=>accountActionWithConfirm('unblock',b.dataset.opsAccountUnblock,'Unblock this account? The person must sign in again.')));
+    document.querySelectorAll('[data-ops-account-signout]').forEach(b=>b.addEventListener('click',()=>accountActionWithConfirm('sign_out_all',b.dataset.opsAccountSignout,'Sign this user out of all sessions?')));
+    document.querySelectorAll('[data-ops-account-delete]').forEach(b=>b.addEventListener('click',()=>deleteAccount(b.dataset.opsAccountDelete,b.dataset.opsAccountEmail)));
     document.querySelectorAll('[data-ops-edit-preload-user]').forEach(b => b.addEventListener('click', () => { state.editingPreloadedUserId=b.dataset.opsEditPreloadUser; render(); }));
     document.querySelectorAll('[data-ops-delete-preload-user]').forEach(b => b.addEventListener('click', () => deletePreloadedUser(b.dataset.opsDeletePreloadUser)));
     document.querySelectorAll('[data-ops-cancel-preload-edit]').forEach(b => b.addEventListener('click', () => { state.editingPreloadedUserId=''; render(); }));

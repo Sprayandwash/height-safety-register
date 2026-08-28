@@ -1,0 +1,43 @@
+name: Apply private account lifecycle to staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY PRIVATE ACCOUNTS TO STAGING to confirm
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    environment: staging
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging-only confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "APPLY PRIVATE ACCOUNTS TO STAGING"
+          test -n "$SUPABASE_STAGING_DB_URL"
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then echo 'SAFETY STOP: production database target.' >&2; exit 1; fi
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - name: Resolve staging project and deploy function
+        run: |
+          set -euo pipefail
+          ref="$(supabase projects list --output json | jq -r '.[] | select(.name=="Spray and Wash Staging") | (.id // .ref)')"
+          test -n "$ref" && test "$ref" != "$PRODUCTION_PROJECT_REF"
+          curl --fail-with-body --silent --show-error --request PATCH "https://api.supabase.com/v1/projects/$ref/config/auth" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header 'Content-Type: application/json' --data '{"disable_signup":true}'
+          supabase functions deploy account-admin --project-ref "$ref"
+      - name: Apply reviewed migration once
+        run: |
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --dbname "$SUPABASE_STAGING_DB_URL" --file supabase/migrations/20260828_private_account_lifecycle.sql
