@@ -22,7 +22,33 @@ async function signInAndOpenAdmin(page) {
 }
 
 test('REG-043/046/048: Admin screens are available, stable, and browseable without writes', async ({ page }, testInfo) => {
-  await signInAndOpenAdmin(page);
+  const staging = getStagingAdminReadOnlyConfig();
+  await page.goto('/');
+  await page.locator('#loginEmail').fill(staging.email);
+  await page.locator('#loginPassword').fill(staging.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.locator('#signedIn')).toBeVisible({ timeout: 15_000 });
+
+  // Home attention summaries are toggles. Selecting a summary opens its
+  // matching list; selecting it again clears that selection and closes the
+  // panel. Returning Home from another module also starts with the panel
+  // closed.
+  const attentionList = page.locator('.ops-attention-list');
+  const dueSoonSummary = page.locator('.ops-attention-summary.soon');
+  await expect(attentionList).not.toHaveAttribute('open', '');
+  await dueSoonSummary.click();
+  await expect(attentionList).toHaveAttribute('open', '');
+  await dueSoonSummary.click();
+  await expect(attentionList).not.toHaveAttribute('open', '');
+  await dueSoonSummary.click();
+  await expect(attentionList).toHaveAttribute('open', '');
+  await page.locator('.ops-home-admin').click();
+  await expect(page.locator('#opsShell h2')).toHaveText('Admin');
+  await page.locator('.ops-home-btn').click();
+  await expect(attentionList).not.toHaveAttribute('open', '');
+
+  await page.locator('.ops-home-admin').click();
+  await expect(page.locator('#opsShell h2')).toHaveText('Admin');
 
   // Admin must render one final header, rather than duplicate Home controls
   // or replace the layout after navigation has settled.
