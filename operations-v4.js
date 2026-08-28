@@ -914,9 +914,11 @@
     await loadRoles(revision);
     if(revision!==state.authRevision) return;
     // A different signed-in user must never inherit the previous user's
-    // module or view (for example, an Admin screen). Token refreshes retain
-    // the current location because resetNavigation is false for the same user.
-    if(resetNavigation) showModuleHome();
+    // module or view (for example, an Admin screen). A first-time invited
+    // user remains on the required personal-password screen. Token refreshes
+    // retain the current location because resetNavigation is false for the
+    // same user.
+    if(resetNavigation && !state.accountAccess?.must_change_password) showModuleHome();
     if(canSyncAutomaticTasks()){
       try{
         const synced=await state.sb.rpc('operations_sync_automatic_tasks_v4077');

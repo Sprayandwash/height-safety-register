@@ -229,7 +229,7 @@ test('REG-061: a newly signed-in user starts at Home instead of inheriting the p
   assert.match(init,/const userChanged = Boolean\(nextUserId\) && nextUserId !== state\.activeUserId/);
   assert.match(init,/refreshAuthAndData\(revision, \{resetNavigation: userChanged\}\)/);
   assert.match(refresh,/function refreshAuthAndData\(revision=state\.authRevision,\{resetNavigation=false\}=\{\}\)/);
-  assert.match(refresh,/if\(resetNavigation\) showModuleHome\(\);/);
+  assert.match(refresh,/if\(resetNavigation && !state\.accountAccess\?\.must_change_password\) showModuleHome\(\);/);
 });
 
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
