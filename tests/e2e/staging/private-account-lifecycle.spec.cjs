@@ -6,7 +6,22 @@ test.setTimeout(120000);
 const literal=v=>`'${String(v).replaceAll("'","''")}'`;
 async function sql(query){if(config.projectRef==='twkgfmctuffmkvkmdkct')throw new Error('SAFETY STOP: REG-058 never writes to production.');const r=await fetch(`https://api.supabase.com/v1/projects/${config.projectRef}/database/query`,{method:'POST',headers:{Authorization:`Bearer ${config.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({query})});if(!r.ok)throw new Error(`Staging database command failed (${r.status}).`);return r.json();}
 async function cleanup(){await sql(`delete from auth.users where email=${literal(config.claimEmail)};`);}
-async function signIn(page,email,password){await page.locator('#loginEmail').fill(email);await page.locator('#loginPassword').fill(password);await page.getByRole('button',{name:'Sign in',exact:true}).click();}
+async function signIn(page,email,password){
+  let authDialog='';
+  const captureDialog=async dialog=>{authDialog=dialog.message();await dialog.dismiss();};
+  page.on('dialog',captureDialog);
+  try{
+    await page.locator('#loginEmail').fill(email);
+    await page.locator('#loginPassword').fill(password);
+    await page.getByRole('button',{name:'Sign in',exact:true}).click();
+    try{
+      await expect(page.locator('#signedIn')).toBeVisible({timeout:15000});
+    }catch(error){
+      const detail=authDialog?` Supabase reported: ${authDialog}`:'';
+      throw new Error(`Sign-in did not complete for the controlled staging test.${detail}`,{cause:error});
+    }
+  }finally{page.off('dialog',captureDialog);}
+}
 async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();}
 async function openAdmin(page){await signIn(page,config.adminEmail,config.adminPassword);await expect(page.locator('.ops-home-admin')).toBeVisible({timeout:15000});await page.locator('.ops-home-admin').click();await expect(page.locator('#opsShell h2')).toHaveText('Admin',{timeout:15000});}
 test.afterEach(cleanup);
