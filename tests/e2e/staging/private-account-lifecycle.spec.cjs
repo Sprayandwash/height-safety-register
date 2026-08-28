@@ -12,7 +12,7 @@ async function openAdmin(page){await signIn(page,config.adminEmail,config.adminP
 test.afterEach(cleanup);
 test('REG-058: Admin creates, blocks, unblocks, signs out and deletes a controlled private account',async({page})=>{
   await cleanup(); await page.goto('/'); await expect(page.locator('#stagingEnvironmentBanner')).toContainText('NOT PRODUCTION'); await expect(page.getByText('Create account',{exact:true})).toHaveCount(0);
-  await openAdmin(page); await page.getByText('Create staff account',{exact:true}).click();
+  await openAdmin(page); await page.locator('summary',{hasText:'Create staff account'}).click();
   await page.locator('#opsAccountFirst').fill('E2E');await page.locator('#opsAccountLast').fill('REG058');await page.locator('#opsAccountEmail').fill(config.claimEmail);await page.locator('#opsAccountTempPassword').fill(config.password);await page.locator('input[data-ops-account-role][value="Vehicle inspector"]').check();
   const createDialog=page.waitForEvent('dialog');await page.getByRole('button',{name:'Create staff account',exact:true}).click();expect((await createDialog).message()).toContain('Account created');(await createDialog).accept();
   await signOut(page);await signIn(page,config.claimEmail,config.password);await expect(page.getByText('Create your own password',{exact:true})).toBeVisible();const personalPassword=`${config.password}aA1!`;await page.locator('#opsFirstPassword').fill(personalPassword);await page.locator('#opsFirstPasswordConfirm').fill(personalPassword);await page.getByRole('button',{name:'Save password and continue',exact:true}).click();await expect(page.getByText('Vehicle Checks',{exact:true})).toBeVisible();await signOut(page);
