@@ -1,6 +1,7 @@
 const {test,expect}=require('@playwright/test');
-const {getStagingPreloadedClaimConfig}=require('../support/staging-preloaded-claim-config.cjs');
-const config=getStagingPreloadedClaimConfig();
+const {getStagingConfig}=require('../support/staging-config.cjs');
+const required=name=>{const value=String(process.env[name]||'').trim();if(!value)throw new Error(`Missing required controlled staging test setting: ${name}`);return value;};
+const config={...getStagingConfig(),accessToken:required('SUPABASE_ACCESS_TOKEN'),adminEmail:required('E2E_STAGING_ADMIN_EMAIL').toLowerCase(),adminPassword:required('E2E_STAGING_ADMIN_PASSWORD'),claimEmail:required('E2E_REG049_CLAIM_EMAIL').toLowerCase(),password:required('E2E_STAGING_TEST_PASSWORD')};
 test.setTimeout(120000);
 const literal=v=>`'${String(v).replaceAll("'","''")}'`;
 async function sql(query){if(config.projectRef==='twkgfmctuffmkvkmdkct')throw new Error('SAFETY STOP: REG-058 never writes to production.');const r=await fetch(`https://api.supabase.com/v1/projects/${config.projectRef}/database/query`,{method:'POST',headers:{Authorization:`Bearer ${config.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({query})});if(!r.ok)throw new Error(`Staging database command failed (${r.status}).`);return r.json();}
