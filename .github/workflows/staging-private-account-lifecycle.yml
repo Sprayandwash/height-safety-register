@@ -36,3 +36,14 @@ jobs:
         run: |
           test "${E2E_STAGING_PROJECT_REF:-}" != twkgfmctuffmkvkmdkct
           jq -n --arg q "delete from auth.users where email = '${E2E_REG049_CLAIM_EMAIL}';" '{query:$q}' | curl --fail-with-body -X POST "https://api.supabase.com/v1/projects/${E2E_STAGING_PROJECT_REF}/database/query" -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H 'Content-Type: application/json' --data @-
+      - name: Upload lifecycle failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-private-account-lifecycle-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+            server.log
+          if-no-files-found: warn
+          retention-days: 14
