@@ -196,6 +196,18 @@ test('REG-058: private account lifecycle has no public sign-up path and uses a s
   assert.doesNotMatch(fn,/SUPABASE_SERVICE_ROLE_KEY.*window|localStorage/);
 });
 
+test('REG-059: Operations ignores a stale Auth event after a newer session is available',()=>{
+  const init=functionSource('initSupabase');
+  const refresh=functionSource('refreshAuthAndData');
+  const roles=functionSource('loadRoles');
+  assert.match(init,/state\.sb\.auth\.getSession\(\)/);
+  assert.match(init,/const revision=\+\+state\.authRevision/);
+  assert.match(init,/data\?\.session\?\.user \|\| eventSession\?\.user \|\| null/);
+  assert.match(refresh,/revision!==state\.authRevision/);
+  assert.match(roles,/const userId=state\.user\?\.id/);
+  assert.match(roles,/eq\('user_id', userId\)/);
+});
+
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
 test.todo('REG-047: run the controlled staging Height read-only role-matrix verification after its separate account is configured');
 test.todo('REG-048: browser review records no delayed Admin layout shift after opening the module');

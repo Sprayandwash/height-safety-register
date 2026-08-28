@@ -18,6 +18,7 @@
   const state = {
     sb: null,
     user: null,
+    authRevision: 0,
     roles: [],
     profile: null,
     accountAccess: null,
@@ -884,26 +885,34 @@
       return;
     }
     state.sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-    state.sb.auth.onAuthStateChange(async (_event, session) => {
-      state.user = session?.user || null;
-      await refreshAuthAndData();
+    state.sb.auth.onAuthStateChange(async (_event, eventSession) => {
+      // A separate Supabase client is used by the Operations module. During a
+      // rapid sign-out/sign-in, its delayed sign-out event can arrive after a
+      // newer sign-in. Always reconcile against this client's current session.
+      const { data } = await state.sb.auth.getSession();
+      const revision=++state.authRevision;
+      state.user = data?.session?.user || eventSession?.user || null;
+      await refreshAuthAndData(revision);
     });
     const { data } = await state.sb.auth.getSession();
+    const revision=++state.authRevision;
     state.user = data?.session?.user || null;
-    await refreshAuthAndData();
+    await refreshAuthAndData(revision);
   }
 
-  async function refreshAuthAndData(){
-    if(!state.sb) return;
+  async function refreshAuthAndData(revision=state.authRevision){
+    if(!state.sb || revision!==state.authRevision) return;
     state.lastError = '';
     if(!state.user){ state.roles = []; render(); return; }
-    await loadRoles();
+    await loadRoles(revision);
+    if(revision!==state.authRevision) return;
     if(canSyncAutomaticTasks()){
       try{
         const synced=await state.sb.rpc('operations_sync_automatic_tasks_v4077');
         if(synced.error&&!/does not exist|Could not find/i.test(synced.error.message||'')) console.warn('Automatic task sync skipped:',synced.error.message);
       }catch(err){ console.warn('Automatic task sync skipped:',err.message); }
     }
+    if(revision!==state.authRevision) return;
     await loadAll();
   }
 
@@ -918,15 +927,21 @@
     }catch(err){ console.warn('Preloaded user setup skipped:', err.message); }
   }
 
-  async function loadRoles(){
+  async function loadRoles(revision=state.authRevision){
+    const userId=state.user?.id;
+    if(!userId || revision!==state.authRevision) return;
     state.roles = [];
     state.profile = null;
     await claimPreloadedUserSetup();
-    const r = await state.sb.from('user_roles').select('role').eq('user_id', state.user.id).order('role');
+    if(revision!==state.authRevision) return;
+    const r = await state.sb.from('user_roles').select('role').eq('user_id', userId).order('role');
+    if(revision!==state.authRevision) return;
     if(!r.error) state.roles = (r.data || []).map(x => x.role).filter(Boolean);
-    const p = await state.sb.from('profiles').select('*').eq('user_id', state.user.id).maybeSingle();
+    const p = await state.sb.from('profiles').select('*').eq('user_id', userId).maybeSingle();
+    if(revision!==state.authRevision) return;
     if(!p.error) state.profile = p.data || null;
-    const access = await state.sb.from('app_user_access').select('status,must_change_password').eq('user_id', state.user.id).maybeSingle();
+    const access = await state.sb.from('app_user_access').select('status,must_change_password').eq('user_id', userId).maybeSingle();
+    if(revision!==state.authRevision) return;
     state.accountAccess = access.error ? null : access.data;
     renderModuleHome();
     refreshTopUserSummary();
