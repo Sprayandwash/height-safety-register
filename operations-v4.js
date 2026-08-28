@@ -698,8 +698,9 @@
     }
   }
 
-  function showModuleHome(){
+  function showModuleHome({preserveAttentionFilter=false}={}){
     hideLegacyUserAdminControls();
+    if(!preserveAttentionFilter) state.homeAttentionFilter='all';
     state.currentModule = 'home';
     setTopTabsMode('none');
     document.querySelectorAll('.tabpane').forEach(x => x.classList.add('hidden'));
@@ -826,7 +827,11 @@
     const open=state.homeAttentionFilter!=='all'?'open':'';
     return `<div class="ops-maintenance-dashboard">${summary('Critical / overdue',critical,'Action required','critical','alert')}${summary('Due soon',soon,'Due within the alert period','soon','schedule')}${summary('Open tasks',tasks,'Tasks requiring completion','tasks','task')}</div><details class="ops-attention-list" ${open}><summary><span>${esc(label)}<span class="ops-attention-count">${filtered.length}</span></span></summary><div class="ops-attention-list-body">${state.homeAttentionFilter!=='all'?`<div class="ops-section-title"><span></span><button type="button" class="ops-btn ghost" onclick="SWOperationsV4.openAppAttention('all')">Clear filter</button></div>`:''}${rows}</div></details>`;
   }
-  function openAppAttention(group){ state.homeAttentionFilter=group||'all'; showModuleHome(); }
+  function openAppAttention(group){
+    const requested=group||'all';
+    state.homeAttentionFilter=state.homeAttentionFilter===requested?'all':requested;
+    showModuleHome({preserveAttentionFilter:true});
+  }
   function openAttentionItem(kind,taskId,group){
     if(kind==='task'){ state.currentModule='tasks'; state.currentView='app-tasks'; state.taskQuickFilter='open'; state.openTaskId=taskId||''; return showOperations('app-tasks'); }
     if(kind==='maintenance-schedule'){ state.currentModule='ops-management'; state.scheduleQuickFilter=typeof REGRESSION_RULES.maintenanceScheduleAttentionFilter==='function'?REGRESSION_RULES.maintenanceScheduleAttentionFilter(group):(group==='soon'?'upcoming':'overdue'); return showOperations('schedules'); }
