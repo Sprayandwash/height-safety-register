@@ -176,6 +176,26 @@ test('Admin controlled-test design prohibits unsafe normal-user, production, and
   assert.match(plan, /separate Stage 9B approval/);
 });
 
+test('REG-058: private account lifecycle has no public sign-up path and uses a server-side function',()=>{
+  const index=read('index.html');
+  const legacyApp=read('app.js');
+  const migration=read('supabase/migrations/20260828_private_account_lifecycle.sql');
+  const fn=read('supabase/functions/account-admin/index.ts');
+  const users=functionSource('usersHtml');
+  assert.doesNotMatch(index,/Create account/);
+  assert.doesNotMatch(legacyApp,/function signUp\(/);
+  assert.match(users,/Create staff account/);
+  assert.match(app,/functions\.invoke\('account-admin'/);
+  assert.match(migration,/app_user_access/);
+  assert.match(migration,/must_change_password/);
+  assert.match(migration,/Cannot remove the final active Admin role/);
+  assert.match(fn,/auth\.admin\.createUser/);
+  assert.match(fn,/auth\.admin\.signOut/);
+  assert.match(fn,/auth\.admin\.deleteUser/);
+  assert.match(fn,/complete_first_password/);
+  assert.doesNotMatch(fn,/SUPABASE_SERVICE_ROLE_KEY.*window|localStorage/);
+});
+
 test.todo('REG-044: a different Admin cannot remove the final active Admin role');
 test.todo('REG-047: run the controlled staging Height read-only role-matrix verification after its separate account is configured');
 test.todo('REG-048: browser review records no delayed Admin layout shift after opening the module');
