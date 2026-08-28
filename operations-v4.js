@@ -1026,6 +1026,7 @@
     shell.innerHTML = headerHtml() + (state.lastError ? `<div class="ops-error">${esc(state.lastError)}</div>` : '') + bodyHtml();
     bindRenderedEvents();
     refreshTopUserSummary();
+    document.dispatchEvent(new CustomEvent('sw:operations-rendered'));
     if(state.currentModule === 'home') renderModuleHome();
     setTimeout(()=>postHeightEnhancementsV415(), 30);
   }
