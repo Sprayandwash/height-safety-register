@@ -168,7 +168,9 @@ test('REG-043/046/048: Admin read-only browser review covers desktop and mobile 
 
 test('REG-060: the full Admin backup module reads the live Operations state before checking Admin access',()=>{
   const backup=read('backup-v4-core.js');
+  const index=read('index.html');
   const boundEvents=functionSource('bindRenderedEvents');
+  assert.match(index, /operations-v4\.js\?v=4\.0\.83"><\/script>\s*<script src="\.\/backup-v4-core\.js\?v=4\.0\.84"><\/script>\s*<script src="\.\/backup-v4\.js\?v=4\.0\.83"><\/script>/);
   assert.match(backup, /const state = \(\) => window\.SWOperationsV4\?\.state \|\| null;/);
   assert.match(backup, /const isAdmin = \(\) => Array\.isArray\(state\(\)\?\.roles\) && state\(\)\.roles\.includes\('Admin'\);/);
   assert.match(boundEvents, /btn\.dataset\.opsView === 'admin-settings'\) window\.setTimeout\(\(\) => window\.SWBackupV4083\?\.mount\?\.\(\), 0\)/);
