@@ -166,6 +166,12 @@ test('REG-043/046/048: Admin read-only browser review covers desktop and mobile 
   assert.doesNotMatch(spec, /\.click\(\).*Create Complete Backup/);
 });
 
+test('REG-060: the full Admin backup module reads the live Operations state before checking Admin access',()=>{
+  const backup=read('backup-v4-core.js');
+  assert.match(backup, /const state = \(\) => window\.SWOperationsV4\?\.state\?\.\(\) \|\| null;/);
+  assert.match(backup, /const isAdmin = \(\) => Array\.isArray\(state\(\)\?\.roles\) && state\(\)\.roles\.includes\('Admin'\);/);
+});
+
 test('Admin controlled-test design prohibits unsafe normal-user, production, and real-backup actions',()=>{
   const plan=read('docs/admin-controlled-staging-test-plan.md');
   assert.match(plan, /not an executable workflow/);
