@@ -22,6 +22,22 @@ async function signIn(page,email,password){
     }
   }finally{page.off('dialog',captureDialog);}
 }
+async function acceptDialogDuring(page, action, {message, promptText}={}){
+  const handled=new Promise((resolve,reject)=>{
+    page.once('dialog',async dialog=>{
+      try{
+        if(message) expect(dialog.message()).toMatch(message);
+        if(promptText!==undefined) expect(dialog.type()).toBe('prompt');
+        await dialog.accept(promptText);
+        resolve();
+      }catch(error){
+        try{await dialog.dismiss();}catch{}
+        reject(error);
+      }
+    });
+  });
+  await Promise.all([handled,action()]);
+}
 async function signOut(page){await page.evaluate(()=>window.signOut());await expect(page.locator('#signedOut')).toBeVisible();}
 async function openAdmin(page){
   await signIn(page,config.adminEmail,config.adminPassword);
@@ -43,10 +59,10 @@ test('REG-058: Admin creates, blocks, unblocks, signs out and deletes a controll
   await cleanup(); await page.goto('/'); await expect(page.locator('#stagingEnvironmentBanner')).toContainText('NOT PRODUCTION'); await expect(page.getByText('Create account',{exact:true})).toHaveCount(0);
   await openAdmin(page); await page.locator('summary',{hasText:'Create staff account'}).click();
   await page.locator('#opsAccountFirst').fill('E2E');await page.locator('#opsAccountLast').fill('REG058');await page.locator('#opsAccountEmail').fill(config.claimEmail);await page.locator('#opsAccountTempPassword').fill(temporaryPassword);await page.locator('input[data-ops-account-role][value="Vehicle inspector"]').check();
-  const createDialog=page.waitForEvent('dialog');await page.getByRole('button',{name:'Create staff account',exact:true}).click();expect((await createDialog).message()).toContain('Account created');(await createDialog).accept();
+  await acceptDialogDuring(page,()=>page.getByRole('button',{name:'Create staff account',exact:true}).click(),{message:/Account created/});
   await signOut(page);await signIn(page,config.claimEmail,temporaryPassword);await expect(page.getByText('Create your own password',{exact:true})).toBeVisible();const personalPassword=`Staging!REG058Personal-${Date.now()}Aa`;await page.locator('#opsFirstPassword').fill(personalPassword);await page.locator('#opsFirstPasswordConfirm').fill(personalPassword);await page.getByRole('button',{name:'Save password and continue',exact:true}).click();await expect(page.locator('#opsFirstPassword')).toBeHidden({timeout:15000});await expect(page.locator('#opsShell')).not.toContainText('Create your own password',{timeout:15000});await signOut(page);
-  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const row=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await expect(row).toHaveCount(1);const blockDialog=page.waitForEvent('dialog');await row.locator('[data-ops-account-block]').click();await (await blockDialog).accept();await expect(row).toContainText('Blocked');await signOut(page);
-  const blockedSignIn=page.waitForEvent('dialog');await signIn(page,config.claimEmail,personalPassword);expect((await blockedSignIn).message()).toMatch(/banned|disabled|blocked/i);await (await blockedSignIn).accept();await expect(page.locator('#signedOut')).toBeVisible();
-  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const blockedRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});const unblockDialog=page.waitForEvent('dialog');await blockedRow.locator('[data-ops-account-unblock]').click();await (await unblockDialog).accept();await signOut(page);await signIn(page,config.claimEmail,personalPassword);await expect(page.getByText('Vehicle Checks',{exact:true})).toBeVisible();await signOut(page);
-  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const deleteRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});const prompt=page.waitForEvent('dialog');await deleteRow.locator('[data-ops-account-delete]').click();const dialog=await prompt;expect(dialog.type()).toBe('prompt');await dialog.accept(config.claimEmail);await expect(deleteRow).toHaveCount(0,{timeout:15000});
+  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const row=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await expect(row).toHaveCount(1);await acceptDialogDuring(page,()=>row.locator('[data-ops-account-block]').click());await expect(row).toContainText('Blocked');await signOut(page);
+  await page.locator('#loginEmail').fill(config.claimEmail);await page.locator('#loginPassword').fill(personalPassword);await acceptDialogDuring(page,()=>page.getByRole('button',{name:'Sign in',exact:true}).click(),{message:/banned|disabled|blocked/i});await expect(page.locator('#signedOut')).toBeVisible();
+  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const blockedRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await acceptDialogDuring(page,()=>blockedRow.locator('[data-ops-account-unblock]').click());await signOut(page);await signIn(page,config.claimEmail,personalPassword);await expect(page.getByText('Vehicle Checks',{exact:true})).toBeVisible();await signOut(page);
+  await openAdmin(page);await page.getByText('Current Users',{exact:true}).click();const deleteRow=page.locator('.ops-user-row').filter({hasText:config.claimEmail});await acceptDialogDuring(page,()=>deleteRow.locator('[data-ops-account-delete]').click(),{promptText:config.claimEmail});await expect(deleteRow).toHaveCount(0,{timeout:15000});
 });
