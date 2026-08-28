@@ -3177,7 +3177,14 @@
   }
 
   function bindRenderedEvents(){
-    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => { state.currentView = btn.dataset.opsView; state.openTaskId=''; render(); }));
+    document.querySelectorAll('[data-ops-view]').forEach(btn => btn.addEventListener('click', () => {
+      state.currentView = btn.dataset.opsView;
+      state.openTaskId='';
+      render();
+      // The full backup panel is supplied by the separately loaded backup
+      // module. Mount it after this view's final DOM has rendered.
+      if(btn.dataset.opsView === 'admin-settings') window.setTimeout(() => window.SWBackupV4083?.mount?.(), 0);
+    }));
     document.querySelectorAll('[data-ops-pm-view]').forEach(btn => btn.addEventListener('click', () => { state.pmView = btn.dataset.opsPmView; state.scheduleQuickFilter=''; render(); }));
     document.querySelectorAll('[data-ops-shortcut]').forEach(card => { const go = () => handleDashboardShortcut(card.dataset.opsShortcut); card.addEventListener('click', go); card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } }); });
     byId('opsVehicleForm')?.addEventListener('submit', saveVehicle);

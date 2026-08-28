@@ -24,9 +24,7 @@
   let busy = false;
   let mountTimer = 0;
 
-  // SWOperationsV4 exposes state as a function. Call it so the Admin check
-  // sees the current session roles rather than the function object itself.
-  const state = () => window.SWOperationsV4?.state?.() || null;
+  const state = () => window.SWOperationsV4?.state || null;
   const client = () => state()?.sb || null;
   const isAdmin = () => Array.isArray(state()?.roles) && state().roles.includes('Admin');
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
