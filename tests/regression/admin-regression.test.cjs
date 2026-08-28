@@ -172,7 +172,8 @@ test('REG-060: the full Admin backup module reads the live Operations state befo
   const boundEvents=functionSource('bindRenderedEvents');
   assert.match(index, /operations-v4\.js\?v=4\.0\.83"><\/script>\s*<script src="\.\/backup-v4-core\.js\?v=4\.0\.84"><\/script>\s*<script src="\.\/backup-v4\.js\?v=4\.0\.83"><\/script>/);
   assert.match(backup, /const state = \(\) => window\.SWOperationsV4\?\.state \|\| null;/);
-  assert.match(backup, /const isAdmin = \(\) => Array\.isArray\(state\(\)\?\.roles\) && state\(\)\.roles\.includes\('Admin'\);/);
+  assert.match(backup, /if \(!shell \|\| !nav \|\| !button\?\.classList\.contains\('active'\)\) return false;/);
+  assert.match(backup, /if \(!isAdmin\(\)\) throw new Error\('Only Admin users can create or verify backups\.'\);/);
   assert.match(boundEvents, /btn\.dataset\.opsView === 'admin-settings'\) window\.setTimeout\(\(\) => window\.SWBackupV4083\?\.mount\?\.\(\), 0\)/);
 });
 
