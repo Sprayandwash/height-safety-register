@@ -24,6 +24,9 @@ async function signIn(page) {
   await page.locator('#loginPassword').fill(staging.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.locator('#signedIn')).toBeVisible({ timeout: 15_000 });
+  // Auth UI appears before the role-aware landing cards. Do not classify an
+  // authorised module as unavailable while that data load is still settling.
+  await page.locator('.ops-home-management').waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 async function openAndCapture(page, testInfo, manifest, id, locator, state, note = '') {
