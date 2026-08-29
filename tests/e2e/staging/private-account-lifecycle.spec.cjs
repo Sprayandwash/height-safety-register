@@ -54,10 +54,17 @@ async function openAdmin(page){
 }
 async function openCurrentUser(page,email,actionSelector){
   await expect.poll(()=>page.evaluate(expected=>window.SWOperationsV4?.state?.actualUsers?.some(user=>String(user.email||'').toLowerCase()===expected),String(email).toLowerCase()),{timeout:15000}).toBe(true);
-  await page.getByText('Current Users',{exact:true}).click();
+  const section=page.locator('details').filter({has:page.locator('summary',{hasText:'Current Users'})});
+  const summary=section.locator('summary');
   const row=page.locator('.ops-user-row').filter({hasText:email});
   await expect(row).toHaveCount(1);
-  await expect(row.locator(actionSelector)).toBeVisible({timeout:15000});
+  const action=row.locator(actionSelector);
+  for(let attempt=0;attempt<8;attempt++){
+    if(!await section.evaluate(element=>element.open)) await summary.click();
+    if(await action.isVisible()) return row;
+    await page.waitForTimeout(250);
+  }
+  await expect(action).toBeVisible({timeout:15000});
   return row;
 }
 test.afterEach(cleanup);
