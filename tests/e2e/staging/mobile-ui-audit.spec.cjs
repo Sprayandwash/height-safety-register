@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { getStagingConfig } = require('../support/staging-config.cjs');
+const INVENTORY_IDS = ['AUTH-01','AUTH-02','AUTH-03','HOME-01','HOME-02','HOME-03','HEIGHT-01','HEIGHT-02','HEIGHT-03','HEIGHT-04','HEIGHT-05','HEIGHT-06','HEIGHT-07','VEH-01','VEH-02','VEH-03','VEH-04','MAINT-01','MAINT-02','MAINT-03','MAINT-04','MAINT-05','MAINT-06','MAINT-07','MAINT-08','MAINT-09','ADMIN-01','ADMIN-02','ADMIN-03','ADMIN-04','ADMIN-05','PERM-01','SHELL-01','SHELL-02','PWA-01'];
 
 // This suite is intentionally browse-only. It must not submit a form, start
 // an inspection, create/change a record, upload/download a file, or call a
@@ -66,8 +67,35 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     }
   }
 
+  // Preserve a formal result for every plan item. The audit never fabricates
+  // data or roles merely to turn an unavailable state into a passing result.
+  for (const id of INVENTORY_IDS) if (!manifest.some(entry => entry.id === id)) {
+    manifest.push({ id, result: 'unavailable', note: 'Not reachable with the current authorised role and safe Staging fixture; no write, email, upload, download, or fixture change was attempted.' });
+  }
+
   const manifestPath = testInfo.outputPath(`mobile-ui-audit-manifest-${testInfo.project.name}.json`);
   require('fs').writeFileSync(manifestPath, JSON.stringify({ viewport: testInfo.project.name, entries: manifest }, null, 2));
   await testInfo.attach('mobile-ui-audit-manifest', { path: manifestPath, contentType: 'application/json' });
+  expect(manifest.some(entry => entry.pageOverflow)).toBeFalsy();
+  expect(new Set(manifest.map(entry => entry.id)).size).toBe(INVENTORY_IDS.length);
+});
+
+test('MOBILE-UI-AUDIT: Admin read-only evidence', async ({ page }, testInfo) => {
+  const admin = getStagingConfig({ ...process.env, E2E_STAGING_TEST_EMAIL: process.env.E2E_STAGING_ADMIN_EMAIL, E2E_STAGING_TEST_PASSWORD: process.env.E2E_STAGING_ADMIN_PASSWORD });
+  await page.goto('/');
+  await page.locator('#loginEmail').fill(admin.email);
+  await page.locator('#loginPassword').fill(admin.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.locator('.ops-home-admin')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.ops-home-admin').click();
+  const manifest = [await capture(page, testInfo, 'ADMIN-01', 'landing')];
+  await page.getByRole('button', { name: 'Users & Permissions', exact: true }).click();
+  const users = page.getByText('Current Users', { exact: true }); if (await users.count()) { await users.click(); manifest.push(await capture(page, testInfo, 'ADMIN-02', 'current-users')); }
+  const add = page.locator('details > summary').filter({ hasText: /^Add User$/ }); if (await add.count()) { await add.click(); manifest.push(await capture(page, testInfo, 'ADMIN-03', 'preload-form')); }
+  await page.getByRole('button', { name: 'Settings', exact: true }).click(); manifest.push(await capture(page, testInfo, 'ADMIN-04', 'settings'));
+  await page.getByRole('button', { name: 'Backup', exact: true }).click(); manifest.push(await capture(page, testInfo, 'ADMIN-05', 'backup'));
+  const path = testInfo.outputPath(`mobile-ui-audit-manifest-admin-${testInfo.project.name}.json`);
+  require('fs').writeFileSync(path, JSON.stringify({ viewport: testInfo.project.name, entries: manifest }, null, 2));
+  await testInfo.attach('mobile-ui-audit-admin-manifest', { path, contentType: 'application/json' });
   expect(manifest.some(entry => entry.pageOverflow)).toBeFalsy();
 });
