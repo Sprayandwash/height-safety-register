@@ -91,14 +91,19 @@ test('MOBILE-UI-AUDIT: readiness gate validates required accounts and roles', as
   for (const [kind, credential] of Object.entries(credentials)) {
     const context = await browser.newContext({ viewport });
     const candidate = await context.newPage();
-    await signInWith(candidate, credential);
+    if (kind !== 'BLOCKED') await signInWith(candidate, credential);
     if (kind === 'HEIGHT_READONLY') {
       await expect(candidate.locator('.ops-home-height')).toBeVisible({ timeout: 15_000 });
       await candidate.locator('.ops-home-height').click();
       await expect(candidate.locator('#addItemButton')).toBeHidden();
     }
     if (kind === 'FIRST_PASSWORD') await expect(candidate.locator('#opsFirstPasswordForm')).toBeVisible({ timeout: 15_000 });
-    if (kind === 'BLOCKED') await expect(candidate.getByText('Account access is blocked', { exact: true })).toBeVisible({ timeout: 15_000 });
+    if (kind === 'BLOCKED') {
+      let message = '';
+      candidate.once('dialog', async dialog => { message = dialog.message(); await dialog.dismiss(); });
+      await signInWith(candidate, credential);
+      await expect.poll(() => message).toMatch(/banned|blocked/i);
+    }
     await context.close();
   }
 });
