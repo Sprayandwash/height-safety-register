@@ -16,9 +16,12 @@ async function capture(page, testInfo, id, state, note = '') {
   await page.waitForTimeout(150);
   const visualIssues = await page.evaluate(() => {
     const visible = element => {
-      const style = getComputedStyle(element);
+      for (let node = element; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) return false;
+      }
       const rect = element.getBoundingClientRect();
-      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 2 && rect.height > 2;
+      return element.getClientRects().length > 0 && rect.width > 2 && rect.height > 2;
     };
     const inIntentionalScroller = element => {
       for (let parent = element.parentElement; parent; parent = parent.parentElement) {
@@ -79,9 +82,10 @@ async function signInWith(page, credentials) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
-test('MOBILE-UI-AUDIT: readiness gate validates required accounts and roles', async ({ page }) => {
+test('MOBILE-UI-AUDIT: readiness gate validates required accounts and roles', async ({ page }, testInfo) => {
   const browser = page.context().browser();
   const viewport = page.viewportSize();
+  const readiness = [];
   const credentials = {
     HEIGHT_READONLY: auditCredential('HEIGHT_READONLY'),
     FIRST_PASSWORD: auditCredential('FIRST_PASSWORD'),
@@ -91,20 +95,36 @@ test('MOBILE-UI-AUDIT: readiness gate validates required accounts and roles', as
     const context = await browser.newContext({ viewport });
     const candidate = await context.newPage();
     if (kind !== 'BLOCKED') await signInWith(candidate, credential);
-    if (kind === 'HEIGHT_READONLY') {
-      await expect(candidate.locator('.ops-home-height')).toBeVisible({ timeout: 15_000 });
-      await candidate.locator('.ops-home-height').click();
-      await expect(candidate.locator('#addItemButton')).toBeHidden();
-    }
-    if (kind === 'FIRST_PASSWORD') await expect(candidate.locator('#opsFirstPasswordForm')).toBeVisible({ timeout: 15_000 });
-    if (kind === 'BLOCKED') {
+    try {
+      if (kind === 'HEIGHT_READONLY') {
+        await expect(candidate.locator('.ops-home-height')).toBeVisible({ timeout: 15_000 });
+        await candidate.locator('.ops-home-height').click();
+        await expect(candidate.locator('#addItemButton')).toBeHidden();
+        readiness.push(await capture(candidate, testInfo, 'PERM-01', 'height-readonly', 'Height-only account; write action must remain hidden.'));
+      }
+      if (kind === 'FIRST_PASSWORD') {
+        await expect(candidate.locator('#opsFirstPasswordForm')).toBeVisible({ timeout: 15_000 });
+        readiness.push(await capture(candidate, testInfo, 'AUTH-02', 'first-password'));
+      }
+      if (kind === 'BLOCKED') {
       let message = '';
       candidate.once('dialog', async dialog => { message = dialog.message(); await dialog.dismiss(); });
       await signInWith(candidate, credential);
       await expect.poll(() => message).toMatch(/banned|blocked/i);
+        readiness.push(await capture(candidate, testInfo, 'AUTH-03', 'blocked-account', 'Blocked authentication response; no record was altered.'));
+      }
+    } catch (error) {
+      const id = kind === 'HEIGHT_READONLY' ? 'PERM-01' : kind === 'FIRST_PASSWORD' ? 'AUTH-02' : 'AUTH-03';
+      const state = kind.toLowerCase().replace('_', '-');
+      const entry = await capture(candidate, testInfo, id, state, String(error.message || error));
+      readiness.push({ ...entry, result: 'failed' });
     }
     await context.close();
   }
+  const readinessPath = testInfo.outputPath(`mobile-ui-audit-manifest-readiness-${testInfo.project.name}.json`);
+  require('fs').writeFileSync(readinessPath, JSON.stringify({ viewport: testInfo.project.name, entries: readiness }, null, 2));
+  await testInfo.attach('mobile-ui-audit-readiness-manifest', { path: readinessPath, contentType: 'application/json' });
+  expect(readiness.filter(entry => entry.result !== 'tested').map(entry => entry.id)).toEqual([]);
 });
 
 async function signIn(page) {
