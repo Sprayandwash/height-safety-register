@@ -7,7 +7,6 @@ const PRIMARY_IDS = INVENTORY_IDS.filter(id => !id.startsWith('ADMIN-'));
 // Full-page evidence for every browse-only state can take longer than the
 // standard test budget on CI, particularly on the narrow mobile viewport.
 test.setTimeout(120_000);
-test.describe.configure({ mode: 'serial' });
 
 // This suite is intentionally browse-only. It must not submit a form, start
 // an inspection, create/change a record, upload/download a file, or call a
