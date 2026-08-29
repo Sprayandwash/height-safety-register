@@ -62,7 +62,7 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     await page.locator('.ops-home-management').click();
     manifest.push(await capture(page, testInfo, 'MAINT-01', 'dashboard'));
     for (const [id, view, state] of [['MAINT-02', 'assets', 'assets'], ['MAINT-04', 'schedules', 'maintenance-items'], ['MAINT-06', 'tasks', 'tasks'], ['MAINT-08', 'history', 'log']]) {
-      const button = page.locator(`[data-ops-view="${view}"]`);
+      const button = page.locator(`[data-ops-view="${view}"]:visible`);
       if (await button.count()) { await button.click(); manifest.push(await capture(page, testInfo, id, state)); }
     }
   }
