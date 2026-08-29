@@ -31,7 +31,7 @@ async function signIn(page) {
 
 async function openAndCapture(page, testInfo, manifest, id, locator, state, note = '') {
   if (await locator.count() && await locator.first().isVisible()) {
-    await locator.first().click();
+    await clickInUsableViewport(page, locator.first());
     manifest.push(await capture(page, testInfo, id, state, note));
     return true;
   }
@@ -89,7 +89,8 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     await page.locator('.tab[data-tab="equipment"]').click();
     manifest.push(await capture(page, testInfo, 'HEIGHT-02', 'equipment-register'));
     await openAndCapture(page, testInfo, manifest, 'HEIGHT-04', page.locator('#addItemButton:visible'), 'add-item-form', 'Opened only; no form submitted.');
-    if (await page.getByRole('button', { name: /back to register/i }).count()) await page.getByRole('button', { name: /back to register/i }).click();
+    const backToRegister = page.getByRole('button', { name: /back to register/i });
+    if (await backToRegister.count()) await clickInUsableViewport(page, backToRegister);
     await page.locator('.tab[data-tab="dashboard"]').click();
     await openAndCapture(page, testInfo, manifest, 'HEIGHT-05', page.getByRole('button', { name: 'Start Inspection', exact: true }), 'inspection-form', 'Opened only; no form submitted or photo control used.');
     await page.locator('.tab[data-tab="equipment"]').click();
