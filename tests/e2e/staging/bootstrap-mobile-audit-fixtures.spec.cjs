@@ -57,17 +57,25 @@ test('BOOTSTRAP: create dedicated read-only mobile audit fixtures in Staging', a
       userId = createdProfile.data.user_id;
     }
     if (fixture.completePassword) {
-      const context = await browser.newContext();
-      const candidate = await context.newPage();
-      await signIn(candidate, fixture);
-      await expect(candidate.locator('#opsFirstPasswordForm')).toBeVisible({ timeout: 15_000 });
-      const completed = await candidate.evaluate(async password => {
+      const access = await page.evaluate(async id => {
         const client = window.SWOperationsV4?.state?.sb;
-        const result = await client.functions.invoke('account-admin', { body: { action: 'complete_first_password', password } });
-        return { error: result.error?.message || result.data?.error || '' };
-      }, fixture.password);
-      await context.close();
-      if (completed.error) throw new Error(`Could not activate ${fixture.key}: ${completed.error}`);
+        const result = await client.from('app_user_access').select('must_change_password').eq('user_id', id).maybeSingle();
+        return { error: result.error?.message || '', data: result.data || null };
+      }, userId);
+      if (access.error || !access.data) throw new Error(`Could not read ${fixture.key} access state: ${access.error || 'missing record'}`);
+      if (access.data.must_change_password) {
+        const context = await browser.newContext();
+        const candidate = await context.newPage();
+        await signIn(candidate, fixture);
+        const completed = await candidate.evaluate(async password => {
+          const client = window.SWOperationsV4?.state?.sb;
+          if (!client) return { error: 'Fixture client is unavailable.' };
+          const result = await client.functions.invoke('account-admin', { body: { action: 'complete_first_password', password } });
+          return { error: result.error?.message || result.data?.error || '' };
+        }, fixture.password);
+        await context.close();
+        if (completed.error) throw new Error(`Could not activate ${fixture.key}: ${completed.error}`);
+      }
     }
     if (fixture.block) {
       const blocked = await adminCall({ action: 'block', user_id: userId });
