@@ -38,6 +38,28 @@ async function openAndCapture(page, testInfo, manifest, id, locator, state, note
   return false;
 }
 
+// The dashboard header is sticky. A normal locator.click() can scroll a
+// summary card behind that header on short mobile viewports, then report a
+// false interaction failure. Position the card in the usable viewport and
+// prove its centre is hit-testable before clicking it.
+async function clickBelowStickyHeader(page, locator) {
+  const point = await locator.evaluate(node => {
+    const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom || 0;
+    const margin = 16;
+    const rect = node.getBoundingClientRect();
+    const usableHeight = Math.max(1, window.innerHeight - headerBottom - (margin * 2));
+    const desiredTop = headerBottom + margin + Math.max(0, (usableHeight - rect.height) / 2);
+    window.scrollBy({ top: rect.top - desiredTop, behavior: 'instant' });
+    const positioned = node.getBoundingClientRect();
+    return { x: positioned.left + (positioned.width / 2), y: positioned.top + (positioned.height / 2) };
+  });
+  await expect.poll(() => locator.evaluate((node, tapPoint) => {
+    const target = document.elementFromPoint(tapPoint.x, tapPoint.y);
+    return Boolean(target && (target === node || node.contains(target)));
+  }, point)).toBe(true);
+  await page.mouse.click(point.x, point.y);
+}
+
 test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidence', async ({ page }, testInfo) => {
   const manifest = [];
   await page.goto('/');
@@ -47,9 +69,9 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
 
   const attention = page.locator('.ops-attention-summary').first();
   if (await attention.count()) {
-    await attention.click();
+    await clickBelowStickyHeader(page, attention);
     manifest.push(await capture(page, testInfo, 'HOME-02', 'attention-filter'));
-    await attention.click();
+    await clickBelowStickyHeader(page, attention);
     manifest.push(await capture(page, testInfo, 'HOME-02', 'attention-cleared'));
   } else manifest.push({ id: 'HOME-02', result: 'unavailable', note: 'No attention summary is present in the safe fixture.' });
 
