@@ -1,0 +1,52 @@
+name: Bootstrap mobile audit fixtures
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_fixture_setup_confirmed:
+        description: 'Create or validate only the dedicated mobile-audit accounts in Staging.'
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      E2E_STAGING_TEST_EMAIL: ${{ secrets.E2E_STAGING_TEST_EMAIL }}
+      E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
+      E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
+      E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
+      E2E_STAGING_HEIGHT_READONLY_EMAIL: ${{ secrets.E2E_STAGING_HEIGHT_READONLY_EMAIL }}
+      E2E_STAGING_HEIGHT_READONLY_PASSWORD: ${{ secrets.E2E_STAGING_HEIGHT_READONLY_PASSWORD }}
+      E2E_STAGING_FIRST_PASSWORD_EMAIL: ${{ secrets.E2E_STAGING_FIRST_PASSWORD_EMAIL }}
+      E2E_STAGING_FIRST_PASSWORD_PASSWORD: ${{ secrets.E2E_STAGING_FIRST_PASSWORD_PASSWORD }}
+      E2E_STAGING_BLOCKED_EMAIL: ${{ secrets.E2E_STAGING_BLOCKED_EMAIL }}
+      E2E_STAGING_BLOCKED_PASSWORD: ${{ secrets.E2E_STAGING_BLOCKED_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Confirm the authorised Staging-only setup
+        run: test "${{ inputs.staging_fixture_setup_confirmed }}" = 'true'
+      - name: Download and validate the isolated Staging build
+        run: |
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          test -n "$artifact_id"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app && unzip -q staging-app.zip -d staging-app
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test "$ref" = 'tsnmbvezrweciaitkquf'
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+      - name: Create or validate mobile audit accounts
+        run: |
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          pid=$!; trap 'kill "$pid" 2>/dev/null || true' EXIT
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npx playwright test --config=playwright.staging.mobile-audit-fixtures.config.cjs
