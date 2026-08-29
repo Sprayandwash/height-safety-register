@@ -1,6 +1,6 @@
 # Testing and debugging current state
 
-**Checkpoint date:** 27 August 2026 (NZST)  
+**Checkpoint date:** 29 August 2026 (NZST)
 **Application:** Spray & Wash Operations  
 **Repository:** `Sprayandwash/height-safety-register`
 
@@ -11,6 +11,10 @@ This is the quickest safe starting point for a new chat or engineer. It is a sum
 ## Current programme position
 
 Height Equipment, Vehicle Checks, Maintenance and Admin regression testing have been completed through their agreed test journeys.
+
+The final Admin private-account lifecycle run passed in GitHub Actions run `33225362362` on 29 August 2026. It verified, in isolated Staging only: invited-account creation, first personal-password setup, block, unblock, return to Home, Vehicle Checks access, account deletion, and mandatory cleanup.
+
+The signed-in-user navigation fix was released to production in GitHub Actions run `33231501728` on 29 August 2026. The release contained application files only; it did not change Supabase, database data, or configuration.
 
 The Admin read-only desktop and phone-size journey passed in GitHub Actions run `33060709477` on 27 August 2026. It opened Admin, Current Users, the pre-load form, Settings and Backup without submitting, saving, downloading or writing any data.
 
@@ -24,7 +28,7 @@ The earlier email-rate failures remain recorded in the run ledger as test-enviro
 
 ## Next safe action for future regression work
 
-For a future Admin regression run, dispatch **Verify staging pre-loaded account claims** from `main` only after fresh immediate **Step 9B** approval. Verify the controlled-test result, mandatory cleanup and automatic archive job.
+For a future app change, start again at **Step 1 — Define change**. Run the affected automated checks, then the appropriate read-only and, when necessary, controlled Staging review. Each controlled **Step 9B** run still requires fresh immediate approval and must verify its mandatory cleanup.
 
 ## Non-negotiable safety boundaries
 
