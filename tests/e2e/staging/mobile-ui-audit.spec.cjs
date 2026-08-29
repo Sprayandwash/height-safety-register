@@ -88,12 +88,16 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     manifest.push(await capture(page, testInfo, 'HEIGHT-01', 'dashboard', 'Height Equipment dashboard and tab strip.'));
     await page.locator('.tab[data-tab="equipment"]').click();
     manifest.push(await capture(page, testInfo, 'HEIGHT-02', 'equipment-register'));
+    await openAndCapture(page, testInfo, manifest, 'HEIGHT-04', page.locator('#addItemButton:visible'), 'add-item-form', 'Opened only; no form submitted.');
+    if (await page.getByRole('button', { name: /back to register/i }).count()) await page.getByRole('button', { name: /back to register/i }).click();
+    await page.locator('.tab[data-tab="dashboard"]').click();
+    await openAndCapture(page, testInfo, manifest, 'HEIGHT-05', page.getByRole('button', { name: 'Start Inspection', exact: true }), 'inspection-form', 'Opened only; no form submitted or photo control used.');
+    await page.locator('.tab[data-tab="equipment"]').click();
     const item = page.locator('#equipmentList .listItem').first();
     if (await item.count()) { await clickInUsableViewport(page, item); manifest.push(await capture(page, testInfo, 'HEIGHT-03', 'equipment-detail')); }
     else manifest.push({ id: 'HEIGHT-03', result: 'unavailable', note: 'No readable Height Equipment item in the safe fixture.' });
     if (await page.locator('#certificateTabButton').count()) { await page.locator('#certificateTabButton').click(); manifest.push(await capture(page, testInfo, 'HEIGHT-06', 'certificates')); }
     await openAndCapture(page, testInfo, manifest, 'HEIGHT-07', page.locator('.tab[data-tab="heightQualifications"]:visible'), 'qualifications');
-    await openAndCapture(page, testInfo, manifest, 'HEIGHT-04', page.getByRole('button', { name: /add item/i }), 'add-item-form', 'Opened only; no form submitted.');
   }
 
   await page.locator('.logo').click();
@@ -109,10 +113,19 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     for (const [id, view, state] of [['MAINT-02', 'assets', 'assets'], ['MAINT-04', 'schedules', 'maintenance-items'], ['MAINT-06', 'tasks', 'tasks'], ['MAINT-08', 'history', 'log']]) {
       const button = page.locator(`[data-ops-view="${view}"]:visible`);
       if (await button.count()) { await button.click(); manifest.push(await capture(page, testInfo, id, state)); }
+      if (id === 'MAINT-02') {
+        await openAndCapture(page, testInfo, manifest, 'MAINT-03', page.locator('[data-ops-action="openAssetEditor"]:visible'), 'asset-form', 'Opened only; no form submitted.');
+        if (await page.locator('[data-ops-action="closeAssetEditor"]:visible').count()) await page.locator('[data-ops-action="closeAssetEditor"]:visible').click();
+      }
+      if (id === 'MAINT-04') {
+        await openAndCapture(page, testInfo, manifest, 'MAINT-05', page.locator('[data-ops-action="addMaintenanceItem"]:visible'), 'maintenance-item-form', 'Opened only; no form submitted.');
+        if (await page.locator('[data-ops-action="closeMaintenanceItemEditor"]:visible').count()) await page.locator('[data-ops-action="closeMaintenanceItemEditor"]:visible').click();
+      }
+      if (id === 'MAINT-06') {
+        await openAndCapture(page, testInfo, manifest, 'MAINT-07', page.locator('[data-ops-action="openManualTaskEditor"]:visible'), 'manual-task-form', 'Opened only; no form submitted.');
+        if (await page.locator('[data-ops-action="closeManualTaskEditor"]:visible').count()) await page.locator('[data-ops-action="closeManualTaskEditor"]:visible').click();
+      }
     }
-    await openAndCapture(page, testInfo, manifest, 'MAINT-03', page.getByRole('button', { name: /add asset/i }), 'asset-form', 'Opened only; no form submitted.');
-    await openAndCapture(page, testInfo, manifest, 'MAINT-05', page.getByRole('button', { name: /add maintenance item/i }), 'maintenance-item-form', 'Opened only; no form submitted.');
-    await openAndCapture(page, testInfo, manifest, 'MAINT-07', page.getByRole('button', { name: /add manual task/i }), 'manual-task-form', 'Opened only; no form submitted.');
     await openAndCapture(page, testInfo, manifest, 'MAINT-09', page.getByRole('button', { name: /record maintenance/i }), 'record-maintenance-form', 'Opened only; no form submitted.');
   }
 
