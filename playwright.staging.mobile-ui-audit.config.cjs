@@ -13,6 +13,6 @@ module.exports = defineConfig({
   use: { baseURL: staging.baseURL, screenshot: 'off', trace: 'retain-on-failure', video: 'retain-on-failure' },
   projects: [
     { name: 'mobile-audit-pixel-7', use: { ...devices['Pixel 7'] } },
-    { name: 'mobile-audit-iphone-narrow', use: { ...devices['iPhone 13'], viewport: { width: 375, height: 667 } } }
+    { name: 'mobile-audit-iphone-narrow', use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: { width: 375, height: 667 } } }
   ]
 });
