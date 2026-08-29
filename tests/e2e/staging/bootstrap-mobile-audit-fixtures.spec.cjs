@@ -67,6 +67,11 @@ test('BOOTSTRAP: create dedicated read-only mobile audit fixtures in Staging', a
         const context = await browser.newContext();
         const candidate = await context.newPage();
         await signIn(candidate, fixture);
+        await expect.poll(() => candidate.evaluate(async () => {
+          const client = window.SWOperationsV4?.state?.sb;
+          const { data } = await client.auth.getSession();
+          return Boolean(data.session?.user);
+        })).toBe(true);
         const completed = await candidate.evaluate(async password => {
           const client = window.SWOperationsV4?.state?.sb;
           if (!client) return { error: 'Fixture client is unavailable.' };
