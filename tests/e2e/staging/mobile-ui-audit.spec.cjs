@@ -2,6 +2,10 @@ const { test, expect } = require('@playwright/test');
 const { getStagingConfig } = require('../support/staging-config.cjs');
 const INVENTORY_IDS = ['AUTH-01','AUTH-02','AUTH-03','HOME-01','HOME-02','HOME-03','HEIGHT-01','HEIGHT-02','HEIGHT-03','HEIGHT-04','HEIGHT-05','HEIGHT-06','HEIGHT-07','VEH-01','VEH-02','VEH-03','VEH-04','MAINT-01','MAINT-02','MAINT-03','MAINT-04','MAINT-05','MAINT-06','MAINT-07','MAINT-08','MAINT-09','ADMIN-01','ADMIN-02','ADMIN-03','ADMIN-04','ADMIN-05','PERM-01','SHELL-01','SHELL-02','PWA-01'];
 
+// Full-page evidence for every browse-only state can take longer than the
+// standard test budget on CI, particularly on the narrow mobile viewport.
+test.setTimeout(120_000);
+
 // This suite is intentionally browse-only. It must not submit a form, start
 // an inspection, create/change a record, upload/download a file, or call a
 // Supabase administration API. Each capture records the actual safe-fixture
