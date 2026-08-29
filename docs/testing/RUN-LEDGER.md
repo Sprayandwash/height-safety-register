@@ -16,6 +16,13 @@ This is a compact, append-only index of meaningful Admin test runs and fixes. It
 | 27 Aug 2026 | Admin read-only review `33060709477` | 8–9A | Passed | Desktop and phone-size Admin browser review completed without writes. |
 | 27 Aug 2026 | Controlled run `33061479194` | 9B | Failed; cleanup passed | First temporary signup showed `email rate limit exceeded`; the 120-second timing correction was not reached. See [detailed record](history/step-9b/2026-08-27-run-33061479194.md). |
 | 27 Aug 2026 | Controlled run `33105862362` | 9B | Passed; cleanup and automatic archive passed | Temporary claim, Admin role edit, persisted re-sign-in role and self-sign-up-with-no-roles checks passed. [Automated history record](https://github.com/Sprayandwash/height-safety-register/blob/testing-history/docs/testing/history/step-9b/2026-08-27-run-33105862362-attempt-1.md). |
+| 28 Aug 2026 | Controlled run `33214850826` | 9B | Failed; cleanup passed | A newly unblocked Vehicle Inspector remained on the previous Admin screen. Confirmed application defect. |
+| 28 Aug 2026 | PRs #74–#75 | 1–6 | Merged | Reset a different signed-in user to Home while preserving the compulsory first-password screen for an invited user. |
+| 28 Aug 2026 | Controlled runs `33215978901`, `33220601154`, `33222649650`, `33224012685` | 9B | Failed; cleanup passed | Each run exposed a test synchronization race around route and Current Users panel rendering; no residual temporary account remained. |
+| 29 Aug 2026 | PRs #76–#78 | 1–6 | Merged | Hardened only the controlled browser test to wait for Home routing, loaded Current Users controls and panel visibility. |
+| 29 Aug 2026 | Staging build `33224259443`; preflight `33224275701`; Admin read-only review `33224338327` | 7–9A | Passed | Final isolated Staging build and read-only browser review passed. |
+| 29 Aug 2026 | Controlled run `33225362362` | 9B | Passed; cleanup passed | Full private-account lifecycle passed: invite, first password, block, unblock, Home, Vehicle Checks and deletion. |
+| 29 Aug 2026 | Production release `33231501728` | 10A | Passed | Tested application files published through the protected GitHub Pages production gate; no database migration was required. |
 
 ## Recording rule
 
