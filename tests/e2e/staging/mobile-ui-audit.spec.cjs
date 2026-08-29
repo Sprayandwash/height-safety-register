@@ -1,10 +1,13 @@
 const { test, expect } = require('@playwright/test');
 const { getStagingConfig } = require('../support/staging-config.cjs');
 const INVENTORY_IDS = ['AUTH-01','AUTH-02','AUTH-03','HOME-01','HOME-02','HOME-03','HEIGHT-01','HEIGHT-02','HEIGHT-03','HEIGHT-04','HEIGHT-05','HEIGHT-06','HEIGHT-07','VEH-01','VEH-02','VEH-03','VEH-04','MAINT-01','MAINT-02','MAINT-03','MAINT-04','MAINT-05','MAINT-06','MAINT-07','MAINT-08','MAINT-09','ADMIN-01','ADMIN-02','ADMIN-03','ADMIN-04','ADMIN-05','PERM-01','SHELL-01','SHELL-02','PWA-01'];
+const ADMIN_IDS = INVENTORY_IDS.filter(id => id.startsWith('ADMIN-'));
+const PRIMARY_IDS = INVENTORY_IDS.filter(id => !id.startsWith('ADMIN-'));
 
 // Full-page evidence for every browse-only state can take longer than the
 // standard test budget on CI, particularly on the narrow mobile viewport.
 test.setTimeout(120_000);
+test.describe.configure({ mode: 'serial' });
 
 // This suite is intentionally browse-only. It must not submit a form, start
 // an inspection, create/change a record, upload/download a file, or call a
@@ -12,13 +15,93 @@ test.setTimeout(120_000);
 // outcome, including unavailable states, in the Playwright artifact.
 async function capture(page, testInfo, id, state, note = '') {
   await page.waitForTimeout(150);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2);
+  const visualIssues = await page.evaluate(() => {
+    const visible = element => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 2 && rect.height > 2;
+    };
+    const inIntentionalScroller = element => {
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (['auto', 'scroll'].includes(style.overflowX) && parent.scrollWidth > parent.clientWidth + 2) return true;
+      }
+      return false;
+    };
+    const issues = [];
+    const targets = [...document.querySelectorAll('button, input, select, textarea, h1, h2, h3, .card, .ops-card, .ops-maintenance-summary')]
+      .filter(visible)
+      .filter(element => !inIntentionalScroller(element));
+    for (const element of targets) {
+      const rect = element.getBoundingClientRect();
+      const label = (element.getAttribute('aria-label') || element.textContent || element.id || element.className || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 90);
+      if (rect.left < -2 || rect.right > window.innerWidth + 2) issues.push({ type: 'viewport-clipping', label, left: Math.round(rect.left), right: Math.round(rect.right), viewport: window.innerWidth });
+      const style = getComputedStyle(element);
+      if ((['hidden', 'clip'].includes(style.overflowX) && element.scrollWidth > element.clientWidth + 2) || (['hidden', 'clip'].includes(style.overflowY) && element.scrollHeight > element.clientHeight + 2)) {
+        issues.push({ type: 'text-or-control-clipping', label });
+      }
+    }
+    const semantic = targets.filter(element => element.matches('button, input, select, textarea, h1, h2, h3, .accountBtn, #userEmail'));
+    for (let left = 0; left < semantic.length; left += 1) for (let right = left + 1; right < semantic.length; right += 1) {
+      const first = semantic[left]; const second = semantic[right];
+      if (first.contains(second) || second.contains(first)) continue;
+      const a = first.getBoundingClientRect(); const b = second.getBoundingClientRect();
+      const overlapWidth = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+      const overlapHeight = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+      if (overlapWidth * overlapHeight >= 48) {
+        const firstLabel = (first.getAttribute('aria-label') || first.textContent || first.id || first.tagName).trim().replace(/\s+/g, ' ').slice(0, 60);
+        const secondLabel = (second.getAttribute('aria-label') || second.textContent || second.id || second.tagName).trim().replace(/\s+/g, ' ').slice(0, 60);
+        issues.push({ type: 'unintended-overlap', first: firstLabel, second: secondLabel });
+      }
+    }
+    return { pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 2, issues };
+  });
   const file = `${String(testInfo.attachments.filter(a => a.name.startsWith('audit-')).length + 1).padStart(2, '0')}-${testInfo.project.name}-${id}-${state}.png`;
   const path = testInfo.outputPath('screenshots', file);
   await page.screenshot({ path, fullPage: true });
+  const viewportPath = testInfo.outputPath('screenshots', file.replace(/\.png$/, '-viewport.png'));
+  await page.screenshot({ path: viewportPath });
   await testInfo.attach(`audit-${id}-${state}`, { path, contentType: 'image/png' });
-  return { id, state, result: 'tested', note, pageOverflow: !overflow, screenshot: file };
+  await testInfo.attach(`audit-${id}-${state}-viewport`, { path: viewportPath, contentType: 'image/png' });
+  return { id, state, result: 'tested', note, pageOverflow: visualIssues.pageOverflow, visualIssues: visualIssues.issues, screenshot: file, viewportScreenshot: viewportPath.split('/').pop() };
 }
+
+function auditCredential(prefix) {
+  const email = String(process.env[`E2E_STAGING_${prefix}_EMAIL`] || '').trim();
+  const password = String(process.env[`E2E_STAGING_${prefix}_PASSWORD`] || '').trim();
+  if (!email || !password) throw new Error(`AUDIT READINESS BLOCKED: add E2E_STAGING_${prefix}_EMAIL and E2E_STAGING_${prefix}_PASSWORD before starting the audit.`);
+  return { email, password };
+}
+
+async function signInWith(page, credentials) {
+  await page.goto('/');
+  await page.locator('#loginEmail').fill(credentials.email);
+  await page.locator('#loginPassword').fill(credentials.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+}
+
+test('MOBILE-UI-AUDIT: readiness gate validates required accounts and roles', async ({ page }) => {
+  const browser = page.context().browser();
+  const viewport = page.viewportSize();
+  const credentials = {
+    HEIGHT_READONLY: auditCredential('HEIGHT_READONLY'),
+    FIRST_PASSWORD: auditCredential('FIRST_PASSWORD'),
+    BLOCKED: auditCredential('BLOCKED')
+  };
+  for (const [kind, credential] of Object.entries(credentials)) {
+    const context = await browser.newContext({ viewport });
+    const candidate = await context.newPage();
+    await signInWith(candidate, credential);
+    if (kind === 'HEIGHT_READONLY') {
+      await expect(candidate.locator('.ops-home-height')).toBeVisible({ timeout: 15_000 });
+      await candidate.locator('.ops-home-height').click();
+      await expect(candidate.locator('#addItemButton')).toBeHidden();
+    }
+    if (kind === 'FIRST_PASSWORD') await expect(candidate.locator('#opsFirstPasswordForm')).toBeVisible({ timeout: 15_000 });
+    if (kind === 'BLOCKED') await expect(candidate.getByText('Account access is blocked', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await context.close();
+  }
+});
 
 async function signIn(page) {
   const staging = getStagingConfig();
@@ -136,7 +219,7 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
 
   // Preserve a formal result for every plan item. The audit never fabricates
   // data or roles merely to turn an unavailable state into a passing result.
-  for (const id of INVENTORY_IDS) if (!manifest.some(entry => entry.id === id)) {
+  for (const id of PRIMARY_IDS) if (!manifest.some(entry => entry.id === id)) {
     manifest.push({ id, result: 'unavailable', note: 'Not reachable with the current authorised role and safe Staging fixture; no write, email, upload, download, or fixture change was attempted.' });
   }
 
@@ -144,7 +227,9 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
   require('fs').writeFileSync(manifestPath, JSON.stringify({ viewport: testInfo.project.name, entries: manifest }, null, 2));
   await testInfo.attach('mobile-ui-audit-manifest', { path: manifestPath, contentType: 'application/json' });
   expect(manifest.some(entry => entry.pageOverflow)).toBeFalsy();
-  expect(new Set(manifest.map(entry => entry.id)).size).toBe(INVENTORY_IDS.length);
+  expect(manifest.flatMap(entry => entry.visualIssues || [])).toEqual([]);
+  expect(manifest.filter(entry => entry.result !== 'tested').map(entry => entry.id)).toEqual([]);
+  expect(new Set(manifest.map(entry => entry.id)).size).toBe(PRIMARY_IDS.length);
 });
 
 test('MOBILE-UI-AUDIT: Admin read-only evidence', async ({ page }, testInfo) => {
@@ -165,4 +250,6 @@ test('MOBILE-UI-AUDIT: Admin read-only evidence', async ({ page }, testInfo) => 
   require('fs').writeFileSync(path, JSON.stringify({ viewport: testInfo.project.name, entries: manifest }, null, 2));
   await testInfo.attach('mobile-ui-audit-admin-manifest', { path, contentType: 'application/json' });
   expect(manifest.some(entry => entry.pageOverflow)).toBeFalsy();
+  expect(manifest.flatMap(entry => entry.visualIssues || [])).toEqual([]);
+  expect(new Set(manifest.map(entry => entry.id)).size).toBe(ADMIN_IDS.length);
 });

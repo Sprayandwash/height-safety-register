@@ -1,6 +1,7 @@
 # Mobile UI audit plan
 
-**Status:** Step 2 — branch and plan only. No browser review has run.
+**Status:** Redesigned audit contract. A run is not complete unless every
+inventory item below has been captured at both target viewports.
 
 ## Purpose and safety boundary
 
@@ -9,9 +10,31 @@ Operations Staging build. It does not authorise application changes, form
 submissions, test-data creation, uploads, downloads, emails, account changes,
 or direct Supabase access. Production Supabase is out of scope.
 
-Each inventory item must be recorded as **tested**, **not applicable**, or
-**unavailable in the safe Staging fixture**, with a reason. A parent screen
-loading is not evidence that its child states were audited.
+Each inventory item must be recorded as **tested** or **not applicable** with
+an approved reason. An unavailable page, role, account or fixture is an
+**audit-readiness failure**, not a successful partial-audit result. A parent
+screen loading is not evidence that its child states were audited.
+
+## Mandatory audit-readiness gate
+
+Before any authenticated browser audit starts, the workflow must confirm all
+of the following. If any requirement is absent, it must stop before collecting
+partial evidence and produce a clear list of what is missing.
+
+| Requirement | Purpose | Required proof before dispatch |
+| --- | --- | --- |
+| Primary manager account | Height, Vehicle and Maintenance manager screens | `E2E_STAGING_TEST_EMAIL/PASSWORD` secrets and successful role landing |
+| Admin account | All Admin screens | `E2E_STAGING_ADMIN_EMAIL/PASSWORD` secrets and successful Admin landing |
+| Height read-only account | Permission-limited Height view and hidden write actions | `E2E_STAGING_HEIGHT_READONLY_EMAIL/PASSWORD` secrets and a successful read-only landing |
+| First-password account | AUTH-02 without changing an account | `E2E_STAGING_FIRST_PASSWORD_EMAIL/PASSWORD` secrets and the existing first-password screen |
+| Blocked account | AUTH-03 without blocking an account | `E2E_STAGING_BLOCKED_EMAIL/PASSWORD` secrets and the existing blocked-account screen |
+| Safe Staging fixture | Attention destinations, vehicle alert/history states, empty states and existing records | A named, non-production fixture checklist confirming every data-dependent inventory item is present |
+| Real-device/PWA evidence | PWA install/offline/update/camera behaviour | A separately controlled device session; browser emulation cannot pass this item |
+
+The dispatcher must explicitly confirm readiness. The harness then signs in to
+the specialised accounts and verifies their expected state before it begins
+the page audit. No account is created, changed, blocked, unblocked, reset or
+saved by the audit.
 
 ## Viewports and screenshot rules
 
@@ -20,9 +43,9 @@ loading is not evidence that its child states were audited.
 | `pixel-7` | Existing Playwright Pixel 7 project | Project default | Established Android coverage |
 | `iphone-narrow` | Narrow iPhone-size Playwright project | 375 × 667 CSS px | Finds tighter wrapping, clipping and tap-target problems |
 
-At normal zoom, capture one settled full-page screenshot for every reachable
-inventory item at both widths. Capture an additional focused screenshot for
-each confirmed issue. Every screenshot name must follow:
+At normal zoom, capture both a settled viewport screenshot and a full-page
+screenshot for every inventory item at both widths. Capture an additional
+focused screenshot for each confirmed issue. Every screenshot name must follow:
 
 `<sequence>-<viewport>-<area>-<state>.png`
 
@@ -35,8 +58,13 @@ tokens, email addresses, or secret values.
 
 For each item, verify that text is legible and contained, controls are
 unobscured and tappable, dialogs/panels remain usable, and the document has no
-page-level horizontal overflow. A wide table/list may scroll horizontally
-only inside a visibly bounded wrapper; record that wrapper in the manifest.
+page-level horizontal overflow. The harness must fail on: visible semantic
+elements outside the viewport; text/control clipping inside a non-scrollable
+container; and unintended overlap between controls and headings/account text.
+A wide table/list may scroll horizontally only inside a visibly bounded
+wrapper; record that wrapper in the manifest. Automated geometry checks do not
+replace final screenshot review: the final report must identify the reviewer
+and link every issue screenshot.
 
 ## Formal page and state inventory
 
@@ -89,14 +117,19 @@ be displayed but never submitted or used to cause a write.
    build artifact and secrets in GitHub Actions, which already reject a build
    that identifies Production.
 2. Add the `iphone-narrow` project alongside the established Pixel 7 project.
-3. Build a route/state runner that captures screenshots after each settled,
-   non-writing state and checks document-level overflow. It will record
-   contained table/list scrolling as an exception, not a defect.
-4. Make the workflow upload the screenshot directory, manifest, Playwright
+3. Run the mandatory readiness gate before browser review. It must verify every
+   required secret, account state and role; it must not begin the page audit if
+   any required state is missing.
+4. Build a route/state runner that captures viewport and full-page screenshots
+   after each settled, non-writing state. It must check document overflow,
+   viewport clipping, text/control clipping and unintended overlap. It will
+   record contained table/list scrolling as an exception, not a defect.
+5. Make the workflow upload the screenshot directory, manifest, Playwright
    report, traces and focused issue evidence as a GitHub Actions artifact.
-5. Do not attempt inventory entries that require a new fixture, a submission,
-   a database change, an email, an upload or a download. Record them as gaps
-   and propose a separately approved Step 9B only after the Step 9A report.
+6. Do not attempt inventory entries that require a new fixture, a submission,
+   a database change, an email, an upload or a download. Stop at readiness and
+   request the necessary authorised fixture/account instead of issuing a
+   partial-audit pass.
 
 ## Approval sequence after this plan
 

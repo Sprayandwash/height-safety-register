@@ -2,6 +2,11 @@ name: Staging mobile UI audit
 
 on:
   workflow_dispatch:
+    inputs:
+      readiness_confirmed:
+        description: 'All required audit accounts and safe Staging fixtures are present and read-only review is approved.'
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -17,6 +22,12 @@ jobs:
       E2E_STAGING_TEST_PASSWORD: ${{ secrets.E2E_STAGING_TEST_PASSWORD }}
       E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
       E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
+      E2E_STAGING_HEIGHT_READONLY_EMAIL: ${{ secrets.E2E_STAGING_HEIGHT_READONLY_EMAIL }}
+      E2E_STAGING_HEIGHT_READONLY_PASSWORD: ${{ secrets.E2E_STAGING_HEIGHT_READONLY_PASSWORD }}
+      E2E_STAGING_FIRST_PASSWORD_EMAIL: ${{ secrets.E2E_STAGING_FIRST_PASSWORD_EMAIL }}
+      E2E_STAGING_FIRST_PASSWORD_PASSWORD: ${{ secrets.E2E_STAGING_FIRST_PASSWORD_PASSWORD }}
+      E2E_STAGING_BLOCKED_EMAIL: ${{ secrets.E2E_STAGING_BLOCKED_EMAIL }}
+      E2E_STAGING_BLOCKED_PASSWORD: ${{ secrets.E2E_STAGING_BLOCKED_PASSWORD }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +35,24 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Verify audit readiness before browser review
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.readiness_confirmed }}" = 'true' || { echo 'AUDIT READINESS BLOCKED: confirm the required accounts and safe fixtures before dispatching.' >&2; exit 1; }
+          missing=()
+          for setting in \
+            E2E_STAGING_TEST_EMAIL E2E_STAGING_TEST_PASSWORD \
+            E2E_STAGING_ADMIN_EMAIL E2E_STAGING_ADMIN_PASSWORD \
+            E2E_STAGING_HEIGHT_READONLY_EMAIL E2E_STAGING_HEIGHT_READONLY_PASSWORD \
+            E2E_STAGING_FIRST_PASSWORD_EMAIL E2E_STAGING_FIRST_PASSWORD_PASSWORD \
+            E2E_STAGING_BLOCKED_EMAIL E2E_STAGING_BLOCKED_PASSWORD; do
+            test -n "${!setting:-}" || missing+=("$setting")
+          done
+          if ((${#missing[@]})); then
+            printf 'AUDIT READINESS BLOCKED: missing required Staging audit secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
       - name: Download and validate the isolated Staging build
         shell: bash
         run: |
