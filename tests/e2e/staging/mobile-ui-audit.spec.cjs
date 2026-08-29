@@ -38,17 +38,25 @@ async function openAndCapture(page, testInfo, manifest, id, locator, state, note
   return false;
 }
 
-// The dashboard header is sticky. A normal locator.click() can scroll a
-// summary card behind that header on short mobile viewports, then report a
-// false interaction failure. Position the card in the usable viewport and
-// prove its centre is hit-testable before clicking it.
-async function clickBelowStickyHeader(page, locator) {
+// Mobile pages use sticky headers and filter panels. A normal locator.click()
+// can scroll a target behind one of them, then report a false interaction
+// failure. Position the target in the usable viewport and prove its centre is
+// hit-testable before clicking it.
+async function clickInUsableViewport(page, locator) {
   const point = await locator.evaluate(node => {
-    const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom || 0;
     const margin = 16;
     const rect = node.getBoundingClientRect();
-    const usableHeight = Math.max(1, window.innerHeight - headerBottom - (margin * 2));
-    const desiredTop = headerBottom + margin + Math.max(0, (usableHeight - rect.height) / 2);
+    const x = rect.left + (rect.width / 2);
+    const obstructionBottom = [...document.querySelectorAll('body *')].reduce((bottom, candidate) => {
+      const style = getComputedStyle(candidate);
+      if (!['fixed', 'sticky'].includes(style.position)) return bottom;
+      const candidateRect = candidate.getBoundingClientRect();
+      const overlapsTapColumn = candidateRect.left <= x && candidateRect.right >= x;
+      const isVisibleTopObstruction = candidateRect.bottom > 0 && candidateRect.top < (window.innerHeight / 2);
+      return overlapsTapColumn && isVisibleTopObstruction ? Math.max(bottom, candidateRect.bottom) : bottom;
+    }, 0);
+    const usableHeight = Math.max(1, window.innerHeight - obstructionBottom - (margin * 2));
+    const desiredTop = obstructionBottom + margin + Math.max(0, (usableHeight - rect.height) / 2);
     window.scrollBy({ top: rect.top - desiredTop, behavior: 'instant' });
     const positioned = node.getBoundingClientRect();
     return { x: positioned.left + (positioned.width / 2), y: positioned.top + (positioned.height / 2) };
@@ -69,9 +77,9 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
 
   const attention = page.locator('.ops-attention-summary').first();
   if (await attention.count()) {
-    await clickBelowStickyHeader(page, attention);
+    await clickInUsableViewport(page, attention);
     manifest.push(await capture(page, testInfo, 'HOME-02', 'attention-filter'));
-    await clickBelowStickyHeader(page, attention);
+    await clickInUsableViewport(page, attention);
     manifest.push(await capture(page, testInfo, 'HOME-02', 'attention-cleared'));
   } else manifest.push({ id: 'HOME-02', result: 'unavailable', note: 'No attention summary is present in the safe fixture.' });
 
@@ -81,7 +89,7 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     await page.locator('.tab[data-tab="equipment"]').click();
     manifest.push(await capture(page, testInfo, 'HEIGHT-02', 'equipment-register'));
     const item = page.locator('#equipmentList .listItem').first();
-    if (await item.count()) { await item.click(); manifest.push(await capture(page, testInfo, 'HEIGHT-03', 'equipment-detail')); }
+    if (await item.count()) { await clickInUsableViewport(page, item); manifest.push(await capture(page, testInfo, 'HEIGHT-03', 'equipment-detail')); }
     else manifest.push({ id: 'HEIGHT-03', result: 'unavailable', note: 'No readable Height Equipment item in the safe fixture.' });
     if (await page.locator('#certificateTabButton').count()) { await page.locator('#certificateTabButton').click(); manifest.push(await capture(page, testInfo, 'HEIGHT-06', 'certificates')); }
     await openAndCapture(page, testInfo, manifest, 'HEIGHT-07', page.locator('.tab[data-tab="heightQualifications"]:visible'), 'qualifications');
