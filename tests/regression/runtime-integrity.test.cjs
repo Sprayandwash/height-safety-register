@@ -101,3 +101,12 @@ test('REG-057: Height Equipment register distinguishes loading from an empty reg
   assert.doesNotMatch(review,/force\s*:\s*true/);
   assert.doesNotMatch(review,/await selectedItem\.click\(\);/);
 });
+
+test('REG-058: mobile layout keeps dashboard cards and Staging account controls in view',()=>{
+  const index=read('index.html');
+  assert.match(index,/\.stagingEnvironment\{--staging-banner-height:52px\}/);
+  assert.match(index,/\.stagingEnvironment \.accountTray\{top:calc\(var\(--staging-banner-height\) \+ 14px\)\}/);
+  assert.match(index,/@media\(max-width:760px\)\{[\s\S]*?#dashboard>\.grid\.five\{grid-template-columns:1fr;margin-top:0\}/);
+  assert.match(index,/header>div\{flex:1;min-width:0\}/);
+  assert.match(index,/\.tagline,\.topUserSummary\{max-width:100%;white-space:normal;overflow-wrap:anywhere\}/);
+});
