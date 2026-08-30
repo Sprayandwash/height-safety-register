@@ -385,6 +385,18 @@ async function loadData(){
 }
 function renderAll(){renderDashboard();renderEquipment();renderInspections();renderNotifications();applyPermissions();if(window.reportTypeFilter) fillReportFilterOptions();if(window.certTypeFilter) fillCertificateFilterOptions();if(window.certificateHistory) renderCertificateHistory();if(window.certMode) updateCertificateUI();}
 function showTab(id){if(id==="certificates")window.SWOperationsV4?.installCertificatesV424?.();document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hidden"));const pane=document.getElementById(id);if(!pane)return;pane.classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));let t=document.querySelector(`[data-tab="${id}"]`);if(t)t.classList.add("active");if(id==="export")renderReportsHome();setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),10);}
+function scrollContentToTop(target,delay=0){
+  window.setTimeout(()=>{
+    const el=typeof target==="string"?document.querySelector(target):target;
+    if(!el)return;
+    const header=document.querySelector("body > header");
+    const headerStyle=header?window.getComputedStyle(header):null;
+    const headerOffset=header&&["fixed","sticky"].includes(headerStyle?.position)?header.getBoundingClientRect().height+8:8;
+    const top=Math.max(0,window.scrollY+el.getBoundingClientRect().top-headerOffset);
+    window.scrollTo({top,left:0,behavior:"smooth"});
+  },delay);
+}
+window.scrollContentToTop=scrollContentToTop;
 function recentInspectionLimit(){
   const value=Number(document.getElementById("heightRecentLimit")?.value||10);
   return [10,20,30,50].includes(value)?value:10;
@@ -541,6 +553,10 @@ function setRegisterFilter(mode,value){
   if(mode==="noInspection") equipmentFilterState.due="no_inspection";
   showTab("equipment");
   renderEquipment();
+  // Dashboard and notification shortcuts open a filtered register.  Place the
+  // resulting list at the top of the viewport, rather than leaving the user
+  // at the top of the page above the filter results.
+  scrollContentToTop("#equipmentList",40);
 }
 function clearFilter(){
   activeFilter={mode:"active",value:"active"};

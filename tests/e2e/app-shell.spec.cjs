@@ -29,14 +29,14 @@ test.describe('local application shell', () => {
   test('REG-UI-002: the packaged PWA manifest and app icons are available', async ({ page, request }) => {
     await page.goto('/');
 
-    const manifest = await request.get('/manifest.webmanifest?v=4.0.86');
+    const manifest = await request.get('/manifest.webmanifest?v=4.0.88');
     expect(manifest.ok()).toBe(true);
     expect(await manifest.json()).toMatchObject({
       name: 'Spray and Wash Operations App',
       short_name: 'Spray and Wash'
     });
 
-    for (const icon of ['assets/spray-wash-app-icon-192-v4.0.86.png', 'assets/spray-wash-app-icon-512-v4.0.86.png']) {
+    for (const icon of ['assets/spray-wash-app-icon-192-v4.0.88.png', 'assets/spray-wash-app-icon-512-v4.0.88.png']) {
       const response = await request.get(`/${icon}`);
       expect(response.ok(), `${icon} should load`).toBe(true);
       expect(response.headers()['content-type']).toContain('image/png');

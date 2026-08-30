@@ -701,7 +701,7 @@
     }
   }
 
-  function showModuleHome({preserveAttentionFilter=false}={}){
+  function showModuleHome({preserveAttentionFilter=false,scrollToTop=true}={}){
     hideLegacyUserAdminControls();
     if(!preserveAttentionFilter) state.homeAttentionFilter='all';
     state.currentModule = 'home';
@@ -711,7 +711,7 @@
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     renderModuleHome();
     refreshTopUserSummary();
-    window.scrollTo({top:0, left:0, behavior:'auto'});
+    if(scrollToTop) window.scrollTo({top:0, left:0, behavior:'auto'});
   }
 
   function openHeightModule(){
@@ -832,8 +832,15 @@
   }
   function openAppAttention(group){
     const requested=group||'all';
+    const opensFilteredList=requested!=='all'&&state.homeAttentionFilter!==requested;
     state.homeAttentionFilter=state.homeAttentionFilter===requested?'all':requested;
-    showModuleHome({preserveAttentionFilter:true});
+    showModuleHome({preserveAttentionFilter:true,scrollToTop:!opensFilteredList});
+    if(opensFilteredList) scrollFilteredListToTop('#moduleHome .ops-attention-list[open]');
+  }
+  function scrollFilteredListToTop(selector){
+    const scroll=window.scrollContentToTop;
+    if(typeof scroll==='function') return scroll(selector,40);
+    window.setTimeout(()=>document.querySelector(selector)?.scrollIntoView({behavior:'smooth',block:'start'}),40);
   }
   function openAttentionItem(kind,taskId,group){
     if(kind==='task'){ state.currentModule='tasks'; state.currentView='app-tasks'; state.taskQuickFilter='open'; state.openTaskId=taskId||''; return showOperations('app-tasks'); }
@@ -1201,7 +1208,10 @@
       state.taskQuickFilter = 'open';
     }
     render();
-    window.scrollTo({top:0,left:0,behavior:'auto'});
+    const target=shortcut==='tasks-open'
+      ? '#operations .ops-primary-action-content .ops-card'
+      : '#operations .ops-maintenance-filter-results';
+    scrollFilteredListToTop(target);
   }
 
   function vehiclesHtml(){
