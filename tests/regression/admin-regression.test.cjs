@@ -162,7 +162,9 @@ test('REG-043/046/048: Admin read-only browser review covers desktop and mobile 
   assert.match(spec, /Users & Permissions', exact: true \}\)\.click\(\)/);
   assert.match(spec, /currentUsersSummary/);
   assert.match(spec, /currentUsersSummary\.click\(\)/);
-  assert.match(spec, /input\[data-ops-preload-role\]:checked/);
+  assert.match(spec, /legacy pre-load form is not offered/);
+  assert.match(spec, /Create staff account/);
+  assert.doesNotMatch(spec, /input\[data-ops-preload-role\]:checked/);
   assert.match(spec, /Save app settings/);
   assert.match(spec, /Create Complete Backup/);
   assert.doesNotMatch(spec, /\.click\(\).*Save app settings/);
