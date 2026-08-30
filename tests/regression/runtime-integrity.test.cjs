@@ -38,8 +38,9 @@ test('REG-051: manifest and index reference the approved packaged app icons',()=
   const manifest=JSON.parse(read('manifest.webmanifest'));
   const index=read('index.html');
   assert.equal(manifest.name,'Spray and Wash Operations App');
-  assert.match(index,/<link rel="manifest" href="manifest\.webmanifest\?v=4\.0\.85">/);
-  assert.match(index,/spray-wash-app-icon-192\.png\?v=4\.0\.85/);
+  assert.match(index,/<link rel="manifest" href="manifest\.webmanifest\?v=4\.0\.86">/);
+  assert.match(index,/spray-wash-app-icon-192-v4\.0\.86\.png/);
+  assert.match(index,/favicon-v4\.0\.86\.ico/);
   for(const icon of manifest.icons){
     assert.equal(fs.existsSync(path.join(root,icon.src)),true,`manifest icon missing: ${icon.src}`);
     assert.ok(fs.statSync(path.join(root,icon.src)).size>0,`manifest icon is empty: ${icon.src}`);
