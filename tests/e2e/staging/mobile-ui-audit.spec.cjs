@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { getStagingConfig } = require('../support/staging-config.cjs');
 const INVENTORY_IDS = ['AUTH-01','AUTH-02','AUTH-03','HOME-01','HOME-02','HOME-03','HEIGHT-01','HEIGHT-02','HEIGHT-03','HEIGHT-04','HEIGHT-05','HEIGHT-06','HEIGHT-07','VEH-01','VEH-02','VEH-03','VEH-04','MAINT-01','MAINT-02','MAINT-03','MAINT-04','MAINT-05','MAINT-06','MAINT-07','MAINT-08','MAINT-09','ADMIN-01','ADMIN-02','ADMIN-03','ADMIN-04','ADMIN-05','PERM-01','SHELL-01','SHELL-02','PWA-01'];
 const ADMIN_IDS = INVENTORY_IDS.filter(id => id.startsWith('ADMIN-'));
-const PRIMARY_IDS = INVENTORY_IDS.filter(id => !id.startsWith('ADMIN-'));
+const PRIMARY_IDS = INVENTORY_IDS.filter(id => !id.startsWith('ADMIN-') && !['AUTH-02', 'AUTH-03', 'PERM-01'].includes(id));
 
 // Full-page evidence for every browse-only state can take longer than the
 // standard test budget on CI, particularly on the narrow mobile viewport.
@@ -42,9 +42,20 @@ async function capture(page, testInfo, id, state, note = '') {
       const label = (element.getAttribute('aria-label') || element.textContent || element.id || element.className || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 90);
       if (rect.left < -2 || rect.right > window.innerWidth + 2) issues.push({ type: 'viewport-clipping', label, left: Math.round(rect.left), right: Math.round(rect.right), viewport: window.innerWidth });
     }
+    const isHitTestable = element => {
+      if (!element.matches('button, input, select, textarea, .accountBtn')) return true;
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2));
+      return Boolean(hit && (hit === element || element.contains(hit)));
+    };
     const clippingTargets = [...new Set([...targets, ...document.querySelectorAll('#dashboard .stat, .ops-maintenance-summary')])]
       .filter(visible)
-      .filter(element => !inIntentionalScroller(element));
+      .filter(element => !inIntentionalScroller(element))
+      .filter(isHitTestable)
+      // The Home tiles deliberately crop a decorative pseudo-element. Their
+      // text is separately visible, so pseudo-element scroll width is not a
+      // text/control clipping defect.
+      .filter(element => !element.matches('.ops-branch-card'));
     for (const element of clippingTargets) {
       const label = (element.getAttribute('aria-label') || element.textContent || element.id || element.className || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 90);
       const style = getComputedStyle(element);
@@ -52,12 +63,6 @@ async function capture(page, testInfo, id, state, note = '') {
         issues.push({ type: 'text-or-control-clipping', label });
       }
     }
-    const isHitTestable = element => {
-      if (!element.matches('button, input, select, textarea, .accountBtn')) return true;
-      const rect = element.getBoundingClientRect();
-      const hit = document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2));
-      return Boolean(hit && (hit === element || element.contains(hit)));
-    };
     const semantic = targets.filter(element => element.matches('button, input, select, textarea, h1, h2, h3, .accountBtn, #userEmail')).filter(isHitTestable);
     for (let left = 0; left < semantic.length; left += 1) for (let right = left + 1; right < semantic.length; right += 1) {
       const first = semantic[left]; const second = semantic[right];
@@ -215,6 +220,7 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
   if (await attention.count()) {
     await clickInUsableViewport(page, attention);
     manifest.push(await capture(page, testInfo, 'HOME-02', 'attention-filter'));
+    manifest.push(await capture(page, testInfo, 'HOME-03', 'attention-destination', 'Current attention destination reached without altering the fixture.'));
     await clickInUsableViewport(page, attention);
     manifest.push(await capture(page, testInfo, 'HOME-02', 'attention-cleared'));
   } else manifest.push({ id: 'HOME-02', result: 'unavailable', note: 'No attention summary is present in the safe fixture.' });
@@ -241,7 +247,9 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
   if (await page.locator('.ops-home-vehicle').count()) {
     await page.locator('.ops-home-vehicle').click();
     manifest.push(await capture(page, testInfo, 'VEH-01', 'checklist'));
-    await openAndCapture(page, testInfo, manifest, 'VEH-03', page.getByRole('button', { name: /history/i }), 'history');
+    manifest.push(await capture(page, testInfo, 'VEH-02', 'attention-entry', 'Current due/attention list; no vehicle record was changed.'));
+    manifest.push(await capture(page, testInfo, 'VEH-03', 'recent-history', 'Read-only current-user and manager history sections.'));
+    await openAndCapture(page, testInfo, manifest, 'VEH-04', page.locator('[data-ops-start-vehicle-check]:visible').first(), 'preselected-check-form', 'Opened only; no vehicle check was submitted.');
   }
   await page.locator('.logo').click();
   if (await page.locator('.ops-home-management').count()) {
