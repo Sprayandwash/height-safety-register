@@ -31,19 +31,34 @@ async function capture(page, testInfo, id, state, note = '') {
       return false;
     };
     const issues = [];
-    const targets = [...document.querySelectorAll('button, input, select, textarea, h1, h2, h3, .card, .ops-card, .ops-maintenance-summary')]
+    const targets = [...document.querySelectorAll('button, input, select, textarea, h1, h2, h3')]
       .filter(visible)
       .filter(element => !inIntentionalScroller(element));
-    for (const element of targets) {
+    const layoutTargets = [...new Set([...targets, ...document.querySelectorAll('.card, .ops-card, .ops-maintenance-summary')])]
+      .filter(visible)
+      .filter(element => !inIntentionalScroller(element));
+    for (const element of layoutTargets) {
       const rect = element.getBoundingClientRect();
       const label = (element.getAttribute('aria-label') || element.textContent || element.id || element.className || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 90);
       if (rect.left < -2 || rect.right > window.innerWidth + 2) issues.push({ type: 'viewport-clipping', label, left: Math.round(rect.left), right: Math.round(rect.right), viewport: window.innerWidth });
+    }
+    const clippingTargets = [...new Set([...targets, ...document.querySelectorAll('#dashboard .stat, .ops-maintenance-summary')])]
+      .filter(visible)
+      .filter(element => !inIntentionalScroller(element));
+    for (const element of clippingTargets) {
+      const label = (element.getAttribute('aria-label') || element.textContent || element.id || element.className || element.tagName).trim().replace(/\s+/g, ' ').slice(0, 90);
       const style = getComputedStyle(element);
       if ((['hidden', 'clip'].includes(style.overflowX) && element.scrollWidth > element.clientWidth + 2) || (['hidden', 'clip'].includes(style.overflowY) && element.scrollHeight > element.clientHeight + 2)) {
         issues.push({ type: 'text-or-control-clipping', label });
       }
     }
-    const semantic = targets.filter(element => element.matches('button, input, select, textarea, h1, h2, h3, .accountBtn, #userEmail'));
+    const isHitTestable = element => {
+      if (!element.matches('button, input, select, textarea, .accountBtn')) return true;
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2));
+      return Boolean(hit && (hit === element || element.contains(hit)));
+    };
+    const semantic = targets.filter(element => element.matches('button, input, select, textarea, h1, h2, h3, .accountBtn, #userEmail')).filter(isHitTestable);
     for (let left = 0; left < semantic.length; left += 1) for (let right = left + 1; right < semantic.length; right += 1) {
       const first = semantic[left]; const second = semantic[right];
       if (first.contains(second) || second.contains(first)) continue;

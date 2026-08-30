@@ -109,4 +109,11 @@ test('REG-058: mobile layout keeps dashboard cards and Staging account controls 
   assert.match(index,/@media\(max-width:760px\)\{[\s\S]*?#dashboard>\.grid\.five\{grid-template-columns:1fr;margin-top:0\}/);
   assert.match(index,/header>div\{flex:1;min-width:0\}/);
   assert.match(index,/\.tagline,\.topUserSummary\{max-width:100%;white-space:normal;overflow-wrap:anywhere\}/);
+  assert.match(index,/V4 dashboard grid rule above[\s\S]*?#dashboard>\.grid\.five\{grid-template-columns:1fr;margin-top:0\}/);
+});
+
+test('REG-062: a first-password account is routed to its account gate',()=>{
+  const operations=read('operations-v4.js');
+  assert.match(operations,/state\.accountAccess\?\.status === 'Blocked' \|\| state\.accountAccess\?\.must_change_password/);
+  assert.match(operations,/state\.currentModule = 'account-gate';[\s\S]*?showOperations\('account-gate'\);/);
 });
