@@ -1,6 +1,6 @@
-// Spray & Wash Operations V4.0.84 service worker
+// Spray and Wash Operations App V4.0.85 service worker
 // Network-first, clears old caches, and forces the V4.0.84 release modules.
-const CACHE_NAME = 'spray-wash-operations-v4-0-84';
+const CACHE_NAME = 'spray-wash-operations-v4-0-85';
 const BACKUP_SCRIPT = '<script src="./backup-v4.js?v=4.0.84"></script>';
 const PHOTO_SCRIPT = '<script src="./photo-storage-v4.0.84.js?v=4.0.84"></script>';
 

@@ -1,6 +1,6 @@
 {
-  "name": "Spray & Wash Operations",
-  "short_name": "Spray & Wash",
+  "name": "Spray and Wash Operations App",
+  "short_name": "Spray and Wash",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
