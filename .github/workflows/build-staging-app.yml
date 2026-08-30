@@ -177,7 +177,7 @@ jobs:
           if marker not in s:
               raise SystemExit('Could not locate <body> in index.html')
           s = s.replace(marker, banner, 1)
-          s = s.replace('<title>Spray &amp; Wash Operations</title>', '<title>STAGING — Spray &amp; Wash Operations</title>', 1)
+          s = s.replace('<title>Spray and Wash Operations App</title>', '<title>STAGING — Spray and Wash Operations App</title>', 1)
           p.write_text(s, encoding='utf-8')
           PY
 
@@ -187,8 +187,8 @@ jobs:
           from pathlib import Path
           p=Path('staging-build/manifest.webmanifest')
           d=json.loads(p.read_text(encoding='utf-8'))
-          d['name']='Spray & Wash Operations — STAGING'
-          d['short_name']='S&W STAGING'
+          d['name']='Spray and Wash Operations App — STAGING'
+          d['short_name']='S&W App STAGING'
           p.write_text(json.dumps(d, indent=2)+"\n", encoding='utf-8')
           PY
           fi
@@ -199,7 +199,7 @@ jobs:
           p=Path('staging-build/service-worker.js')
           s=p.read_text(encoding='utf-8')
           s=s.replace('operations-v4', 'operations-staging-v4')
-          s=s.replace('height-safety-register', 'height-safety-register-staging')
+          s=s.replace('spray-wash-operations', 'spray-wash-operations-staging')
           p.write_text(s, encoding='utf-8')
           PY
           fi
