@@ -913,6 +913,14 @@
     if(!state.user){ state.roles = []; render(); return; }
     await loadRoles(revision);
     if(revision!==state.authRevision) return;
+    // Account gates must take precedence over the module landing screen.  A
+    // first-password user otherwise remains on Home and the required form is
+    // rendered into a hidden Operations pane.
+    if(state.accountAccess?.status === 'Blocked' || state.accountAccess?.must_change_password){
+      state.currentModule = 'account-gate';
+      showOperations('account-gate');
+      return;
+    }
     // A different signed-in user must never inherit the previous user's
     // module or view (for example, an Admin screen). A first-time invited
     // user remains on the required personal-password screen. Token refreshes
