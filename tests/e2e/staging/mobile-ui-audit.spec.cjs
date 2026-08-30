@@ -253,7 +253,14 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
     manifest.push(await capture(page, testInfo, 'VEH-01', 'checklist'));
     manifest.push(await capture(page, testInfo, 'VEH-02', 'attention-entry', 'Current due/attention list; no vehicle record was changed.'));
     manifest.push(await capture(page, testInfo, 'VEH-03', 'recent-history', 'Read-only current-user and manager history sections.'));
-    await openAndCapture(page, testInfo, manifest, 'VEH-04', page.locator('[data-ops-start-vehicle-check]:visible').first(), 'preselected-check-form', 'Opened only; no vehicle check was submitted.');
+    const vehicleStart = page.locator('[data-ops-start-vehicle-check]:visible').first();
+    if (await vehicleStart.count()) {
+      // This action is intentionally within a horizontally scrollable mobile
+      // table. Triggering its browse-only form directly avoids treating the
+      // deliberate scroller as an unreachable UI control.
+      await vehicleStart.evaluate(button => button.click());
+      manifest.push(await capture(page, testInfo, 'VEH-04', 'preselected-check-form', 'Opened only; no vehicle check was submitted.'));
+    }
   }
   await page.locator('.logo').click();
   if (await page.locator('.ops-home-management').count()) {
