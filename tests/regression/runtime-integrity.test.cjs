@@ -46,6 +46,13 @@ test('REG-051: manifest and index reference the approved packaged app icons',()=
   }
 });
 
+test('REG-059: narrow mobile header uses the compact app label and reserves the account control',()=>{
+  const index=read('index.html');
+  assert.match(index,/header\{align-items:flex-start;padding-right:128px\}/);
+  assert.match(index,/@media\(max-width:640px\)\{header\{padding-top:10px;padding-bottom:10px;gap:8px\}header h1\{font-size:20px;white-space:nowrap\}\.appTitleFull\{display:none\}\.appTitleMobile\{display:inline\}/);
+  assert.match(index,/<h1 aria-label="Spray and Wash Operations App"><span class="appTitleFull">Spray and Wash Operations App<\/span><span class="appTitleMobile" aria-hidden="true">Spray &amp; Wash<\/span><\/h1>/);
+});
+
 test('REG-052: service worker takes control and serves navigation network-first',()=>{
   const worker=read('service-worker.js');
   assert.match(worker,/self\.skipWaiting\(\)/);
