@@ -7,11 +7,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Spray and Wash Operations App</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.0.86">
-  <link rel="shortcut icon" href="favicon-v4.0.86.ico">
-  <link rel="icon" href="favicon-v4.0.86.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/spray-wash-app-icon-192-v4.0.86.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/spray-wash-app-icon-192-v4.0.86.png">
+  <link rel="manifest" href="manifest.webmanifest?v=4.0.87">
+  <link rel="shortcut icon" href="favicon-v4.0.87.ico">
+  <link rel="icon" href="favicon-v4.0.87.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/spray-wash-app-icon-192-v4.0.87.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/spray-wash-app-icon-192-v4.0.87.png">
   <meta name="theme-color" content="#003b73">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -107,6 +107,18 @@
 .sw429-qualifications details{background:#fff;border:1px solid #dbe7ee;border-radius:14px;margin:0 0 14px;overflow:hidden}
 .sw429-qualifications summary{cursor:pointer;font-weight:900;padding:14px 16px;background:#f8fafc}
 .sw429-qual-body{padding:14px 16px}.sw429-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+</style>
+
+<style id="vehicleAttentionMobileStyles">
+.ops-vehicle-attention-mobile{display:none}
+@media(max-width:640px){
+  .ops-vehicle-attention-desktop{display:none!important}
+  .ops-vehicle-attention-mobile{display:grid!important;gap:8px}
+  .ops-vehicle-attention-row{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;color:var(--ink);font:inherit;font-weight:800}
+  button.ops-vehicle-attention-row{cursor:pointer}
+  .ops-vehicle-attention-name{font-size:18px;line-height:1.15}
+  .ops-vehicle-attention-row .ops-pill{flex:0 0 auto;white-space:nowrap}
+}
 </style>
 </head>
 <body>

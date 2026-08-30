@@ -38,9 +38,9 @@ test('REG-051: manifest and index reference the approved packaged app icons',()=
   const manifest=JSON.parse(read('manifest.webmanifest'));
   const index=read('index.html');
   assert.equal(manifest.name,'Spray and Wash Operations App');
-  assert.match(index,/<link rel="manifest" href="manifest\.webmanifest\?v=4\.0\.86">/);
-  assert.match(index,/spray-wash-app-icon-192-v4\.0\.86\.png/);
-  assert.match(index,/favicon-v4\.0\.86\.ico/);
+  assert.match(index,/<link rel="manifest" href="manifest\.webmanifest\?v=4\.0\.87">/);
+  assert.match(index,/spray-wash-app-icon-192-v4\.0\.87\.png/);
+  assert.match(index,/favicon-v4\.0\.87\.ico/);
   for(const icon of manifest.icons){
     assert.equal(fs.existsSync(path.join(root,icon.src)),true,`manifest icon missing: ${icon.src}`);
     assert.ok(fs.statSync(path.join(root,icon.src)).size>0,`manifest icon is empty: ${icon.src}`);
@@ -124,4 +124,17 @@ test('REG-062: a first-password account is routed to its account gate',()=>{
   const operations=read('operations-v4.js');
   assert.match(operations,/state\.accountAccess\?\.status === 'Blocked' \|\| state\.accountAccess\?\.must_change_password/);
   assert.match(operations,/state\.currentModule = 'account-gate';[\s\S]*?showOperations\('account-gate'\);/);
+});
+
+
+test('REG-063: Vehicle Check reminders use a compact clickable mobile-only list without changing the desktop table',()=>{
+  const operations=read('operations-v4.js');
+  const index=read('index.html');
+  assert.match(operations,/function vehicleCheckReminderHtml\(rows\)/);
+  assert.match(operations,/ops-vehicle-attention-desktop/);
+  assert.match(operations,/ops-vehicle-attention-mobile/);
+  assert.match(operations,/ops-vehicle-attention-row/);
+  assert.match(operations,/data-ops-start-vehicle-check=/);
+  assert.match(index,/\.ops-vehicle-attention-mobile\{display:none\}/);
+  assert.match(index,/@media\(max-width:640px\)\{[\s\S]*?\.ops-vehicle-attention-desktop\{display:none!important\}[\s\S]*?\.ops-vehicle-attention-mobile\{display:grid!important\}/);
 });
