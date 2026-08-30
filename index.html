@@ -82,6 +82,9 @@
     #dashboard .stat.service .statIcon{background:#0d9649}
     #dashboard .stat.dueCard .statIcon{background:#c98219}
     #dashboard .stat.failed .statIcon{background:#c53b3b}
+    /* This must follow the V4 dashboard grid rule above.  On a phone the
+       summary cards need one readable column, not three clipped columns. */
+    @media(max-width:760px){#dashboard>.grid.five{grid-template-columns:1fr;margin-top:0}}
     .reportWorkspace>.reportPanel:first-child{background:var(--brand-pale);border:1px solid #bdd6f0;border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
     .reportWorkspace>.reportPanel:first-child h3{margin:0 0 10px;font-size:18px;line-height:1.3;font-weight:800}
     .reportWorkspace>.reportPanel:first-child .row{margin:0;gap:8px}
