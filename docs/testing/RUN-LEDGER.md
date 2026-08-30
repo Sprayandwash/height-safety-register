@@ -24,6 +24,11 @@ This is a compact, append-only index of meaningful Admin test runs and fixes. It
 | 29 Aug 2026 | Controlled run `33225362362` | 9B | Passed; cleanup passed | Full private-account lifecycle passed: invite, first password, block, unblock, Home, Vehicle Checks and deletion. |
 | 29 Aug 2026 | Production release `33231501728` | 10A | Passed | Tested application files published through the protected GitHub Pages production gate; no database migration was required. |
 
+| 29 Aug 2026 | Complete mobile UI audit plan and audit harness | 1–9A | Completed | Formal inventory, two-viewport audit controls and evidence requirements added. |
+| 30 Aug 2026 | Mobile UI fixes | 1–10A | Released | Mobile header/layout, attention-list navigation and PWA icon/cache issues addressed. |
+| 30 Aug 2026 | Vehicle Checks mobile attention-list and icon-centering release | 1–10A | Passed | Regression/browser smoke, staging build/preflight and production release `33300910215` passed. Desktop Vehicle Checks table unchanged. |
+| 30 Aug 2026 | Final shortcut-swirl alignment | 1–10A | Passed | Commit `4e7c652c1dee66193f0cd3f8129cef09bea4ea4f`; staging build `33306913523`, preflight `33306926329` and production release `33306935360` all passed. |
+
 ## Recording rule
 
 Add one short row for each meaningful controlled run, staging build, read-only review, PR merge, or confirmed new defect. Add a detailed file under `history/step-9b/` only for Step 9B runs.
