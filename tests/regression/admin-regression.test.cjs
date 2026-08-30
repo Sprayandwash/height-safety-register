@@ -81,7 +81,7 @@ test('REG-049: pre-loaded permissions are explicit, claimed once, and never rest
   assert.equal((app.match(/function usersHtml\(/g)||[]).length,1,'Admin user-management markup must have one active definition');
   assert.doesNotMatch(users, /roleCheckboxGridForPreload\(\['Vehicle inspector'\]\)/);
   assert.match(users, /roleCheckboxGridForPreload\(editingPreload\?\.roles \|\| \[\]\)/);
-  assert.doesNotMatch(users, /<summary>Add User<\\/summary>/);
+  assert.doesNotMatch(users, /<summary>Add User<\/summary>/);
   assert.match(users, /New accounts are created using Create staff account/);
   assert.match(users, /data-ops-edit-preload-user=/);
   assert.match(users, /data-ops-delete-preload-user=/);
