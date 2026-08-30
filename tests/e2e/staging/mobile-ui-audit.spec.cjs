@@ -314,7 +314,7 @@ test('MOBILE-UI-AUDIT: Admin read-only evidence', async ({ page }, testInfo) => 
   const manifest = [await capture(page, testInfo, 'ADMIN-01', 'landing')];
   await page.getByRole('button', { name: 'Users & Permissions', exact: true }).click();
   const users = page.getByText('Current Users', { exact: true }); if (await users.count()) { await users.click(); manifest.push(await capture(page, testInfo, 'ADMIN-02', 'current-users')); }
-  const add = page.locator('details > summary').filter({ hasText: /^Add User$/ }); if (await add.count()) { await add.click(); manifest.push(await capture(page, testInfo, 'ADMIN-03', 'preload-form')); }
+  manifest.push(await capture(page, testInfo, 'ADMIN-03', 'single-account-creation-route'));
   await page.getByRole('button', { name: 'Settings', exact: true }).click(); manifest.push(await capture(page, testInfo, 'ADMIN-04', 'settings'));
   await page.getByRole('button', { name: 'Backup', exact: true }).click(); manifest.push(await capture(page, testInfo, 'ADMIN-05', 'backup'));
   const path = testInfo.outputPath(`mobile-ui-audit-manifest-admin-${testInfo.project.name}.json`);

@@ -30,7 +30,7 @@ test('REG-043: editing a signed-in user remains in the Admin user-management vie
   const actualUsers=functionSource('actualUsersHtml');
   const events=functionSource('bindRenderedEvents');
   assert.match(users, /<h3>Current signed-in users<\/h3>/);
-  assert.match(users, /<details \$\{state\.editingActualUserId\?'open':''\}><summary>Current Users<\/summary>/);
+  assert.match(users, /<details \$\{state\.editingActualUserId\|\|editingPreload\?'open':''\}><summary>Current Users<\/summary>/);
   assert.match(actualUsers, /data-ops-edit-user=/);
   assert.match(actualUsers, /data-ops-save-user=/);
   assert.match(events, /state\.editingActualUserId=b\.dataset\.opsEditUser; render\(\);/);
@@ -81,11 +81,14 @@ test('REG-049: pre-loaded permissions are explicit, claimed once, and never rest
   assert.equal((app.match(/function usersHtml\(/g)||[]).length,1,'Admin user-management markup must have one active definition');
   assert.doesNotMatch(users, /roleCheckboxGridForPreload\(\['Vehicle inspector'\]\)/);
   assert.match(users, /roleCheckboxGridForPreload\(editingPreload\?\.roles \|\| \[\]\)/);
-  assert.match(users, /Nothing is selected by default/);
+  assert.doesNotMatch(users, /<summary>Add User<\/summary>/);
+  assert.match(users, /New accounts are created using Create staff account/);
   assert.match(users, /data-ops-edit-preload-user=/);
   assert.match(users, /data-ops-delete-preload-user=/);
   assert.match(users, /Manage under Current Users/);
   assert.doesNotMatch(save, /\.upsert\(/);
+  assert.doesNotMatch(save, /operations_preloaded_users'\)\.insert/);
+  assert.match(save, /New pre-loaded accounts are no longer created here\. Use Create staff account\./);
   assert.match(save, /\.is\('claimed_user_id', null\)/);
   assert.match(remove, /preloadedUserIsClaimed\(user\)/);
 
@@ -159,7 +162,9 @@ test('REG-043/046/048: Admin read-only browser review covers desktop and mobile 
   assert.match(spec, /Users & Permissions', exact: true \}\)\.click\(\)/);
   assert.match(spec, /currentUsersSummary/);
   assert.match(spec, /currentUsersSummary\.click\(\)/);
-  assert.match(spec, /input\[data-ops-preload-role\]:checked/);
+  assert.match(spec, /legacy pre-load form is not offered/);
+  assert.match(spec, /Create staff account/);
+  assert.doesNotMatch(spec, /input\[data-ops-preload-role\]:checked/);
   assert.match(spec, /Save app settings/);
   assert.match(spec, /Create Complete Backup/);
   assert.doesNotMatch(spec, /\.click\(\).*Save app settings/);

@@ -102,7 +102,7 @@ be displayed but never submitted or used to cause a write.
 | MAINT-09 | Maintenance | Record Maintenance form: vehicle/target selectors, routine and other-maintenance layouts | Open only; do not select a combination that alters data or submit. |
 | ADMIN-01 | Admin | Admin landing, persistent navigation and single Home control | Existing Admin account only; no writes. |
 | ADMIN-02 | Admin | Users & Permissions: Current Users collapsed/expanded, user detail/edit control, and no-results state | Inspect only; never save/block/unblock/delete/reset. |
-| ADMIN-03 | Admin | Add User/pre-load form, role controls and validation layout | Open only; do not submit or send an invitation. |
+| ADMIN-03 | Admin | Single Create staff account route, permissions controls and absence of the legacy Add User route | Open only; do not submit. |
 | ADMIN-04 | Admin | Settings and logo preview/upload controls | Inspect only; do not save or select/upload a file. |
 | ADMIN-05 | Admin | Backup page and download/create controls | Inspect only; do not create or download a backup. |
 | PERM-01 | Permission states | Height read-only, role-limited action visibility, and no-Admin landing | Use existing authorised role accounts only. |

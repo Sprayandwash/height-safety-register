@@ -73,12 +73,9 @@ test('REG-043/046/048: Admin screens are available, stable, and browseable witho
   await currentUsersSummary.click();
   await expect(page.getByRole('heading', { name: 'Current signed-in users', exact: true })).toBeVisible();
 
-  // The unclaimed-preload form begins safe: no default permissions and no save.
-  const addUserSummary = page.locator('details > summary').filter({ hasText: /^Add User$/ });
-  await expect(addUserSummary).toBeVisible();
-  await addUserSummary.click();
-  await expect(page.locator('#opsPreloadUserForm')).toBeVisible();
-  await expect(page.locator('input[data-ops-preload-role]:checked')).toHaveCount(0);
+  // New accounts have one route only; the legacy pre-load form is not offered.
+  await expect(page.locator('details > summary').filter({ hasText: /^Add User$/ })).toHaveCount(0);
+  await expect(page.getByText('Create staff account', { exact: true })).toHaveCount(1);
 
   // Settings and backup controls must render, but deliberately are not used.
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
