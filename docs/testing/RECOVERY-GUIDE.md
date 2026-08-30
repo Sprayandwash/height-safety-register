@@ -4,8 +4,8 @@
 
 1. Read [CURRENT-STATE.md](CURRENT-STATE.md).
 2. Read [RUN-LEDGER.md](RUN-LEDGER.md), then the latest relevant Step 9B history record.
-3. Read the [master regression catalogue](../regression-catalogue.md) and [controlled Admin test plan](../admin-controlled-staging-test-plan.md).
-4. Check the current state of `main`, the relevant GitHub Actions runs and open pull requests before proposing any work.
+3. Read the [master regression catalogue](../regression-catalogue.md), [controlled Admin test plan](../admin-controlled-staging-test-plan.md), and [access and recovery handover](ACCESS-AND-RECOVERY-HANDOVER.md).
+4. Check the current state of `main`, the relevant GitHub Actions runs and open pull requests before proposing any work. Verify existing GitHub, browser and Supabase access routes before asking the user to restore any connection.
 
 ## Required operating rules
 
