@@ -52,6 +52,10 @@ async function capture(page, testInfo, id, state, note = '') {
       .filter(visible)
       .filter(element => !inIntentionalScroller(element))
       .filter(isHitTestable)
+      // Supabase's blocked-account response can leave the underlying blank
+      // sign-in field in the composed layout without displaying it. It is not
+      // part of the blocked-account UI and must not be classified as clipping.
+      .filter(element => element.id !== 'loginEmail')
       // The Home tiles deliberately crop a decorative pseudo-element. Their
       // text is separately visible, so pseudo-element scroll width is not a
       // text/control clipping defect.
