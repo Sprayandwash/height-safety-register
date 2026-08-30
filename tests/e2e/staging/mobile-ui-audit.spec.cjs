@@ -143,7 +143,14 @@ test('MOBILE-UI-AUDIT: readiness gate validates required accounts and roles', as
 });
 
 async function signIn(page) {
-  const staging = getStagingConfig();
+  // The primary browse-only review must use the dedicated Staging Admin
+  // account.  A limited account cannot expose every authorised module, which
+  // turns a page-coverage audit into a role-coverage sample.
+  const staging = getStagingConfig({
+    ...process.env,
+    E2E_STAGING_TEST_EMAIL: process.env.E2E_STAGING_ADMIN_EMAIL,
+    E2E_STAGING_TEST_PASSWORD: process.env.E2E_STAGING_ADMIN_PASSWORD
+  });
   await page.goto('/');
   await expect(page.locator('#stagingEnvironmentBanner')).toContainText('NOT PRODUCTION');
   await page.locator('#loginEmail').fill(staging.email);
@@ -198,8 +205,11 @@ test('MOBILE-UI-AUDIT: safe fixture navigation, screenshots and overflow evidenc
   const manifest = [];
   await page.goto('/');
   manifest.push(await capture(page, testInfo, 'AUTH-01', 'signed-out', 'Sign-in form and Staging banner.'));
+  manifest.push(await capture(page, testInfo, 'SHELL-01', 'signed-out-shell', 'Global shell before authentication.'));
   await signIn(page);
   manifest.push(await capture(page, testInfo, 'HOME-01', 'home-dashboard', 'Role landing, Home dashboard, account controls and module cards.'));
+  manifest.push(await capture(page, testInfo, 'SHELL-02', 'signed-in-shell', 'Global shell, sticky header, account control and module navigation.'));
+  manifest.push(await capture(page, testInfo, 'PWA-01', 'app-shell-emulation', 'Manifest-backed app shell in browser emulation; real-device install, offline/update and camera checks remain separately evidenced.'));
 
   const attention = page.locator('.ops-attention-summary').first();
   if (await attention.count()) {
