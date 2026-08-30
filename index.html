@@ -26,7 +26,7 @@
     body{margin:0;background:radial-gradient(circle at top left,#edf5fc 0,#f5f7fc 42%,#fff 100%);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
     header{position:sticky;top:0;z-index:20;background:linear-gradient(135deg,var(--brand),var(--brand2));color:white;padding:14px max(14px,env(safe-area-inset-left));display:flex;align-items:center;gap:14px;box-shadow:0 10px 26px rgba(15,23,42,.20)}
     .logo{width:72px;height:60px;border-radius:14px;background:white;object-fit:contain;padding:5px;box-shadow:0 4px 15px #0002}
-    h1{font-size:20px;margin:0;letter-spacing:-.02em} h2{margin:.1rem 0 .8rem;font-size:20px} h3{margin:1rem 0 .5rem}.tagline{font-size:13px;opacity:.9}.topUserSummary{font-size:11px;opacity:.78;margin-top:2px;line-height:1.25;font-weight:650;max-width:620px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    h1{font-size:20px;margin:0;letter-spacing:-.02em} h2{margin:.1rem 0 .8rem;font-size:20px} h3{margin:1rem 0 .5rem}.appTitleMobile{display:none}.tagline{font-size:13px;opacity:.9}.topUserSummary{font-size:11px;opacity:.78;margin-top:2px;line-height:1.25;font-weight:650;max-width:620px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     main{max-width:1120px;min-width:0;margin:auto;padding:14px}.card{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
     .grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:820px){.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}.five{grid-template-columns:repeat(5,1fr)}}
     .tabs{display:flex;gap:8px;overflow:auto;padding:4px 0 10px;position:sticky;top:88px;z-index:15;background:linear-gradient(to bottom,rgba(234,246,247,.97),rgba(234,246,247,.80))}
@@ -48,14 +48,15 @@
     .certificateControls{border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:12px;margin:10px 0}.certActionBox{border:2px solid #0f766e;background:#ecfdf5;border-radius:14px;padding:14px;margin:12px 0}.certActionBox button{width:100%;font-size:16px}.certPanel{border:1px solid #e2e8f0;background:white;border-radius:14px;padding:12px;margin:10px 0}.certValidation{border-radius:12px;padding:10px;margin-top:10px;font-weight:800}.certValidation.ready{background:#dcfce7;color:#166534}.certValidation.warn{background:#fef3c7;color:#92400e}.certValidation.bad{background:#fee2e2;color:#991b1b}.certSelectionTools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}.selectedCount{display:inline-block;background:#0f766e;color:white;border-radius:999px;padding:6px 10px;font-weight:900;font-size:12px}.certSelectList{max-height:220px;overflow:auto;border:1px solid #e2e8f0;background:white;border-radius:12px;padding:8px}.certItemCheckRow{display:block;border-bottom:1px solid #e2e8f0;padding:8px 4px}.certItemCheckRow input{width:auto;margin-right:8px}
     button,.buttonLike,.uploadBtn{transition:transform .08s ease,filter .12s ease,box-shadow .12s ease}button:active,.buttonLike:active,.uploadBtn:active,button.clicked,.buttonLike.clicked,.uploadBtn.clicked{transform:scale(.97);filter:brightness(.93)}button:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.15)}.busyOverlay{position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:250;display:flex;align-items:center;justify-content:center;padding:18px}.busyBox{background:white;border-radius:18px;box-shadow:0 24px 80px rgba(15,23,42,.35);padding:22px 26px;min-width:220px;text-align:center;border:1px solid #e2e8f0}.spinner{width:38px;height:38px;border:5px solid #dbeafe;border-top-color:#0f766e;border-radius:50%;animation:spin .85s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
     @media(max-width:760px){
-      header{align-items:flex-start;padding-right:110px}
+      header{align-items:flex-start;padding-right:128px}
       header>div{flex:1;min-width:0}
       header h1{font-size:clamp(23px,7vw,32px);line-height:1.08;overflow-wrap:anywhere}
+      .appTitleMobile{display:none}
       .tagline,.topUserSummary{max-width:100%;white-space:normal;overflow-wrap:anywhere}
       #dashboard>.grid.five{grid-template-columns:1fr;margin-top:0}
       .stagingEnvironment .tabs{top:calc(var(--staging-banner-height) + 88px)}
     }
-    @media(max-width:640px){.tabs{top:88px}.stat{min-height:108px}.stat b{font-size:32px}.lineItem{grid-template-columns:1fr auto}.hideMobile{display:none}.dateParts{grid-template-columns:1fr 1.25fr 1fr}.cropControls{grid-template-columns:1fr}.logo{width:60px;height:52px}#equipmentList .listItem{scroll-margin-block:150px 18px}}
+    @media(max-width:640px){header{padding-top:10px;padding-bottom:10px;gap:8px}header h1{font-size:20px;white-space:nowrap}.appTitleFull{display:none}.appTitleMobile{display:inline}.tagline{display:none}.tabs{top:88px}.stat{min-height:108px}.stat b{font-size:32px}.lineItem{grid-template-columns:1fr auto}.hideMobile{display:none}.dateParts{grid-template-columns:1fr 1.25fr 1fr}.cropControls{grid-template-columns:1fr}.logo{width:60px;height:52px}#equipmentList .listItem{scroll-margin-block:150px 18px}}
   
 .registerFilterPanel{background:var(--brand-pale);border:1px solid #bdd6f0;border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
 .registerFilterHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;min-height:42px;margin-bottom:10px}
@@ -111,7 +112,7 @@
 <body>
 <header>
   <img class="logo" src="spray-wash-logo-v4.0.69.png" alt="Spray & Wash logo" role="button" tabindex="0" title="Home" onclick="window.showModuleHome&&window.showModuleHome()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.showModuleHome&&window.showModuleHome()}">
-  <div><h1>Spray and Wash Operations App</h1><div class="tagline">Version 4.0.83 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
+  <div><h1 aria-label="Spray and Wash Operations App"><span class="appTitleFull">Spray and Wash Operations App</span><span class="appTitleMobile" aria-hidden="true">Spray &amp; Wash</span></h1><div class="tagline">Version 4.0.83 • Height Safety • Vehicle Checks • Equipment • Maintenance</div><div id="topUserSummary" class="topUserSummary">Not signed in</div></div>
 </header>
 <main>
   <div id="configWarning" class="warning hidden">Supabase config is not set. Keep your existing working <b>config.js</b> in GitHub.</div>
