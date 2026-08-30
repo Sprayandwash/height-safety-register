@@ -136,5 +136,6 @@ test('REG-063: Vehicle Check reminders use a compact clickable mobile-only list 
   assert.match(operations,/ops-vehicle-attention-row/);
   assert.match(operations,/data-ops-start-vehicle-check=/);
   assert.match(index,/\.ops-vehicle-attention-mobile\{display:none\}/);
-  assert.match(index,/@media\(max-width:640px\)\{[\s\S]*?\.ops-vehicle-attention-desktop\{display:none!important\}[\s\S]*?\.ops-vehicle-attention-mobile\{display:grid!important\}/);
+  assert.match(index,/@media\(max-width:640px\)\{[\s\S]*?\.ops-vehicle-attention-desktop\{display:none!important\}/);
+  assert.match(index,/\.ops-vehicle-attention-mobile\{display:grid!important;gap:8px\}/);
 });
