@@ -1,0 +1,87 @@
+name: Configure staging VAPID keys
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type SET STAGING VAPID KEYS to create the initial staging-only keys
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    name: Create initial staging Web Push credentials
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate controlled staging setup
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "SET STAGING VAPID KEYS"
+          test -n "${SUPABASE_ACCESS_TOKEN:-}"
+
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+
+      - name: Resolve staging project and refuse replacement
+        id: staging
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          if [ "$ref" = "$PRODUCTION_PROJECT_REF" ]; then
+            echo 'SAFETY STOP: staging ref matches production.' >&2
+            exit 1
+          fi
+          supabase secrets list --project-ref "$ref" --output json > secrets.json
+          if jq -e 'map(.name // .key // "") | index("VAPID_PRIVATE_KEY") != null' secrets.json >/dev/null; then
+            echo 'SAFETY STOP: staging VAPID keys already exist; this workflow will not replace them.' >&2
+            exit 1
+          fi
+          echo "project_ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Generate and store staging-only VAPID keys
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          npm install --global web-push@3.6.7 --no-audit --no-fund
+          web-push generate-vapid-keys --json > vapid.json
+          public="$(jq -r '.publicKey // empty' vapid.json)"
+          private="$(jq -r '.privateKey // empty' vapid.json)"
+          test "${#public}" -ge 80
+          test "${#private}" -ge 40
+          printf '%s' "$public" | grep -Eq '^[A-Za-z0-9_-]+$'
+          printf '%s' "$private" | grep -Eq '^[A-Za-z0-9_-]+$'
+          echo "::add-mask::$public"
+          echo "::add-mask::$private"
+          umask 077
+          {
+            printf 'VAPID_PUBLIC_KEY=%s\n' "$public"
+            printf 'VAPID_PRIVATE_KEY=%s\n' "$private"
+          } > .vapid-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .vapid-secrets
+          rm .vapid-secrets vapid.json
+
+      - name: Verify secret names only
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          supabase secrets list --project-ref "$STAGING_PROJECT_REF" --output json > secrets-after.json
+          jq -e 'map(.name // .key // "") | index("VAPID_PUBLIC_KEY") != null' secrets-after.json >/dev/null
+          jq -e 'map(.name // .key // "") | index("VAPID_PRIVATE_KEY") != null' secrets-after.json >/dev/null
+          echo 'Staging VAPID secret names verified. No push message was sent.'
