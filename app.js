@@ -287,7 +287,7 @@ async function init(){
   const {data:{session}}=await sb.auth.getSession(); currentUser=session?.user||null; updateAuthUI(); if(currentUser){await ensureCurrentProfile(); await loadRoles(); await loadAppSettings(); await loadData(); await refreshAuditLogs();}
 }
 function fillTypes(){let opts=EQUIPMENT_TYPES.map(t=>`<option>${esc(t)}</option>`).join(""); eqType.innerHTML=opts; inType.innerHTML=opts;}
-function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||""; if(window.userRolesText) userRolesText.textContent=currentRoleText(); applyPermissions();}
+function updateAuthUI(){signedOut.classList.toggle("hidden",!!currentUser); signedIn.classList.toggle("hidden",!currentUser); appMain.classList.toggle("hidden",!currentUser); userEmail.textContent=currentUser?.email||""; if(window.userRolesText) userRolesText.textContent=currentRoleText(); applyPermissions(); window.refreshPushNotificationSettings?.();}
 async function signIn(){let email=loginEmail.value.trim(),password=loginPassword.value;if(!email||!password)return alert("Enter email and password.");let {error}=await sb.auth.signInWithPassword({email,password});if(error)return alert(error.message);let {data:{session}}=await sb.auth.getSession();currentUser=session?.user||null;updateAuthUI();await ensureCurrentProfile();await loadRoles();await loadAppSettings();await loadData();await refreshAuditLogs();}
 async function signOut(){await sb.auth.signOut();currentUser=null;currentRoles=[];userProfiles=[];roleAssignments=[];equipment=[];inspections=[];photos=[];heightEquipmentDataState="idle";updateAuthUI();renderAll();}
 

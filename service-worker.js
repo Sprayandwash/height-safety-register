@@ -54,3 +54,28 @@ self.addEventListener('fetch', event => {
 
   event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request)));
 });
+
+// Delivery is intentionally not implemented in this release. These handlers make
+// a future authenticated Web Push payload visible and return the employee to the
+// installed app without placing any data or credentials in the service worker.
+self.addEventListener('push', event => {
+  const fallback = { title: 'Spray & Wash', body: 'You have an outstanding item.', url: './' };
+  let payload = fallback;
+  try { payload = { ...fallback, ...(event.data ? event.data.json() : {}) }; } catch (_) {}
+  event.waitUntil(self.registration.showNotification(payload.title, {
+    body: payload.body,
+    tag: payload.tag || 'spray-wash-reminder',
+    data: { url: payload.url || './' },
+    icon: './spray-wash-app-icon-192-v4.0.90.png',
+    badge: './spray-wash-app-icon-192-v4.0.90.png'
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || './', self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+    const existing = clients.find(client => client.url.startsWith(self.location.origin));
+    return existing ? existing.focus() : self.clients.openWindow(target);
+  }));
+});
