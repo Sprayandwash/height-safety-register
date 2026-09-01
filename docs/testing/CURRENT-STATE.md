@@ -1,6 +1,6 @@
 # Testing and debugging current state
 
-**Checkpoint date:** 30 August 2026 (NZST)  
+**Checkpoint date:** 2 September 2026 (NZST)  
 **Application:** Spray and Wash Operations App  
 **Repository:** `Sprayandwash/spray-and-wash-operations-app`
 
@@ -17,9 +17,11 @@ The latest mobile work delivered:
 
 No Supabase migration, database data change or `config.js` change was included in these releases.
 
+The notification foundation is now verified in isolated Staging. Controlled Step 9B run `33545502753` passed after the notification Edge Function authentication path was corrected. It created 10 notification records and 0 delivery records; push, email, SMS, scheduling and production remain out of scope.
+
 ## Testing history status
 
-The permanent `testing-history` branch is current. Its latest Step 9B archive is run `33111671095` from 27 August 2026. No later Step 9B controlled test has been run, so no history archive is missing.
+The permanent `testing-history` branch remains the archive route for its existing Admin controlled workflow. The notification Step 9B record is maintained on `main` at [2026-09-01-run-33545502753](history/step-9b/2026-09-01-run-33545502753.md) and indexed in the run ledger.
 
 ## Next safe action
 
