@@ -18,7 +18,14 @@ async function invoke(page, body) {
   return page.evaluate(async request => {
     const client = window.SWOperationsV4?.state?.sb;
     if (!client) throw new Error('Staging Supabase client is unavailable after sign-in.');
-    const { data, error } = await client.functions.invoke('employee-notifications', { body: request });
+    const { data: { session }, error: sessionError } = await client.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      throw new Error(sessionError?.message || 'Staging Admin session token is unavailable after sign-in.');
+    }
+    const { data, error } = await client.functions.invoke('employee-notifications', {
+      body: request,
+      headers: { authorization: `Bearer ${session.access_token}` }
+    });
     return { data, error: error?.message || null };
   }, body);
 }
