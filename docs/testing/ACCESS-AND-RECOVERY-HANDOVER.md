@@ -46,6 +46,8 @@ Available workflow categories include JavaScript/regression checks, staging buil
 
 An authenticated cloud browser session has been used to open GitHub Actions, dispatch the protected production workflow and approve the `production` environment. Browser access may not persist into a new chat.
 
+**Workflow-dispatch recovery (verified 2 September 2026 NZST):** if the GitHub connector can read and change repository content but does not expose a new-workflow dispatch operation, use the already-authenticated cloud browser for the Actions page. Open the required workflow in a **fresh tab**, select **Run workflow**, and allow the form a few seconds to finish loading before treating it as unavailable. The form may briefly show `Loading`; once ready it exposes the branch selector, required confirmation input and **Run workflow** button. This delay is not evidence that the GitHub connection or repository permissions need to be reconnected. Do not submit a controlled Step 9B workflow without the required fresh approval.
+
 **Recovery order:** use the browser-control capability if present; otherwise rely on the GitHub connector for all read/write repository work. A browser is required only for a GitHub action that the connector cannot perform, such as a protected deployment approval.
 
 Never enter credentials, one-time codes, tokens or passwords into a browser without the necessary user confirmation at that time.
@@ -85,4 +87,3 @@ The repository's `docs/SUPABASE-RECOVERY-AUTOMATION.md` describes the separate b
 3. Check which GitHub, browser and Supabase tools are already available before asking the user to do anything.
 4. Start each change at Step 1. Use Step 9A whenever a read-only review can answer the question.
 5. Obtain a fresh explicit approval immediately before every Step 9B run. Confirm cleanup after any such run.
-
