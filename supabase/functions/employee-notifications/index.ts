@@ -43,6 +43,93 @@ async function currentUser(req: Request) {
   return error ? null : user;
 }
 
+const nzDate = (date = new Date()) => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit'
+}).format(date);
+
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return nzDate(next);
+};
+
+async function isActiveAdmin(service: ReturnType<typeof createClient>, userId: string) {
+  const [{ data: access }, { data: roles }] = await Promise.all([
+    service.from('app_user_access').select('status,must_change_password').eq('user_id', userId).maybeSingle(),
+    service.from('user_roles').select('role').eq('user_id', userId)
+  ]);
+  return access?.status === 'Active'
+    && access?.must_change_password !== true
+    && (roles || []).some(row => row.role === 'Admin');
+}
+
+type Task = {
+  id: string; title: string; description: string | null; status: string; priority: string | null;
+  due_date: string | null; assigned_user_id: string | null; assigned_role: string | null;
+};
+
+async function recipientsForTask(service: ReturnType<typeof createClient>, task: Task) {
+  const ids = new Set<string>();
+  if (task.assigned_user_id) ids.add(task.assigned_user_id);
+  if (task.assigned_role) {
+    const { data: roleRows } = await service.from('user_roles').select('user_id').eq('role', task.assigned_role);
+    (roleRows || []).forEach(row => ids.add(row.user_id));
+  }
+  if (!ids.size) return [];
+  const { data: activeRows, error } = await service.from('app_user_access')
+    .select('user_id').in('user_id', [...ids]).eq('status', 'Active');
+  if (error) throw error;
+  return (activeRows || []).map(row => row.user_id);
+}
+
+function taskEvent(task: Task, today: string) {
+  if (!task.due_date) return null;
+  if (task.due_date < today) return { type: 'overdue', keySuffix: today };
+  if (task.due_date <= addDays(new Date(), 2)) return { type: 'due_soon', keySuffix: 'once' };
+  return null;
+}
+
+async function reconcileTaskNotifications(service: ReturnType<typeof createClient>, record: boolean) {
+  const { data: tasks, error } = await service.from('operations_maintenance_tasks')
+    .select('id,title,description,status,priority,due_date,assigned_user_id,assigned_role')
+    .not('status', 'in', '(Completed,Deferred)');
+  if (error) throw error;
+  const today = nzDate();
+  const result = { scanned: tasks?.length || 0, eligible: 0, unresolved: 0, created: 0, duplicates: 0, preview: [] as Array<Record<string, unknown>> };
+  for (const task of (tasks || []) as Task[]) {
+    const event = taskEvent(task, today);
+    if (!event) continue;
+    const recipients = await recipientsForTask(service, task);
+    if (!recipients.length) { result.unresolved += 1; continue; }
+    result.eligible += recipients.length;
+    for (const recipientUserId of recipients) {
+      const idempotencyKey = `task:${task.id}:${recipientUserId}:${event.type}:${event.keySuffix}`;
+      const notification = {
+        recipient_user_id: recipientUserId,
+        task_id: task.id,
+        event_type: event.type,
+        escalation_stage: 'standard',
+        severity: task.priority || 'Medium',
+        title: event.type === 'overdue' ? 'Overdue task' : 'Task due soon',
+        body: `${task.title}${task.due_date ? ` — due ${task.due_date}` : ''}`,
+        deep_link: './',
+        state: 'pending',
+        idempotency_key: idempotencyKey,
+        metadata: { source: 'staging-reconcile', task_status: task.status, due_date: task.due_date }
+      };
+      result.preview.push({ task_id: task.id, event_type: event.type, due_date: task.due_date, idempotency_key: idempotencyKey });
+      if (!record) continue;
+      const { data: insertedRows, error: insertError } = await service.from('operations_notifications')
+        .upsert(notification, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+        .select('id');
+      if (insertError) throw insertError;
+      if ((insertedRows || []).length) result.created += 1;
+      else result.duplicates += 1;
+    }
+  }
+  return result;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'POST required' }, 405);
@@ -56,6 +143,21 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
+
+  if (action === 'reconcile_staging') {
+    if (!await isActiveAdmin(service, user.id)) return json({ error: 'Admin access required' }, 403);
+    const mode = String(body?.mode || 'preview');
+    if (!['preview', 'record'].includes(mode)) return json({ error: 'Mode must be preview or record.' }, 400);
+    if (mode === 'record' && body?.confirmation !== 'STAGING_RECORDS_ONLY') {
+      return json({ error: 'Staging record confirmation required.' }, 400);
+    }
+    try {
+      const result = await reconcileTaskNotifications(service, mode === 'record');
+      return json({ ok: true, mode, delivery: 'disabled', ...result });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : 'Notification reconcile failed.' }, 500);
+    }
+  }
 
   if (action === 'status') {
     const [{ data: preference, error: preferenceError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
