@@ -28,6 +28,7 @@ This is a compact, append-only index of meaningful Admin test runs and fixes. It
 | 30 Aug 2026 | Mobile UI fixes | 1–10A | Released | Mobile header/layout, attention-list navigation and PWA icon/cache issues addressed. |
 | 30 Aug 2026 | Vehicle Checks mobile attention-list and icon-centering release | 1–10A | Passed | Regression/browser smoke, staging build/preflight and production release `33300910215` passed. Desktop Vehicle Checks table unchanged. |
 | 30 Aug 2026 | Final shortcut-swirl alignment | 1–10A | Passed | Commit `4e7c652c1dee66193f0cd3f8129cef09bea4ea4f`; staging build `33306913523`, preflight `33306926329` and production release `33306935360` all passed. |
+| 1 Sep 2026 | Notification records review `33545502753` | 9B | Passed | Corrected staging notification-function authentication. Created 10 staging notification records; 0 delivery records. Push, email, SMS and production excluded. See [detailed record](history/step-9b/2026-09-01-run-33545502753.md). |
 
 ## Recording rule
 
