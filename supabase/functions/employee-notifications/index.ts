@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
       push_enabled: preference?.push_enabled === true,
       weekly_email_enabled: preference?.weekly_email_enabled !== false,
       timezone: preference?.timezone || 'Pacific/Auckland',
+      vapid_public_key: Deno.env.get('VAPID_PUBLIC_KEY') || null,
       subscriptions: subscriptions || []
     });
   }
