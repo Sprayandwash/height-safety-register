@@ -24,7 +24,10 @@ async function invoke(page, body) {
     }
     const { data, error } = await client.functions.invoke('employee-notifications', {
       body: request,
-      headers: { authorization: `Bearer ${session.access_token}` }
+      // Override the Functions client's default anonymous Authorization header.
+      // Header names are case-insensitive on the wire, but this client merges
+      // the request-header objects before constructing the Fetch Headers.
+      headers: { Authorization: `Bearer ${session.access_token}` }
     });
     return { data, error: error?.message || null };
   }, body);
