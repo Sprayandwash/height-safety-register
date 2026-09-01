@@ -17,7 +17,8 @@
     "test:staging:preloaded-claim": "playwright test --config=playwright.staging.preloaded-claim.config.cjs",
     "test:staging:admin-readonly": "playwright test --config=playwright.staging.admin.readonly.config.cjs",
     "test:staging:mobile-ui-audit": "playwright test --config=playwright.staging.mobile-ui-audit.config.cjs",
-    "test:staging:private-accounts": "playwright test --config=playwright.staging.private-accounts.config.cjs"
+    "test:staging:private-accounts": "playwright test --config=playwright.staging.private-accounts.config.cjs",
+    "test:staging:notifications": "playwright test --config=playwright.staging.notifications.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
