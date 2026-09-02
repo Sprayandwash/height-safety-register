@@ -1,0 +1,96 @@
+name: Review staging weekly-email renderer (Step 9A)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: staging-weekly-email-renderer-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    name: Read-only weekly-email renderer review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
+      E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate staging-only credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: run this workflow from main only.' >&2; exit 1; }
+          test -n "${E2E_STAGING_ADMIN_EMAIL:-}" || { echo 'Missing E2E_STAGING_ADMIN_EMAIL.' >&2; exit 1; }
+          test -n "${E2E_STAGING_ADMIN_PASSWORD:-}" || { echo 'Missing E2E_STAGING_ADMIN_PASSWORD.' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install locked test tooling
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Download the latest isolated staging app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          test -n "$artifact_id" || { echo 'No current spray-wash-staging-app artifact exists. Run Build staging app first.' >&2; exit 1; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app
+          unzip -q staging-app.zip -d staging-app
+          test -f staging-app/index.html
+          test -f staging-app/config.js
+          test -f staging-app/STAGING-README.txt
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test -n "$ref" || { echo 'Staging artifact has no project ref.' >&2; exit 1; }
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
+          ! grep -F "$PRODUCTION_PROJECT_REF" staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+      - name: Render drafts and verify no ledger change
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npx playwright test --config=playwright.staging.weekly-email-renderer.config.cjs
+      - name: Publish Step 9A result
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Step 9A staging weekly-email renderer passed'
+            echo
+            echo '- Admin draft includes activity, pending-task and exception sections.'
+            echo '- Employee draft is task-only, or suppressed when there are no current tasks.'
+            echo '- Notification and delivery ledger counts were unchanged.'
+            echo '- No database migration, notification record, email, push, scheduler or production access was involved.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-weekly-email-renderer-review-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+            staging-http-server.log
+          if-no-files-found: warn
+          retention-days: 14
