@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     const title = 'Spray & Wash — test reminder';
     const message = 'Staging push delivery is working.';
     const { data: notification, error: notificationError } = await service.from('operations_notifications').insert({
-      recipient_user_id: user.id, task_id: null, event_type: 'staging_test_push', escalation_stage: 'test', severity: 'Low', title, body: message, deep_link: './', state: 'sending', eligible_at: now,
+      recipient_user_id: user.id, task_id: null, event_type: 'task_assigned', escalation_stage: 'test', severity: 'Low', title, body: message, deep_link: './', state: 'processing', eligible_at: now,
       idempotency_key: `staging-push-test:${user.id}:${subscription.id}`, metadata: { source: 'manual-staging-test', channel: 'push', automated: false }
     }).select('id').single();
     if (notificationError || !notification) return json({ error: notificationError?.message || 'Could not create test notification.' }, 500);
