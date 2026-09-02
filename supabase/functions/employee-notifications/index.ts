@@ -219,9 +219,13 @@ async function weeklyEmployeePreview(service: ReturnType<typeof createClient>, u
 }
 
 function escapeEmailHtml(value: unknown) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[char] || char));
+  return String(value ?? '').replace(/[&<>"']/g, char => {
+    if (char === '&') return '&amp;';
+    if (char === '<') return '&lt;';
+    if (char === '>') return '&gt;';
+    if (char === '"') return '&quot;';
+    return '&#39;';
+  });
 }
 
 type WeeklyPreview = {
