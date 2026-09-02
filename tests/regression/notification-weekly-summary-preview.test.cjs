@@ -30,5 +30,10 @@ test('NOTIFY-WEEKLY-PREVIEW-003: employee previews include only direct or role-a
   assert.match(edgeFunction, /not\('status', 'in', '\(Completed,Deferred\)'\)/);
   assert.match(edgeFunction, /suppressed: tasks\.length === 0/);
   assert.match(edgeFunction, /No open tasks are assigned to this employee/);
-  assert.doesNotMatch(edgeFunction, /weeklyTaskLine\(task, true\).*employee_weekly_preview/s);
+  const employeePreview = edgeFunction.slice(
+    edgeFunction.indexOf('async function weeklyEmployeePreview'),
+    edgeFunction.indexOf('async function reconcileTaskNotifications')
+  );
+  assert.match(employeePreview, /weeklyTaskLine\(task, false\)/);
+  assert.doesNotMatch(employeePreview, /weeklyTaskLine\(task, true\)/);
 });
