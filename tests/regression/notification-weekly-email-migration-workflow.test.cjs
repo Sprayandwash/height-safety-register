@@ -10,10 +10,10 @@ const workflow = fs.readFileSync(
 
 test('NOTIFY-MIGRATION-001: weekly-email migration source is generated only after explicit confirmation', () => {
   assert.match(workflow, /CREATE NOTIFICATION EMAIL MIGRATION/);
-  assert.match(workflow, /test "\\$GITHUB_REF" = 'refs\/heads\/main'/);
+  assert.match(workflow, /test "\$GITHUB_REF" = 'refs\/heads\/main'/);
   assert.match(workflow, /TARGET_BRANCH: notification\/weekly-email-preference-migration/);
   assert.match(workflow, /supabase migration new disable_implicit_weekly_email/);
-  assert.match(workflow, /git push origin "HEAD:\\$TARGET_BRANCH"/);
+  assert.match(workflow, /git push origin "HEAD:\$TARGET_BRANCH"/);
 });
 
 test('NOTIFY-MIGRATION-002: migration generator has no database or delivery access', () => {
