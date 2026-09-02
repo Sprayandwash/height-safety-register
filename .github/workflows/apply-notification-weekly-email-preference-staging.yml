@@ -1,0 +1,137 @@
+name: Apply notification weekly-email preference to staging (Step 9B)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY NOTIFICATION EMAIL STAGING STEP 9B to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: Apply reviewed notification migration to staging
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_STAGING_DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      MIGRATION_PATH: supabase/migrations/20260902082102_disable_implicit_weekly_email.sql
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate controlled staging-only scope
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || {
+            echo 'SAFETY STOP: Step 9B may only run from main.' >&2
+            exit 1
+          }
+          test "$CONFIRMATION" = 'APPLY NOTIFICATION EMAIL STAGING STEP 9B' || {
+            echo 'Confirmation must be exact.' >&2
+            exit 1
+          }
+          test -n "$SUPABASE_STAGING_DB_URL" || {
+            echo 'SAFETY STOP: missing staging database target.' >&2
+            exit 1
+          }
+          printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$STAGING_PROJECT_REF" || {
+            echo 'SAFETY STOP: database target is not the designated staging project.' >&2
+            exit 1
+          }
+          if printf '%s' "$SUPABASE_STAGING_DB_URL" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo 'SAFETY STOP: production database target.' >&2
+            exit 1
+          fi
+          test -f "$MIGRATION_PATH"
+          expected_sha='4ec1aeb17790c1a23ebd5382e0a98301bb4e57c4454e5be175502c758cb90ccb'
+          test "$(sha256sum "$MIGRATION_PATH" | awk '{print $1}')" = "$expected_sha" || {
+            echo 'SAFETY STOP: reviewed migration content does not match.' >&2
+            exit 1
+          }
+
+      - name: Verify expected pre-application state
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_value="$(psql --set ON_ERROR_STOP=1 --dbname "$SUPABASE_STAGING_DB_URL" --tuples-only --no-align --command "SELECT column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'operations_notification_preferences' AND column_name = 'weekly_email_enabled';")"
+          enabled_rows="$(psql --set ON_ERROR_STOP=1 --dbname "$SUPABASE_STAGING_DB_URL" --tuples-only --no-align --command "SELECT count(*) FROM public.operations_notification_preferences WHERE weekly_email_enabled IS TRUE;")"
+          test "$default_value" = 'true' || {
+            echo "SAFETY STOP: expected old default true, received '$default_value'." >&2
+            exit 1
+          }
+          test "$enabled_rows" = '1' || {
+            echo "SAFETY STOP: expected exactly one legacy implicit enabled row, received '$enabled_rows'." >&2
+            exit 1
+          }
+
+      - name: Apply reviewed migration once
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --single-transaction --dbname "$SUPABASE_STAGING_DB_URL" --file "$MIGRATION_PATH"
+
+      - name: Verify staging result
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_value="$(psql --set ON_ERROR_STOP=1 --dbname "$SUPABASE_STAGING_DB_URL" --tuples-only --no-align --command "SELECT column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'operations_notification_preferences' AND column_name = 'weekly_email_enabled';")"
+          enabled_rows="$(psql --set ON_ERROR_STOP=1 --dbname "$SUPABASE_STAGING_DB_URL" --tuples-only --no-align --command "SELECT count(*) FROM public.operations_notification_preferences WHERE weekly_email_enabled IS TRUE;")"
+          test "$default_value" = 'false'
+          test "$enabled_rows" = '0'
+          {
+            echo "DEFAULT_VALUE=$default_value"
+            echo "ENABLED_ROWS=$enabled_rows"
+          } >> "$GITHUB_ENV"
+
+      - name: Commit permanent Step 9B record
+        shell: bash
+        run: |
+          set -euo pipefail
+          record_path="docs/notifications/STEP-9B-WEEKLY-EMAIL-PREFERENCE-${GITHUB_RUN_ID}.md"
+          applied_at="$(date --utc '+%Y-%m-%dT%H:%M:%SZ')"
+          cat > "$record_path" <<EOF
+          # Step 9B — Weekly Email Preference Migration
+
+          - **Status:** Applied and verified
+          - **Applied at (UTC):** $applied_at
+          - **GitHub Actions run:** $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          - **Target:** Staging only (`$STAGING_PROJECT_REF`)
+          - **Production contacted:** No
+          - **Reviewed migration:** `$MIGRATION_PATH`
+          - **Source migration merge:** `177cdaa696e7a48468367e7dd72195d87f1b41ff`
+
+          ## Verified outcome
+
+          - New preference rows default `weekly_email_enabled` to `$DEFAULT_VALUE`.
+          - Legacy enabled preference rows remaining: `$ENABLED_ROWS`.
+          - Employee weekly email remains opt-in. No email provider, scheduler, push delivery, or production resource was changed.
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$record_path"
+          git commit -m 'Record Step 9B weekly email preference migration'
+          git push origin HEAD:main
+
+      - name: Publish Step 9B safety summary
+        shell: bash
+        run: |
+          {
+            echo '## Step 9B completed'
+            echo
+            echo '- Applied the reviewed weekly-email preference migration to staging only.'
+            echo "- Verified default: `$DEFAULT_VALUE`; enabled legacy rows: `$ENABLED_ROWS`."
+            echo '- Committed the permanent Step 9B record to main.'
+            echo '- Production, email provider, scheduler, and push delivery were not contacted.'
+          } >> "$GITHUB_STEP_SUMMARY"
