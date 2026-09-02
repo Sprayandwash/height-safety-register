@@ -1,0 +1,86 @@
+name: Deploy staging weekly-summary preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY STAGING NOTIFICATION PREVIEW to deploy the read-only preview endpoint
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging-weekly-summary-preview
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy employee-notifications to staging only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate scope and confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: run this workflow from main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'DEPLOY STAGING NOTIFICATION PREVIEW' || {
+            echo 'Confirmation must be exactly DEPLOY STAGING NOTIFICATION PREVIEW.' >&2
+            exit 1
+          }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing repository secret: SUPABASE_ACCESS_TOKEN.' >&2; exit 1; }
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Verify the isolated staging project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1 || { echo "Expected exactly one staging project named '$STAGING_PROJECT_NAME'; found $count." >&2; exit 1; }
+          discovered_ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test "$discovered_ref" = "$STAGING_PROJECT_REF" || { echo 'SAFETY STOP: discovered project does not match the expected staging ref.' >&2; exit 1; }
+          test "$discovered_ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: discovered project is production.' >&2; exit 1; }
+
+      - name: Deploy the read-only preview endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions deploy employee-notifications --project-ref "$STAGING_PROJECT_REF"
+
+      - name: Write deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Staging weekly-summary preview deployed'
+            echo
+            echo "- Staging project: $STAGING_PROJECT_REF"
+            echo '- Deployed function: employee-notifications.'
+            echo '- Scope: authenticated, read-only weekly-summary preview.'
+            echo '- No database migration, notification record, schedule, email provider, push delivery or production access was involved.'
+            echo '- Next step: read-only Step 9A invocation from the isolated staging app.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove transient project list
+        if: always()
+        shell: bash
+        run: rm -f projects.json
