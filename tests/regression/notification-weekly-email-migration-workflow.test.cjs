@@ -12,6 +12,7 @@ test('NOTIFY-MIGRATION-001: weekly-email migration source is generated only afte
   assert.match(workflow, /CREATE NOTIFICATION EMAIL MIGRATION/);
   assert.match(workflow, /test "\$GITHUB_REF" = 'refs\/heads\/main'/);
   assert.match(workflow, /TARGET_BRANCH: notification\/weekly-email-preference-migration/);
+  assert.match(workflow, /version: 2\\.116\\.0/);
   assert.match(workflow, /supabase migration new disable_implicit_weekly_email/);
   assert.match(workflow, /git push origin "HEAD:\$TARGET_BRANCH"/);
 });
