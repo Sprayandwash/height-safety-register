@@ -1,0 +1,92 @@
+name: Create notification weekly-email migration source
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type CREATE NOTIFICATION EMAIL MIGRATION to create the reviewed source migration
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-source-migration:
+    name: Create source-only notification migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET_BRANCH: notification/weekly-email-preference-migration
+    steps:
+      - name: Validate source-only confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || {
+            echo 'SAFETY STOP: this generator may only run from main.' >&2
+            exit 1
+          }
+          test "$CONFIRMATION" = 'CREATE NOTIFICATION EMAIL MIGRATION' || {
+            echo 'Confirmation must be exactly: CREATE NOTIFICATION EMAIL MIGRATION' >&2
+            exit 1
+          }
+      - name: Check out the designated migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Generate and validate the source migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort)"
+          supabase migration new disable_implicit_weekly_email
+          after="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort)"
+          migration="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tail -n 1)"
+          test -n "$migration" || { echo 'No new migration file was created.' >&2; exit 1; }
+          migration="supabase/migrations/$migration"
+
+          cat > "$migration" <<'SQL'
+          -- Employee weekly emails are optional. Rows created before this migration
+          -- inherited an enabled value from the former column default, not an opt-in.
+          ALTER TABLE public.operations_notification_preferences
+            ALTER COLUMN weekly_email_enabled SET DEFAULT false;
+
+          UPDATE public.operations_notification_preferences
+          SET weekly_email_enabled = false
+          WHERE weekly_email_enabled = true;
+          SQL
+
+          grep -F 'ALTER COLUMN weekly_email_enabled SET DEFAULT false' "$migration"
+          grep -F 'WHERE weekly_email_enabled = true' "$migration"
+          test "$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -newer "$migration" | wc -l)" = "0"
+          git diff --check
+          echo "MIGRATION_PATH=$migration" >> "$GITHUB_ENV"
+      - name: Commit generated source migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$MIGRATION_PATH"
+          git diff --cached --quiet && { echo 'No migration change to commit.' >&2; exit 1; }
+          git commit -m 'Add weekly email opt-in migration'
+          git push origin "HEAD:$TARGET_BRANCH"
+      - name: Publish safety summary
+        shell: bash
+        run: |
+          {
+            echo '## Source-only notification migration created'
+            echo
+            echo "- Generated migration: \`$MIGRATION_PATH\`"
+            echo "- The workflow used \`supabase migration new\` before writing the reviewed SQL."
+            echo '- No Supabase project, database URL, provider, scheduler, email or push delivery was accessed.'
+            echo '- The generated branch must pass review before any separate staging-only application step.'
+          } >> "$GITHUB_STEP_SUMMARY"
