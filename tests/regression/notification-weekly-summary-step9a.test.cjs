@@ -16,7 +16,7 @@ test('NOTIFY-WEEKLY-STEP9A-001: staging weekly preview review checks both scopes
   assert.match(spec, /scope: 'admin'/);
   assert.match(spec, /scope: 'self'/);
   assert.match(spec, /await expect\.poll\(\(\) => ledgerCounts\(page\)\)\.toEqual\(before\)/);
-  assert.match(spec, /Employee task lines exposed no assignment identifier/);
+  assert.match(workflow, /Employee task lines exposed no assignment identifier/);
   assert.match(spec, /not\.toHaveProperty\('assigned_to'\)/);
   assert.match(spec, /not\.toHaveProperty\('description'\)/);
 });
