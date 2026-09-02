@@ -91,6 +91,133 @@ function taskEvent(task: Task, today: string) {
   return null;
 }
 
+type WeeklyTask = Pick<Task, 'id' | 'title' | 'status' | 'priority' | 'due_date' | 'assigned_user_id' | 'assigned_role'> & {
+  assigned_to: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+  updated_at: string | null;
+};
+
+const nzDayFormatter = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'
+});
+
+function nzDayParts(date = new Date()) {
+  const parts = Object.fromEntries(nzDayFormatter.formatToParts(date)
+    .filter(part => part.type !== 'literal')
+    .map(part => [part.type, part.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, weekday: parts.weekday };
+}
+
+function addCalendarDays(date: string, days: number) {
+  const [year, month, day] = date.split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return next.toISOString().slice(0, 10);
+}
+
+function previousNzWeek(now = new Date()) {
+  const today = nzDayParts(now);
+  const weekdayIndex: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+  const index = weekdayIndex[today.weekday] ?? 0;
+  const end = addCalendarDays(today.date, -index - 1);
+  return { start: addCalendarDays(end, -6), end };
+}
+
+function isInNzDateRange(value: string | null | undefined, range: { start: string; end: string }) {
+  if (!value) return false;
+  const date = nzDate(new Date(value));
+  return date >= range.start && date <= range.end;
+}
+
+function classifyWeeklyTasks(tasks: WeeklyTask[], today: string) {
+  const dueSoon = addCalendarDays(today, 2);
+  const groups = { overdue: [] as WeeklyTask[], due_within_48_hours: [] as WeeklyTask[], later_due: [] as WeeklyTask[] };
+  for (const task of tasks) {
+    if (task.due_date && task.due_date < today) groups.overdue.push(task);
+    else if (task.due_date && task.due_date <= dueSoon) groups.due_within_48_hours.push(task);
+    else groups.later_due.push(task);
+  }
+  return groups;
+}
+
+function weeklyTaskLine(task: WeeklyTask, includeAssignment: boolean) {
+  return {
+    id: task.id, title: task.title, due_date: task.due_date, priority: task.priority || 'Medium',
+    ...(includeAssignment ? { assigned_to: task.assigned_to || task.assigned_role || (task.assigned_user_id ? 'Named employee' : 'Unassigned') } : {}),
+    deep_link: './'
+  };
+}
+
+async function openTasksForUser(service: ReturnType<typeof createClient>, userId: string, tasks?: WeeklyTask[]) {
+  const openTasks = tasks || await (async () => {
+    const { data, error } = await service.from('operations_maintenance_tasks')
+      .select('id,title,status,priority,due_date,assigned_user_id,assigned_role,assigned_to,created_at,completed_at,updated_at')
+      .not('status', 'in', '(Completed,Deferred)');
+    if (error) throw error;
+    return (data || []) as WeeklyTask[];
+  })();
+  const { data: roles, error: rolesError } = await service.from('user_roles').select('role').eq('user_id', userId);
+  if (rolesError) throw rolesError;
+  const roleNames = new Set((roles || []).map(row => row.role));
+  return openTasks.filter(task => task.assigned_user_id === userId || (!!task.assigned_role && roleNames.has(task.assigned_role)));
+}
+
+async function weeklyAdminPreview(service: ReturnType<typeof createClient>) {
+  const range = previousNzWeek();
+  const today = nzDate();
+  const [{ data: taskRows, error: taskError }, { data: vehicleChecks, error: vehicleError }, { data: maintenanceRows, error: maintenanceError }, { data: heightRows, error: heightError }, { data: adminRoles, error: adminRoleError }] = await Promise.all([
+    service.from('operations_maintenance_tasks').select('id,title,status,priority,due_date,assigned_user_id,assigned_role,assigned_to,created_at,completed_at,updated_at').not('status', 'in', '(Completed,Deferred)'),
+    service.from('operations_inspections').select('id,inspection_date,overall_result,created_at'),
+    service.from('operations_maintenance_log').select('id,created_at'),
+    service.from('inspections').select('id,inspection_date').gte('inspection_date', range.start).lte('inspection_date', range.end),
+    service.from('user_roles').select('user_id').eq('role', 'Admin')
+  ]);
+  if (taskError || vehicleError || maintenanceError || heightError || adminRoleError) throw taskError || vehicleError || maintenanceError || heightError || adminRoleError;
+  const openTasks = (taskRows || []) as WeeklyTask[];
+  const adminIds = [...new Set((adminRoles || []).map(row => row.user_id))];
+  let activeAdminCount = 0;
+  if (adminIds.length) {
+    const { count, error } = await service.from('app_user_access').select('user_id', { count: 'exact', head: true })
+      .in('user_id', adminIds).eq('status', 'Active').eq('must_change_password', false);
+    if (error) throw error;
+    activeAdminCount = count || 0;
+  }
+  const vehicleRows = vehicleChecks || [];
+  const nonPassVehicleChecks = vehicleRows.filter(row => isInNzDateRange(row.created_at, range) && !!row.overall_result && !['pass', 'passed', 'ok'].includes(String(row.overall_result).toLowerCase()));
+  const taskActivityRows = await service.from('operations_maintenance_tasks').select('id,status,created_at,completed_at,updated_at');
+  if (taskActivityRows.error) throw taskActivityRows.error;
+  const activityTasks = taskActivityRows.data || [];
+  const groups = classifyWeeklyTasks(openTasks, today);
+  return {
+    kind: 'admin_weekly_preview', delivery: 'disabled', period_nz: range, active_admin_recipient_count: activeAdminCount,
+    activity: {
+      tasks_created: activityTasks.filter(task => isInNzDateRange(task.created_at, range)).length,
+      tasks_completed: activityTasks.filter(task => task.status === 'Completed' && isInNzDateRange(task.completed_at || task.updated_at, range)).length,
+      tasks_deferred: activityTasks.filter(task => task.status === 'Deferred' && isInNzDateRange(task.updated_at, range)).length,
+      vehicle_checks_completed: vehicleRows.filter(row => isInNzDateRange(row.created_at, range)).length,
+      vehicle_checks_with_reported_issue: nonPassVehicleChecks.length,
+      maintenance_records_created: (maintenanceRows || []).filter(row => isInNzDateRange(row.created_at, range)).length,
+      height_equipment_inspections_completed: (heightRows || []).length
+    },
+    pending_tasks: Object.fromEntries(Object.entries(groups).map(([group, rows]) => [group, rows.map(task => weeklyTaskLine(task, true))])),
+    exceptions: {
+      unassigned_tasks: openTasks.filter(task => !task.assigned_user_id && !task.assigned_role).map(task => weeklyTaskLine(task, true)),
+      vehicle_checks_with_reported_issue: nonPassVehicleChecks.length,
+      delivery_failures: 'Not queried: preview creates no notification or delivery record.'
+    }
+  };
+}
+
+async function weeklyEmployeePreview(service: ReturnType<typeof createClient>, userId: string) {
+  const tasks = await openTasksForUser(service, userId);
+  const groups = classifyWeeklyTasks(tasks, nzDate());
+  return {
+    kind: 'employee_weekly_preview', delivery: 'disabled', recipient: 'current_user',
+    suppressed: tasks.length === 0, suppression_reason: tasks.length === 0 ? 'No open tasks are assigned to this employee.' : null,
+    pending_tasks: Object.fromEntries(Object.entries(groups).map(([group, rows]) => [group, rows.map(task => weeklyTaskLine(task, false))]))
+  };
+}
+
 async function reconcileTaskNotifications(service: ReturnType<typeof createClient>, record: boolean) {
   const { data: tasks, error } = await service.from('operations_maintenance_tasks')
     .select('id,title,description,status,priority,due_date,assigned_user_id,assigned_role')
