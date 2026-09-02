@@ -34,5 +34,7 @@ test('NOTIFY-STEP9B-003: a permanent record is written only after verified stagi
   assert.match(workflow, /docs\/notifications\/STEP-9B-WEEKLY-EMAIL-PREFERENCE-\$\{GITHUB_RUN_ID\}\.md/);
   assert.match(workflow, /git push origin HEAD:main/);
   assert.match(workflow, /Production contacted:\*\* No/);
+  assert.ok(workflow.includes("printf -- '- **Target:** Staging only (`%s`)\\n' \"$STAGING_PROJECT_REF\""));
+  assert.doesNotMatch(workflow, /cat > "\$record_path" <<EOF/);
   assert.doesNotMatch(workflow, /RESEND|SMTP|send-notification|functions deploy/i);
 });

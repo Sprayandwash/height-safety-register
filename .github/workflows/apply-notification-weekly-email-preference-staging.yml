@@ -101,23 +101,23 @@ jobs:
           set -euo pipefail
           record_path="docs/notifications/STEP-9B-WEEKLY-EMAIL-PREFERENCE-${GITHUB_RUN_ID}.md"
           applied_at="$(date --utc '+%Y-%m-%dT%H:%M:%SZ')"
-          cat > "$record_path" <<EOF
-          # Step 9B — Weekly Email Preference Migration
-
-          - **Status:** Applied and verified
-          - **Applied at (UTC):** $applied_at
-          - **GitHub Actions run:** $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-          - **Target:** Staging only (`$STAGING_PROJECT_REF`)
-          - **Production contacted:** No
-          - **Reviewed migration:** `$MIGRATION_PATH`
-          - **Source migration merge:** `177cdaa696e7a48468367e7dd72195d87f1b41ff`
-
-          ## Verified outcome
-
-          - New preference rows default `weekly_email_enabled` to `$DEFAULT_VALUE`.
-          - Legacy enabled preference rows remaining: `$ENABLED_ROWS`.
-          - Employee weekly email remains opt-in. No email provider, scheduler, push delivery, or production resource was changed.
-          EOF
+          {
+            printf '%s\n' '# Step 9B — Weekly Email Preference Migration'
+            printf '%s\n' ''
+            printf '%s\n' '- **Status:** Applied and verified'
+            printf -- '- **Applied at (UTC):** %s\n' "$applied_at"
+            printf -- '- **GitHub Actions run:** %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf -- '- **Target:** Staging only (`%s`)\n' "$STAGING_PROJECT_REF"
+            printf '%s\n' '- **Production contacted:** No'
+            printf -- '- **Reviewed migration:** `%s`\n' "$MIGRATION_PATH"
+            printf '%s\n' '- **Source migration merge:** `177cdaa696e7a48468367e7dd72195d87f1b41ff`'
+            printf '%s\n' ''
+            printf '%s\n' '## Verified outcome'
+            printf '%s\n' ''
+            printf -- '- New preference rows default `weekly_email_enabled` to `%s`.\n' "$DEFAULT_VALUE"
+            printf -- '- Legacy enabled preference rows remaining: `%s`.\n' "$ENABLED_ROWS"
+            printf '%s\n' '- Employee weekly email remains opt-in. No email provider, scheduler, push delivery, or production resource was changed.'
+          } > "$record_path"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$record_path"
