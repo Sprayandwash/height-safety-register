@@ -218,6 +218,96 @@ async function weeklyEmployeePreview(service: ReturnType<typeof createClient>, u
   };
 }
 
+function escapeEmailHtml(value: unknown) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char] || char));
+}
+
+type WeeklyPreview = {
+  kind: 'admin_weekly_preview' | 'employee_weekly_preview';
+  delivery: 'disabled';
+  period_nz?: { start: string; end: string };
+  activity?: Record<string, number>;
+  pending_tasks: Record<string, Array<Record<string, unknown>>>;
+  exceptions?: { unassigned_tasks?: Array<Record<string, unknown>>; vehicle_checks_with_reported_issue?: number };
+  suppressed?: boolean;
+  suppression_reason?: string | null;
+};
+
+function taskLinesForEmail(groups: WeeklyPreview['pending_tasks'], includeAssignment: boolean) {
+  const labels: Record<string, string> = {
+    overdue: 'Overdue',
+    due_within_48_hours: 'Due within 48 hours',
+    later_due: 'Later due'
+  };
+  const text: string[] = [];
+  const html: string[] = [];
+  for (const [group, tasks] of Object.entries(groups)) {
+    if (!tasks.length) continue;
+    const heading = labels[group] || group;
+    text.push(heading);
+    html.push(`<h3>${escapeEmailHtml(heading)}</h3><ul>`);
+    for (const task of tasks) {
+      const line = [
+        String(task.title || 'Untitled task'),
+        task.due_date ? `due ${task.due_date}` : 'no due date',
+        task.priority ? `priority ${task.priority}` : null,
+        includeAssignment && task.assigned_to ? `assigned to ${task.assigned_to}` : null
+      ].filter(Boolean).join(' — ');
+      text.push(`- ${line}`);
+      html.push(`<li>${escapeEmailHtml(line)}</li>`);
+    }
+    html.push('</ul>');
+  }
+  return { text: text.join('\n'), html: html.join('') };
+}
+
+function renderWeeklyEmailDraft(preview: WeeklyPreview) {
+  if (preview.kind === 'employee_weekly_preview' && preview.suppressed) {
+    return {
+      delivery: 'disabled',
+      suppressed: true,
+      suppression_reason: preview.suppression_reason || 'No open tasks are assigned to this employee.',
+      subject: null,
+      text: null,
+      html: null
+    };
+  }
+
+  const taskLines = taskLinesForEmail(preview.pending_tasks, preview.kind === 'admin_weekly_preview');
+  if (preview.kind === 'employee_weekly_preview') {
+    return {
+      delivery: 'disabled',
+      suppressed: false,
+      subject: 'Spray & Wash — your weekly task update',
+      text: `Your open tasks\n\n${taskLines.text || 'No dated tasks.'}\n\nOpen the Spray & Wash app for details.`,
+      html: `<h2>Your open tasks</h2>${taskLines.html || '<p>No dated tasks.</p>'}<p>Open the Spray &amp; Wash app for details.</p>`
+    };
+  }
+
+  const activity = preview.activity || {};
+  const activityText = [
+    `Tasks created: ${activity.tasks_created || 0}`,
+    `Tasks completed: ${activity.tasks_completed || 0}`,
+    `Tasks deferred: ${activity.tasks_deferred || 0}`,
+    `Vehicle checks completed: ${activity.vehicle_checks_completed || 0}`,
+    `Vehicle checks with reported issue: ${activity.vehicle_checks_with_reported_issue || 0}`,
+    `Maintenance records created: ${activity.maintenance_records_created || 0}`,
+    `Height Equipment inspections completed: ${activity.height_equipment_inspections_completed || 0}`
+  ];
+  const activityHtml = activityText.map(line => `<li>${escapeEmailHtml(line)}</li>`).join('');
+  const unassigned = preview.exceptions?.unassigned_tasks?.length || 0;
+  const vehicleIssues = preview.exceptions?.vehicle_checks_with_reported_issue || 0;
+  return {
+    delivery: 'disabled',
+    suppressed: false,
+    subject: `Spray & Wash — weekly operations update (${preview.period_nz?.start || ''} to ${preview.period_nz?.end || ''})`,
+    text: `Weekly operations update\n${preview.period_nz?.start || ''} to ${preview.period_nz?.end || ''}\n\nActivity\n${activityText.map(line => `- ${line}`).join('\n')}\n\nPending tasks\n${taskLines.text || 'No open tasks.'}\n\nExceptions\n- Unassigned tasks: ${unassigned}\n- Vehicle checks with reported issue: ${vehicleIssues}\n\nOpen the Spray & Wash app for details.`,
+    html: `<h2>Weekly operations update</h2><p>${escapeEmailHtml(preview.period_nz?.start || '')} to ${escapeEmailHtml(preview.period_nz?.end || '')}</p><h3>Activity</h3><ul>${activityHtml}</ul><h3>Pending tasks</h3>${taskLines.html || '<p>No open tasks.</p>'}<h3>Exceptions</h3><ul><li>Unassigned tasks: ${unassigned}</li><li>Vehicle checks with reported issue: ${vehicleIssues}</li></ul><p>Open the Spray &amp; Wash app for details.</p>`
+  };
+}
+
 async function reconcileTaskNotifications(service: ReturnType<typeof createClient>, record: boolean) {
   const { data: tasks, error } = await service.from('operations_maintenance_tasks')
     .select('id,title,description,status,priority,due_date,assigned_user_id,assigned_role')
