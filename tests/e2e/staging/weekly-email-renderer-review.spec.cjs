@@ -24,7 +24,7 @@ async function invoke(page, body) {
     }
     const { data, error } = await client.functions.invoke('employee-notifications', {
       body: request,
-      headers: { Authorization: \`Bearer \${session.access_token}\` }
+      headers: { Authorization: `Bearer ${session.access_token}` }
     });
     return { data, error: error?.message || null };
   }, body);
