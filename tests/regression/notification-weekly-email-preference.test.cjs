@@ -25,5 +25,5 @@ test('NOTIFY-WEEKLY-002: the account panel presents an optional weekly task emai
   assert.match(client, /setWeeklyEmailPreference\(true\)/);
   assert.match(client, /No email is sent when you have no open tasks/);
   assert.match(client, /Routine email delivery is not enabled yet/);
-  assert.match(client, /action: 'set_weekly_email_preference'/);
+  assert.match(client, /functionCall\('set_weekly_email_preference'/);
 });
