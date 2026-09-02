@@ -353,6 +353,21 @@ Deno.serve(async (req) => {
     });
   }
 
+  if (action === 'preview_weekly_summary') {
+    const scope = String(body?.scope || 'self');
+    if (!['self', 'admin'].includes(scope)) return json({ error: 'Scope must be self or admin.' }, 400);
+    const admin = await isActiveAdmin(service, user.id);
+    if (scope === 'admin' && !admin) return json({ error: 'Admin access required' }, 403);
+    try {
+      const preview = scope === 'admin'
+        ? await weeklyAdminPreview(service)
+        : await weeklyEmployeePreview(service, user.id);
+      return json({ ok: true, scope, ...preview });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : 'Weekly summary preview failed.' }, 500);
+    }
+  }
+
   if (action === 'set_weekly_email_preference') {
     const enabled = body?.enabled === true;
     const now = new Date().toISOString();
