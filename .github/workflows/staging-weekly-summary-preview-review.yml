@@ -57,6 +57,7 @@ jobs:
           test -n "$ref" || { echo 'Staging artifact has no project ref.' >&2; exit 1; }
           test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging artifact identifies production.' >&2; exit 1; }
           ! grep -F "$PRODUCTION_PROJECT_REF" staging-app/config.js >/dev/null || { echo 'SAFETY STOP: staging artifact config references production.' >&2; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
       - name: Invoke previews and verify no ledger change
         shell: bash
         run: |
