@@ -177,10 +177,10 @@ async function weeklyAdminPreview(service: ReturnType<typeof createClient>) {
   const adminIds = [...new Set((adminRoles || []).map(row => row.user_id))];
   let activeAdminCount = 0;
   if (adminIds.length) {
-    const { count, error } = await service.from('app_user_access').select('user_id', { count: 'exact', head: true })
-      .in('user_id', adminIds).eq('status', 'Active').eq('must_change_password', false);
+    const { data: accessRows, error } = await service.from('app_user_access').select('user_id,must_change_password')
+      .in('user_id', adminIds).eq('status', 'Active');
     if (error) throw error;
-    activeAdminCount = count || 0;
+    activeAdminCount = (accessRows || []).filter(row => row.must_change_password !== true).length;
   }
   const vehicleRows = vehicleChecks || [];
   const nonPassVehicleChecks = vehicleRows.filter(row => isInNzDateRange(row.created_at, range) && !!row.overall_result && !['pass', 'passed', 'ok'].includes(String(row.overall_result).toLowerCase()));
