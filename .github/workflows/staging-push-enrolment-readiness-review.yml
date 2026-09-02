@@ -51,6 +51,7 @@ jobs:
           ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
           test -n "$ref" && test "$ref" != 'twkgfmctuffmkvkmdkct'
           ! grep -F 'twkgfmctuffmkvkmdkct' staging-app/config.js >/dev/null
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
       - name: Verify push enrolment readiness only
         shell: bash
         run: |
