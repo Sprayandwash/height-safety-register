@@ -139,3 +139,10 @@ test('REG-063: Vehicle Check reminders use a compact clickable mobile-only list 
   assert.match(index,/@media\(max-width:640px\)\{[\s\S]*?\.ops-vehicle-attention-desktop\{display:none!important\}/);
   assert.match(index,/\.ops-vehicle-attention-mobile\{display:grid!important;gap:8px\}/);
 });
+
+
+test('REG-064: employee weekly email is disabled until explicitly opted in',()=>{
+  const notifications=read('supabase/functions/employee-notifications/index.ts');
+  assert.match(notifications,/weekly_email_enabled: preference\?\.weekly_email_enabled === true,/);
+  assert.doesNotMatch(notifications,/weekly_email_enabled: preference\?\.weekly_email_enabled !== false,/);
+});
