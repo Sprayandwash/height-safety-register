@@ -20,7 +20,7 @@ test('NOTIFY-STEP9B-001: weekly-email preference migration is staging-only and e
 
 test('NOTIFY-STEP9B-002: only the reviewed migration can be applied once', () => {
   assert.match(workflow, /20260902082102_disable_implicit_weekly_email\.sql/);
-  assert.match(workflow, /expected_sha='5609b57661b76f45a148bf75d6f5e5bdc898117309466d8c0f05a7226d75bd79'/);
+  assert.match(workflow, /expected_sha='4ec1aeb17790c1a23ebd5382e0a98301bb4e57c4454e5be175502c758cb90ccb'/);
   assert.match(workflow, /expected exactly one legacy implicit enabled row/);
   assert.match(workflow, /--single-transaction/);
   assert.match(workflow, /test "\$default_value" = 'false'/);
