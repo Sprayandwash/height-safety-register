@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
     if (preferenceError || subscriptionsError) return json({ error: preferenceError?.message || subscriptionsError?.message }, 500);
     return json({
       push_enabled: preference?.push_enabled === true,
-      weekly_email_enabled: preference?.weekly_email_enabled !== false,
+      weekly_email_enabled: preference?.weekly_email_enabled === true,
       timezone: preference?.timezone || 'Pacific/Auckland',
       vapid_public_key: Deno.env.get('VAPID_PUBLIC_KEY') || null,
       is_admin: await isActiveAdmin(service, user.id),
