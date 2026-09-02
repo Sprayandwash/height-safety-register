@@ -17,7 +17,7 @@ The latest mobile work delivered:
 
 No Supabase migration, database data change or `config.js` change was included in these releases.
 
-The notification foundation is now verified in isolated Staging. Controlled Step 9B run `33545502753` passed after the notification Edge Function authentication path was corrected. It created 10 notification records and 0 delivery records. Controlled Step 9B run `33571260467` then created the initial staging-only VAPID key pair, verified the secret names, and recorded no subscription or delivery. A subsequent Android PWA Step 9B enrolment confirmed one granted Staging push subscription and one enabled preference, with zero delivery records. Push/email scheduling and production remain out of scope.
+The notification foundation is now verified in isolated Staging. Controlled Step 9B run `33545502753` passed after the notification Edge Function authentication path was corrected. It created 10 notification records and 0 delivery records. Controlled Step 9B run `33571260467` then created the initial staging-only VAPID key pair, verified the secret names, and recorded no subscription or delivery. A subsequent Android PWA Step 9B enrolment confirmed one granted Staging push subscription and one enabled preference. A controlled manual Android staging push test then received one visible notification and recorded one successful push delivery. Email, SMS, routine scheduling and production remain out of scope.
 
 ## Testing history status
 
@@ -25,7 +25,7 @@ The permanent `testing-history` branch remains the archive route for its existin
 
 ## Next safe action
 
-For any new app change, start at **Step 1 — Define change**, identify the affected journeys, run the relevant automated checks, then complete read-only Staging review where applicable. The next notification work is a separately approved delivery phase; it must not use the enrolled device until sender, scheduling and delivery controls have been reviewed.
+For any new app change, start at **Step 1 — Define change**, identify the affected journeys, run the relevant automated checks, then complete read-only Staging review where applicable. The controlled staging delivery phase has now proven one Android PWA push end-to-end. Any routine assignment, due-soon, overdue or weekly-email delivery design remains a separate approved phase; production must not be used until its controls have been reviewed.
 
 ## Safety boundaries
 
