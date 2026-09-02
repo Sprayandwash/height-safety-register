@@ -25,6 +25,7 @@ test('NOTIFY-WEEKLY-STEP9A-002: the Step 9A workflow is main-only, staging-only 
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /refs\/heads\/main/);
   assert.match(workflow, /E2E_STAGING_ADMIN_EMAIL/);
+  assert.match(workflow, /E2E_STAGING_PROJECT_REF=\$ref/);
   assert.match(workflow, /PRODUCTION_PROJECT_REF/);
   assert.match(workflow, /playwright\.staging\.weekly-summary-preview\.config\.cjs/);
   assert.doesNotMatch(workflow, /RESEND_API_KEY|api\.resend\.com|supabase functions deploy|operations_notifications.*insert|cron\.schedule/);
