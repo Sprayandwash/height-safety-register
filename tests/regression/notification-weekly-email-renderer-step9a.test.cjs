@@ -19,6 +19,8 @@ test('NOTIFY-WEEKLY-RENDER-STEP9A-001: review renders both scopes and keeps both
   assert.match(spec, /Weekly operations update/);
   assert.match(spec, /No open tasks are assigned to this employee/);
   assert.match(spec, /expectNoEmployeeInternals/);
+  assert.match(spec, new RegExp('Authorization: ' + String.fromCharCode(96) + 'Bearer ' + '\\$\\{session\\.access_token\\}' + String.fromCharCode(96)));
+  assert.equal(spec.includes('\\\\' + String.fromCharCode(96)), false);
 });
 
 test('NOTIFY-WEEKLY-RENDER-STEP9A-002: the renderer Step 9A workflow is main-only, staging-only and has no delivery path', () => {
