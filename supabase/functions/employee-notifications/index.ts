@@ -226,6 +226,15 @@ Deno.serve(async (req) => {
     });
   }
 
+  if (action === 'set_weekly_email_preference') {
+    const enabled = body?.enabled === true;
+    const now = new Date().toISOString();
+    const { error } = await service.from('operations_notification_preferences')
+      .upsert({ user_id: user.id, weekly_email_enabled: enabled, updated_at: now, updated_by: user.id });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, weekly_email_enabled: enabled, delivery: 'disabled' });
+  }
+
   if (action === 'register_push_subscription') {
     const subscription = body?.subscription;
     if (!validSubscription(subscription)) return json({ error: 'Invalid push subscription.' }, 400);

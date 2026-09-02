@@ -34,24 +34,28 @@
   const escapeText = value => String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
   const render = () => {
-    if (!currentUser) return setPanel('<h3>Job reminders</h3><p class="muted">Sign in to manage phone reminders.</p>');
-    if (!supported()) return setPanel('<h3>Job reminders</h3><p class="muted">Push reminders need the installed Spray &amp; Wash app on a supported Android browser.</p>');
+    if (!currentUser) return setPanel('<h3>Job reminders</h3><p class="muted">Sign in to manage reminders and weekly email.</p>');
     if (!latestStatus) return setPanel('<h3>Job reminders</h3><p class="muted">Checking notification availability…</p>');
-    if (!latestStatus.vapid_public_key) return setPanel('<h3>Job reminders</h3><p class="muted">Push reminders are being prepared and cannot be enabled yet.</p>');
-    if (Notification.permission === 'denied') return setPanel('<h3>Job reminders</h3><p class="dangerBox">Notifications are blocked for this app. Enable them in your browser or Android app settings, then return here.</p>');
+
+    const weeklyEnabled = latestStatus.weekly_email_enabled === true;
+    const weeklyControl = `<div class="pushSettings"><h3>Weekly task email</h3><p class="muted">${weeklyEnabled ? 'Enabled. You will receive your own open-task summary each Monday at 7:30 am.' : 'Optional. Receive only your own open tasks each Monday at 7:30 am.'}</p><p class="muted">No email is sent when you have no open tasks. Routine email delivery is not enabled yet.</p><div class="row"><button class="primary" onclick="setWeeklyEmailPreference(true)" ${weeklyEnabled ? 'disabled' : ''}>Enable weekly task email</button>${weeklyEnabled ? '<button onclick="setWeeklyEmailPreference(false)">Disable</button>' : ''}</div></div>`;
+
+    if (!supported()) return setPanel(`<h3>Job reminders</h3><p class="muted">Push reminders need the installed Spray &amp; Wash app on a supported Android browser.</p>${weeklyControl}`);
+    if (!latestStatus.vapid_public_key) return setPanel(`<h3>Job reminders</h3><p class="muted">Push reminders are being prepared and cannot be enabled yet.</p>${weeklyControl}`);
+    if (Notification.permission === 'denied') return setPanel(`<h3>Job reminders</h3><p class="dangerBox">Notifications are blocked for this app. Enable them in your browser or Android app settings, then return here.</p>${weeklyControl}`);
     const active = latestStatus.push_enabled && latestStatus.subscriptions?.length;
     const detail = active
       ? `Enabled on ${latestStatus.subscriptions.length} device${latestStatus.subscriptions.length === 1 ? '' : 's'}.`
       : 'Enable reminders for new assignments and due items.';
     const canSendStagingTest = window.SPRAY_WASH_ENV === 'staging' && latestStatus.is_admin && latestStatus.is_staging_test_delivery_enabled && active && latestStatus.subscriptions.length === 1;
     const testControl = canSendStagingTest ? '<button class="primary" onclick="sendStagingTestPush()">Send one staging test push</button>' : '';
-    setPanel(`<h3>Job reminders</h3><p class="muted">${escapeText(detail)}</p><p class="muted">Routine reminders remain disabled. A staging administrator may send one controlled test to this enrolled device.</p><div class="row"><button class="primary" onclick="enablePushNotifications()" ${active ? 'disabled' : ''}>Enable phone reminders</button>${active ? '<button onclick="disablePushNotifications()">Disable</button>' : ''}${testControl}</div>`);
+    setPanel(`<h3>Job reminders</h3><p class="muted">${escapeText(detail)}</p><p class="muted">Routine reminders remain disabled. A staging administrator may send one controlled test to this enrolled device.</p><div class="row"><button class="primary" onclick="enablePushNotifications()" ${active ? 'disabled' : ''}>Enable phone reminders</button>${active ? '<button onclick="disablePushNotifications()">Disable</button>' : ''}${testControl}</div>${weeklyControl}`);
   };
 
   const refresh = async () => {
     latestStatus = null;
     render();
-    if (!currentUser || !supported()) return;
+    if (!currentUser) return;
     try { latestStatus = await functionCall('status'); } catch (error) {
       console.warn('Push notification status unavailable', error);
       setPanel('<h3>Job reminders</h3><p class="muted">Reminder settings are temporarily unavailable. Please try again.</p>');
@@ -93,6 +97,16 @@
     } catch (error) {
       console.warn('Staging push test failed', error);
       alert('Could not send the staging test: ' + (error.message || 'Please try again.'));
+    }
+    await refresh();
+  };
+
+  window.setWeeklyEmailPreference = async enabled => {
+    try {
+      await functionCall('set_weekly_email_preference', { enabled: enabled === true });
+    } catch (error) {
+      console.warn('Weekly email preference update failed', error);
+      alert(`Could not update weekly task email: ${error.message || 'Please try again.'}`);
     }
     await refresh();
   };
