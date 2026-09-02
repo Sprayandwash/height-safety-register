@@ -31,6 +31,8 @@ This is a compact, append-only index of meaningful Admin test runs and fixes. It
 | 1 Sep 2026 | Notification records review `33545502753` | 9B | Passed | Corrected staging notification-function authentication. Created 10 staging notification records; 0 delivery records. Push, email, SMS and production excluded. See [detailed record](history/step-9b/2026-09-01-run-33545502753.md). |
 | 1 Sep 2026 | Staging VAPID setup `33571260467` | 9B | Passed | Generated and stored the initial staging-only VAPID public/private key pair; secret names verified, values not recorded. No subscription or push delivery occurred. See [detailed record](history/step-9b/2026-09-01-run-33571260467.md). |
 
+| 2 Sep 2026 | Controlled Android staging push test | 9B | Passed | One manual staging push was accepted by the provider and visibly received on the enrolled Android PWA device. One notification and one push-delivery record were created. Email, SMS, schedules and production were excluded. See [detailed record](history/step-9b/2026-09-02-staging-push-delivery.md). |
+
 ## Recording rule
 
 Add one short row for each meaningful controlled run, staging build, read-only review, PR merge, or confirmed new defect. Add a detailed file under `history/step-9b/` only for Step 9B runs.
