@@ -9,6 +9,7 @@
 
 ## Required operating rules
 
+- Read and follow [ACCESS-AND-RECOVERY-HANDOVER.md](ACCESS-AND-RECOVERY-HANDOVER.md) before attempting GitHub Actions, browser-based workflow dispatch, staging work, or any production action. It is the authoritative access and connection-recovery procedure.
 - Use the named change-flow steps in every recommendation, request and completion report.
 - Treat production as prohibited unless the user gives explicit approval for the exact production action.
 - Never treat a previous Step 9B approval as permission for another run. Obtain fresh, immediate approval every time.
