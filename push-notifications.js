@@ -43,7 +43,9 @@
     const detail = active
       ? `Enabled on ${latestStatus.subscriptions.length} device${latestStatus.subscriptions.length === 1 ? '' : 's'}.`
       : 'Enable reminders for new assignments and due items.';
-    setPanel(`<h3>Job reminders</h3><p class="muted">${escapeText(detail)}</p><p class="muted">No reminders are sent until the delivery phase is approved.</p><div class="row"><button class="primary" onclick="enablePushNotifications()" ${active ? 'disabled' : ''}>Enable phone reminders</button>${active ? '<button onclick="disablePushNotifications()">Disable</button>' : ''}</div>`);
+    const canSendStagingTest = window.SPRAY_WASH_ENV === 'staging' && latestStatus.is_admin && latestStatus.is_staging_test_delivery_enabled && active && latestStatus.subscriptions.length === 1;
+    const testControl = canSendStagingTest ? '<button class="primary" onclick="sendStagingTestPush()">Send one staging test push</button>' : '';
+    setPanel(`<h3>Job reminders</h3><p class="muted">${escapeText(detail)}</p><p class="muted">Routine reminders remain disabled. A staging administrator may send one controlled test to this enrolled device.</p><div class="row"><button class="primary" onclick="enablePushNotifications()" ${active ? 'disabled' : ''}>Enable phone reminders</button>${active ? '<button onclick="disablePushNotifications()">Disable</button>' : ''}${testControl}</div>`);
   };
 
   const refresh = async () => {
@@ -80,6 +82,19 @@
       alert(`Could not enable phone reminders: ${error.message || 'Please try again.'}`);
       await refresh();
     }
+  };
+
+  window.sendStagingTestPush = async () => {
+    if (!(window.SPRAY_WASH_ENV === 'staging' && latestStatus?.is_admin && latestStatus?.is_staging_test_delivery_enabled)) return;
+    if (!confirm('Send one staging test notification to this enrolled phone?')) return;
+    try {
+      await functionCall('send_staging_test_push', { confirmation: 'SEND_ONE_STAGING_TEST_PUSH' });
+      alert('The staging test push was accepted. Check your notification shade.');
+    } catch (error) {
+      console.warn('Staging push test failed', error);
+      alert('Could not send the staging test: ' + (error.message || 'Please try again.'));
+    }
+    await refresh();
   };
 
   window.disablePushNotifications = async () => {

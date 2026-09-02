@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import webpush from 'npm:web-push@3.6.7';
 
 const cors = {
   'access-control-allow-origin': '*',
@@ -160,6 +161,47 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (action === 'send_staging_test_push') {
+    if (Deno.env.get('STAGING_PUSH_TEST_DELIVERY_ENABLED') !== 'true') return json({ error: 'Staging test delivery is not enabled.' }, 403);
+    if (!await isActiveAdmin(service, user.id)) return json({ error: 'Admin access required' }, 403);
+    if (body?.confirmation !== 'SEND_ONE_STAGING_TEST_PUSH') return json({ error: 'Explicit one-device test confirmation required.' }, 400);
+    const [vapidPublicKey, vapidPrivateKey, vapidSubject] = [Deno.env.get('VAPID_PUBLIC_KEY'), Deno.env.get('VAPID_PRIVATE_KEY'), Deno.env.get('VAPID_SUBJECT')];
+    if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) return json({ error: 'Staging VAPID delivery is not configured.' }, 503);
+    const { data: subscriptions, error: subscriptionError } = await service.from('operations_push_subscriptions').select('id,subscription_json').eq('user_id', user.id).eq('permission_state', 'granted');
+    if (subscriptionError) return json({ error: subscriptionError.message }, 500);
+    if ((subscriptions || []).length !== 1) return json({ error: 'Exactly one granted device subscription is required for this staging test.' }, 409);
+    const subscription = subscriptions![0];
+    const { data: existingDelivery, error: existingDeliveryError } = await service.from('operations_notification_deliveries').select('id').eq('recipient_user_id', user.id).eq('subscription_id', subscription.id).eq('channel', 'push').limit(1).maybeSingle();
+    if (existingDeliveryError) return json({ error: existingDeliveryError.message }, 500);
+    if (existingDelivery) return json({ error: 'A staging push test has already been attempted for this device.' }, 409);
+    const now = new Date().toISOString();
+    const title = 'Spray & Wash — test reminder';
+    const message = 'Staging push delivery is working.';
+    const { data: notification, error: notificationError } = await service.from('operations_notifications').insert({
+      recipient_user_id: user.id, task_id: null, event_type: 'staging_test_push', escalation_stage: 'test', severity: 'Low', title, body: message, deep_link: './', state: 'sending', eligible_at: now,
+      idempotency_key: `staging-push-test:${user.id}:${subscription.id}`, metadata: { source: 'manual-staging-test', channel: 'push', automated: false }
+    }).select('id').single();
+    if (notificationError || !notification) return json({ error: notificationError?.message || 'Could not create test notification.' }, 500);
+    try {
+      webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+      const response = await webpush.sendNotification(subscription.subscription_json, JSON.stringify({ title, body: message, url: './', tag: 'spray-wash-staging-test', data: { kind: 'staging_test_push' } }), { TTL: 60, urgency: 'high' });
+      await Promise.all([
+        service.from('operations_notification_deliveries').insert({ notification_id: notification.id, recipient_user_id: user.id, channel: 'push', subscription_id: subscription.id, status: 'sent', provider_message_id: String(response.statusCode || 'accepted'), attempted_at: now, delivered_at: new Date().toISOString() }),
+        service.from('operations_notifications').update({ state: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', notification.id),
+        service.from('operations_push_subscriptions').update({ last_success_at: new Date().toISOString(), last_failure_at: null, last_failure_code: null, updated_at: new Date().toISOString() }).eq('id', subscription.id)
+      ]);
+      return json({ ok: true, delivery: 'push', recipient: 'current_admin_device', notification_id: notification.id });
+    } catch (error) {
+      const failure = error instanceof Error ? error.message.slice(0, 500) : 'Push provider delivery failed.';
+      await Promise.all([
+        service.from('operations_notification_deliveries').insert({ notification_id: notification.id, recipient_user_id: user.id, channel: 'push', subscription_id: subscription.id, status: 'failed', error_code: 'push_send_failed', error_message: failure, attempted_at: now }),
+        service.from('operations_notifications').update({ state: 'failed', updated_at: new Date().toISOString() }).eq('id', notification.id),
+        service.from('operations_push_subscriptions').update({ last_failure_at: new Date().toISOString(), last_failure_code: 'push_send_failed', updated_at: new Date().toISOString() }).eq('id', subscription.id)
+      ]);
+      return json({ error: 'Staging push test failed.' }, 502);
+    }
+  }
+
   if (action === 'status') {
     const [{ data: preference, error: preferenceError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
       service.from('operations_notification_preferences')
@@ -178,6 +220,8 @@ Deno.serve(async (req) => {
       weekly_email_enabled: preference?.weekly_email_enabled !== false,
       timezone: preference?.timezone || 'Pacific/Auckland',
       vapid_public_key: Deno.env.get('VAPID_PUBLIC_KEY') || null,
+      is_admin: await isActiveAdmin(service, user.id),
+      is_staging_test_delivery_enabled: Deno.env.get('STAGING_PUSH_TEST_DELIVERY_ENABLED') === 'true',
       subscriptions: subscriptions || []
     });
   }
