@@ -1,0 +1,72 @@
+name: Enable controlled staging push test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type ENABLE ONE STAGING PUSH TEST to enable the single-device staging test
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    name: Enable staging-only test delivery
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate controlled setup
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "ENABLE ONE STAGING PUSH TEST"
+          test -n "${SUPABASE_ACCESS_TOKEN:-}"
+
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+
+      - name: Resolve staging project and verify VAPID key names
+        id: staging
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF"
+          supabase secrets list --project-ref "$ref" --output json > secrets.json
+          jq -e 'map(.name // .key // "") | index("VAPID_PUBLIC_KEY") != null' secrets.json >/dev/null
+          jq -e 'map(.name // .key // "") | index("VAPID_PRIVATE_KEY") != null' secrets.json >/dev/null
+          echo "project_ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Set staging-only delivery controls
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          umask 077
+          {
+            printf 'STAGING_PUSH_TEST_DELIVERY_ENABLED=true\n'
+            printf 'VAPID_SUBJECT=mailto:notifications@sprayandwash.co.nz\n'
+          } > .staging-push-test-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .staging-push-test-secrets
+          rm .staging-push-test-secrets
+
+      - name: Verify controls by name only
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          supabase secrets list --project-ref "$STAGING_PROJECT_REF" --output json > secrets-after.json
+          jq -e 'map(.name // .key // "") | index("STAGING_PUSH_TEST_DELIVERY_ENABLED") != null' secrets-after.json >/dev/null
+          jq -e 'map(.name // .key // "") | index("VAPID_SUBJECT") != null' secrets-after.json >/dev/null
+          echo 'Staging test controls verified. No notification was sent.'
