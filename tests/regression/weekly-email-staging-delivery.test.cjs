@@ -14,7 +14,8 @@ test('NOTIFY-WEEKLY-EMAIL-STAGING-001: provider send is restricted to the dedica
   assert.match(source, /await isActiveAdmin\(service, user\.id\)/);
   assert.match(source, /https:\/\/api\.resend\.com\/emails/);
   assert.match(source, /'Idempotency-Key': idempotencyKey/);
-  assert.match(source, /staging-weekly-email-test:\$\{userId\}/);
+  assert.match(source, /stagingEmailTestVersion = 'branded-template-v1'/);
+  assert.match(source, /staging-weekly-email-test:\$\{stagingEmailTestVersion\}:\$\{userId\}/);
   assert.match(source, /recipient: 'staging_secret'/);
   assert.doesNotMatch(source, /action === 'send_weekly_email'/);
 });

@@ -353,7 +353,9 @@ async function sendOneStagingWeeklyEmail(service: ReturnType<typeof createClient
   const recipient = Deno.env.get('STAGING_EMAIL_TEST_RECIPIENT');
   if (!apiKey || !from || !recipient) throw new Error('Staging email delivery is not fully configured.');
 
-  const idempotencyKey = `staging-weekly-email-test:${userId}`;
+  // A renderer revision gets one independently approved staging delivery test.
+  const stagingEmailTestVersion = 'branded-template-v1';
+  const idempotencyKey = `staging-weekly-email-test:${stagingEmailTestVersion}:${userId}`;
   const { data: existing, error: existingError } = await service.from('operations_notifications')
     .select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
   if (existingError) throw existingError;
@@ -392,7 +394,7 @@ async function sendOneStagingWeeklyEmail(service: ReturnType<typeof createClient
       }),
       service.from('operations_notifications').update({ state: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', notification.id)
     ]);
-    return { notification_id: notification.id, provider_message_id: providerMessageId };
+    return { notification_id: notification.id, provider_message_id: providerMessageId, test_version: stagingEmailTestVersion };
   } catch (error) {
     const failure = error instanceof Error ? error.message.slice(0, 500) : 'Email provider delivery failed.';
     await Promise.all([
