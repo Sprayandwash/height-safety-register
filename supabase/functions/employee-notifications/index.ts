@@ -475,12 +475,15 @@ async function reconcileTaskNotifications(service: ReturnType<typeof createClien
   return result;
 }
 
+function weeklyRoutineSchedulerAuthorized(req: Request) {
+  const expected = Deno.env.get('WEEKLY_ROUTINE_SCHEDULER_SECRET');
+  const supplied = req.headers.get('x-spray-wash-scheduler-secret');
+  return Boolean(expected && supplied && supplied === expected);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'POST required' }, 405);
-
-  const user = await currentUser(req);
-  if (!user) return json({ error: 'Unauthenticated' }, 401);
 
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
   const action = String(body?.action || '');
@@ -488,6 +491,18 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
+
+  if (action === 'run_weekly_routine_preview') {
+    if (!weeklyRoutineSchedulerAuthorized(req)) return json({ error: 'Scheduler access required' }, 403);
+    try {
+      return json({ ok: true, kind: 'weekly_routine_scheduler_preview', ...await weeklyRoutineSchedulePreview(service) });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : 'Weekly schedule preview failed.' }, 500);
+    }
+  }
+
+  const user = await currentUser(req);
+  if (!user) return json({ error: 'Unauthenticated' }, 401);
 
   if (action === 'reconcile_staging') {
     if (!await isActiveAdmin(service, user.id)) return json({ error: 'Admin access required' }, 403);
