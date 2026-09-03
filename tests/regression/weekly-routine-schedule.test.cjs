@@ -21,3 +21,12 @@ test('NOTIFY-WEEKLY-ROUTINE-002: candidates respect active access and employee o
   assert.match(source, /weekly-employee:/);
   assert.match(source, /No provider call, notification record, delivery record or scheduler job is created by preview/);
 });
+
+test('NOTIFY-WEEKLY-ROUTINE-003: scheduler endpoint is secret-guarded and preview-only', () => {
+  assert.match(source, /function weeklyRoutineSchedulerAuthorized\(req: Request\)/);
+  assert.match(source, /WEEKLY_ROUTINE_SCHEDULER_SECRET/);
+  assert.match(source, /x-spray-wash-scheduler-secret/);
+  assert.match(source, /action === 'run_weekly_routine_preview'/);
+  assert.match(source, /kind: 'weekly_routine_scheduler_preview'/);
+  assert.match(source, /Scheduler access required/);
+});
