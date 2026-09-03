@@ -26,6 +26,7 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_STAGING_API_KEY }}
       RESEND_FROM: ${{ secrets.RESEND_STAGING_FROM }}
       STAGING_EMAIL_TEST_RECIPIENT: ${{ secrets.RESEND_STAGING_TEST_RECIPIENT }}
+      APP_PUBLIC_URL: ${{ secrets.STAGING_APP_PUBLIC_URL }}
       STAGING_PROJECT_NAME: Spray and Wash Staging
       STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
       PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
@@ -43,6 +44,11 @@ jobs:
           test -n "${RESEND_API_KEY:-}" || { echo 'Missing repository secret: RESEND_STAGING_API_KEY.' >&2; exit 1; }
           test -n "${RESEND_FROM:-}" || { echo 'Missing repository secret: RESEND_STAGING_FROM.' >&2; exit 1; }
           test -n "${STAGING_EMAIL_TEST_RECIPIENT:-}" || { echo 'Missing repository secret: RESEND_STAGING_TEST_RECIPIENT.' >&2; exit 1; }
+          test -n "${APP_PUBLIC_URL:-}" || { echo 'Missing repository secret: STAGING_APP_PUBLIC_URL.' >&2; exit 1; }
+          case "$APP_PUBLIC_URL" in
+            https://*) ;;
+            *) echo 'STAGING_APP_PUBLIC_URL must be an absolute HTTPS URL.' >&2; exit 1 ;;
+          esac
           test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
 
       - uses: actions/checkout@v4
@@ -71,6 +77,7 @@ jobs:
             "RESEND_API_KEY=$RESEND_API_KEY" \
             "RESEND_FROM=$RESEND_FROM" \
             "STAGING_EMAIL_TEST_RECIPIENT=$STAGING_EMAIL_TEST_RECIPIENT" \
+            "APP_PUBLIC_URL=$APP_PUBLIC_URL" \
             'STAGING_EMAIL_TEST_DELIVERY_ENABLED=true' \
             --project-ref "$STAGING_PROJECT_REF"
 
@@ -89,7 +96,7 @@ jobs:
             echo
             echo "- Staging project: $STAGING_PROJECT_REF"
             echo '- Function secrets were written only to the verified staging project.'
-            echo '- The Resend key, sender and test recipient are never printed or committed.'
+            echo '- The Resend key, sender, test recipient and app URL are never printed or committed.'
             echo '- No email, push, scheduler, migration or production access was performed.'
             echo '- Next step: Step 9A read-only readiness review, followed by one separately approved Step 9B email.'
           } >> "$GITHUB_STEP_SUMMARY"
