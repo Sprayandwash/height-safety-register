@@ -369,7 +369,7 @@ async function sendOneStagingWeeklyEmail(service: ReturnType<typeof createClient
   if (!configuredAppPublicUrl()) throw new Error('Staging app link is not configured with a valid HTTPS APP_PUBLIC_URL.');
 
   // A renderer revision gets one independently approved staging delivery test.
-  const stagingEmailTestVersion = 'branded-template-v1';
+  const stagingEmailTestVersion = 'app-link-v1';
   const idempotencyKey = `staging-weekly-email-test:${stagingEmailTestVersion}:${userId}`;
   const { data: existing, error: existingError } = await service.from('operations_notifications')
     .select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
