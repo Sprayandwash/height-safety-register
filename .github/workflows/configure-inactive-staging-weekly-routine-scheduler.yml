@@ -56,19 +56,19 @@ jobs:
           supabase secrets set "WEEKLY_ROUTINE_SCHEDULER_SECRET=$scheduler_secret" --project-ref "$STAGING_PROJECT_REF"
           supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
           sql="$(cat <<SQL
-select vault.create_secret('$scheduler_secret', 'weekly_routine_scheduler_secret');
-select cron.schedule(
-  'spray-and-wash-weekly-routine-staging',
-  '30 18 * * 0',
-  $$select net.http_post(
-    url := 'https://tsnmbvezrweciaitkquf.supabase.co/functions/v1/employee-notifications',
-    headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-scheduler-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'weekly_routine_scheduler_secret')),
-    body := jsonb_build_object('action', 'run_weekly_routine_preview')
-  );$$
-);
-select cron.alter_job((select jobid from cron.job where jobname = 'spray-and-wash-weekly-routine-staging'), active := false);
-select jobid, jobname, schedule, active from cron.job where jobname = 'spray-and-wash-weekly-routine-staging';
-SQL
+          select vault.create_secret('$scheduler_secret', 'weekly_routine_scheduler_secret');
+          select cron.schedule(
+            'spray-and-wash-weekly-routine-staging',
+            '30 18 * * 0',
+            $$select net.http_post(
+              url := 'https://tsnmbvezrweciaitkquf.supabase.co/functions/v1/employee-notifications',
+              headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-scheduler-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'weekly_routine_scheduler_secret')),
+              body := jsonb_build_object('action', 'run_weekly_routine_preview')
+            );$$
+          );
+          select cron.alter_job((select jobid from cron.job where jobname = 'spray-and-wash-weekly-routine-staging'), active := false);
+          select jobid, jobname, schedule, active from cron.job where jobname = 'spray-and-wash-weekly-routine-staging';
+          SQL
 )"
           curl --fail --silent --show-error --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
