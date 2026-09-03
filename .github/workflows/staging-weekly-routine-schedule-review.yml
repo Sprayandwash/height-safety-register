@@ -12,16 +12,32 @@ jobs:
       E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
       E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
       GH_TOKEN: ${{ github.token }}
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: |
+      - name: Run read-only staging schedule review
+        run: |
+          set -euo pipefail
           artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          test -n "$artifact_id" || { echo "No current staging-app artifact was found."; exit 1; }
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
           mkdir staging-app && unzip -q staging-app.zip -d staging-app
+          test -f staging-app/index.html
+          test -f staging-app/config.js
+          test -f staging-app/STAGING-README.txt
+          ref="$(sed -n 's/^Supabase project ref: //p' staging-app/STAGING-README.txt | head -n 1)"
+          test -n "$ref" || { echo "The staging artifact did not declare a Supabase project ref."; exit 1; }
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo "Refusing to run against the production project."; exit 1; }
+          ! grep -F "$PRODUCTION_PROJECT_REF" staging-app/config.js >/dev/null || { echo "Refusing an artifact that references production."; exit 1; }
+          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
           npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
-          sleep 2
+          for attempt in {1..15}; do
+            curl --fail --silent http://127.0.0.1:4174/ >/dev/null && break
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4174/ >/dev/null
           E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npx playwright test --config=playwright.staging.weekly-routine-schedule.config.cjs
