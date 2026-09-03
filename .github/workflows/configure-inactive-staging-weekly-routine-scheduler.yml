@@ -1,0 +1,91 @@
+name: Configure inactive staging weekly routine scheduler (Step 9B)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type CONFIGURE INACTIVE STAGING WEEKLY ROUTINE SCHEDULER
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: configure-inactive-staging-weekly-routine-scheduler
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - name: Validate exact approval and staging target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'CONFIGURE INACTIVE STAGING WEEKLY ROUTINE SCHEDULER' || { echo 'Exact Step 9B confirmation required.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing SUPABASE_ACCESS_TOKEN.' >&2; exit 1; }
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: production target.' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Verify named staging project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          discovered_ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test "$discovered_ref" = "$STAGING_PROJECT_REF" || { echo 'SAFETY STOP: verified staging project mismatch.' >&2; exit 1; }
+      - name: Deploy scheduler-preview endpoint and create inactive job
+        shell: bash
+        run: |
+          set -euo pipefail
+          scheduler_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$scheduler_secret"
+          supabase secrets set "WEEKLY_ROUTINE_SCHEDULER_SECRET=$scheduler_secret" --project-ref "$STAGING_PROJECT_REF"
+          supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
+          sql="$(cat <<SQL
+select vault.create_secret('$scheduler_secret', 'weekly_routine_scheduler_secret');
+select cron.schedule(
+  'spray-and-wash-weekly-routine-staging',
+  '30 18 * * 0',
+  $$select net.http_post(
+    url := 'https://tsnmbvezrweciaitkquf.supabase.co/functions/v1/employee-notifications',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-scheduler-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'weekly_routine_scheduler_secret')),
+    body := jsonb_build_object('action', 'run_weekly_routine_preview')
+  );$$
+);
+select cron.alter_job((select jobid from cron.job where jobname = 'spray-and-wash-weekly-routine-staging'), active := false);
+select jobid, jobname, schedule, active from cron.job where jobname = 'spray-and-wash-weekly-routine-staging';
+SQL
+)"
+          curl --fail --silent --show-error --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$(jq -n --arg query "$sql" '{query:$query}')" > scheduler-result.json
+          jq -e '.[-1][]? | select(.jobname == "spray-and-wash-weekly-routine-staging" and .schedule == "30 18 * * 0" and .active == false)' scheduler-result.json >/dev/null
+      - name: Write redacted result
+        if: success()
+        run: |
+          {
+            echo '## Step 9B inactive scheduler configured'
+            echo '- Target: verified staging project only.'
+            echo '- Job: spray-and-wash-weekly-routine-staging.'
+            echo '- Schedule: Monday 7:30am Pacific/Auckland (30 18 * * 0 UTC).'
+            echo '- State: inactive.'
+            echo '- No routine email, provider call, notification record or delivery record was created.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove transient files
+        if: always()
+        run: rm -f projects.json scheduler-result.json
