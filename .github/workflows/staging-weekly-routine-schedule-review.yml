@@ -1,6 +1,8 @@
 name: Review staging weekly routine schedule (Step 9A)
 on: { workflow_dispatch: {} }
-permissions: { contents: read, actions: read }
+permissions:
+  contents: read
+  actions: read
 jobs:
   review:
     runs-on: ubuntu-latest
