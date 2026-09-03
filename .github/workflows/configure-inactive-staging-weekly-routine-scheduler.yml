@@ -69,7 +69,7 @@ jobs:
           select cron.alter_job((select jobid from cron.job where jobname = 'spray-and-wash-weekly-routine-staging'), active := false);
           select jobid, jobname, schedule, active from cron.job where jobname = 'spray-and-wash-weekly-routine-staging';
           SQL
-)"
+          )"
           curl --fail --silent --show-error --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             --header "Content-Type: application/json" \
