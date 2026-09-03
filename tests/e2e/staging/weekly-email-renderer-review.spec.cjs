@@ -65,8 +65,11 @@ test('weekly email renderer is read-only and produces safe Admin and employee dr
     html: expect.stringContaining('Weekly operations update')
   });
   expect(adminDraft.data.text).toContain('Activity');
-  expect(adminDraft.data.text).toContain('Pending tasks');
+  expect(adminDraft.data.text).toContain('Overdue tasks by employee');
+  expect(adminDraft.data.text).toContain('Other pending tasks');
   expect(adminDraft.data.text).toContain('Exceptions');
+  expect(adminDraft.data.html).toContain('Spray <span style="color:#74c948">&amp;</span> Wash');
+  expect(adminDraft.data.html).toContain('Open Operations App');
 
   const employeeDraft = await invoke(page, { action: 'render_weekly_email', scope: 'self' });
   expect(employeeDraft.error).toBeNull();
