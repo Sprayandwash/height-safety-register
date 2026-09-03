@@ -407,6 +407,33 @@ async function sendOneStagingWeeklyEmail(service: ReturnType<typeof createClient
   }
 }
 
+
+const weeklyRoutineSchedule = {
+  timezone: 'Pacific/Auckland',
+  cron_utc: '30 18 * * 0',
+  local_time: 'Monday 7:30 am',
+  active: false
+};
+
+async function weeklyRoutineSchedulePreview(service: ReturnType<typeof createClient>) {
+  const [{ data: accessRows, error: accessError }, { data: roleRows, error: roleError }, { data: preferenceRows, error: preferenceError }] = await Promise.all([
+    service.from('app_user_access').select('user_id,must_change_password').eq('status', 'Active'),
+    service.from('user_roles').select('user_id,role'),
+    service.from('operations_notification_preferences').select('user_id').eq('weekly_email_enabled', true)
+  ]);
+  if (accessError || roleError || preferenceError) throw accessError || roleError || preferenceError;
+  const activeIds = new Set((accessRows || []).filter(row => row.must_change_password !== true).map(row => row.user_id));
+  const adminIds = new Set((roleRows || []).filter(row => row.role === 'Admin' && activeIds.has(row.user_id)).map(row => row.user_id));
+  const employeeIds = new Set((preferenceRows || []).map(row => row.user_id).filter(id => activeIds.has(id)));
+  const period = previousNzWeek();
+  return {
+    delivery: 'disabled', schedule: weeklyRoutineSchedule, period_nz: period,
+    candidates: { admin_weekly_summary: adminIds.size, employee_task_only_summary: employeeIds.size, total: adminIds.size + employeeIds.size },
+    idempotency: { admin: 'weekly-admin:' + period.end + ':<active-admin-user-id>', employee: 'weekly-employee:' + period.end + ':<opted-in-user-id>' },
+    safeguards: ['No provider call, notification record, delivery record or scheduler job is created by preview.', 'Employee summaries require an explicit weekly-email opt-in.']
+  };
+}
+
 async function reconcileTaskNotifications(service: ReturnType<typeof createClient>, record: boolean) {
   const { data: tasks, error } = await service.from('operations_maintenance_tasks')
     .select('id,title,description,status,priority,due_date,assigned_user_id,assigned_role')
@@ -588,6 +615,16 @@ Deno.serve(async (req) => {
       const message = error instanceof Error ? error.message : 'Staging weekly email test failed.';
       const status = /already been attempted/.test(message) ? 409 : 502;
       return json({ error: message }, status);
+    }
+  }
+
+
+  if (action === 'preview_weekly_routine_schedule') {
+    if (!await isActiveAdmin(service, user.id)) return json({ error: 'Admin access required' }, 403);
+    try {
+      return json({ ok: true, kind: 'weekly_routine_schedule_preview', ...await weeklyRoutineSchedulePreview(service) });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : 'Weekly schedule preview failed.' }, 500);
     }
   }
 
