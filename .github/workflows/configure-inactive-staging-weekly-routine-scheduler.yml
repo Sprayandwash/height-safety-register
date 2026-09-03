@@ -60,11 +60,11 @@ jobs:
           select cron.schedule(
             'spray-and-wash-weekly-routine-staging',
             '30 18 * * 0',
-            $$select net.http_post(
+            \\$\\$select net.http_post(
               url := 'https://tsnmbvezrweciaitkquf.supabase.co/functions/v1/employee-notifications',
               headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-scheduler-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'weekly_routine_scheduler_secret')),
               body := jsonb_build_object('action', 'run_weekly_routine_preview')
-            );$$
+            );\\$\\$
           );
           select cron.alter_job((select jobid from cron.job where jobname = 'spray-and-wash-weekly-routine-staging'), active := false);
           select jobid, jobname, schedule, active from cron.job where jobname = 'spray-and-wash-weekly-routine-staging';
