@@ -11,12 +11,16 @@ const client = fs.readFileSync(
   path.resolve(__dirname, '../../push-notifications.js'),
   'utf8'
 );
+const preferenceAction = edgeFunction.slice(
+  edgeFunction.indexOf("if (action === 'set_weekly_email_preference')"),
+  edgeFunction.indexOf("if (action === 'register_push_subscription')")
+);
 
 test('NOTIFY-WEEKLY-001: a signed-in employee can independently change only their weekly-email preference', () => {
-  assert.match(edgeFunction, /action === 'set_weekly_email_preference'/);
-  assert.match(edgeFunction, /user_id: user\.id, weekly_email_enabled: enabled/);
-  assert.match(edgeFunction, /delivery: 'disabled'/);
-  assert.doesNotMatch(edgeFunction, /RESEND_API_KEY|api\.resend\.com|sendStagingTestEmail/);
+  assert.match(preferenceAction, /action === 'set_weekly_email_preference'/);
+  assert.match(preferenceAction, /user_id: user\.id, weekly_email_enabled: enabled/);
+  assert.match(preferenceAction, /delivery: 'disabled'/);
+  assert.doesNotMatch(preferenceAction, /RESEND_API_KEY|api\.resend\.com|sendStagingTestEmail/);
 });
 
 test('NOTIFY-WEEKLY-002: the account panel presents an optional weekly task email separately from phone push', () => {

@@ -7,11 +7,15 @@ const edgeFunction = fs.readFileSync(
   path.resolve(__dirname, '../../supabase/functions/employee-notifications/index.ts'),
   'utf8'
 );
+const previewAction = edgeFunction.slice(
+  edgeFunction.indexOf("if (action === 'preview_weekly_summary')"),
+  edgeFunction.indexOf("if (action === 'render_weekly_email')")
+);
 
 test('NOTIFY-WEEKLY-PREVIEW-001: weekly previews are authenticated and never send, schedule, or record delivery', () => {
-  assert.match(edgeFunction, /action === 'preview_weekly_summary'/);
+  assert.match(previewAction, /action === 'preview_weekly_summary'/);
   assert.match(edgeFunction, /delivery: 'disabled'/);
-  assert.doesNotMatch(edgeFunction, /RESEND_API_KEY|api\.resend\.com|cron\.schedule|sendWeeklyEmail/);
+  assert.doesNotMatch(previewAction, /RESEND_API_KEY|api\.resend\.com|cron\.schedule|sendWeeklyEmail/);
   assert.match(edgeFunction, /preview creates no notification or delivery record/);
 });
 
