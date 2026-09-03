@@ -33,7 +33,7 @@ jobs:
           test -n "$ref" || { echo "The staging artifact did not declare a Supabase project ref."; exit 1; }
           test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo "Refusing to run against the production project."; exit 1; }
           ! grep -F "$PRODUCTION_PROJECT_REF" staging-app/config.js >/dev/null || { echo "Refusing an artifact that references production."; exit 1; }
-          echo "E2E_STAGING_PROJECT_REF=$ref" >> "$GITHUB_ENV"
+          export E2E_STAGING_PROJECT_REF="$ref"
           npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
           for attempt in {1..15}; do
             curl --fail --silent http://127.0.0.1:4174/ >/dev/null && break
