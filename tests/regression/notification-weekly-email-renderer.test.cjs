@@ -10,7 +10,7 @@ const edgeFunction = fs.readFileSync(
 
 const weeklyRendererAction = edgeFunction.slice(
   edgeFunction.indexOf("if (action === 'render_weekly_email')"),
-  edgeFunction.indexOf("if (action === 'set_weekly_email_preference')")
+  edgeFunction.indexOf("if (action === 'send_staging_test_weekly_email')")
 );
 
 test('NOTIFY-WEEKLY-RENDER-001: weekly email drafting is authenticated and has no provider, scheduler, or delivery path', () => {
