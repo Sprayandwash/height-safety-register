@@ -1,0 +1,100 @@
+name: Configure staging weekly-email test delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type CONFIGURE STAGING WEEKLY EMAIL TEST DELIVERY to configure the isolated staging function
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: configure-staging-weekly-email-test-delivery
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    name: Configure staging email test secrets only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      RESEND_API_KEY: ${{ secrets.RESEND_STAGING_API_KEY }}
+      RESEND_FROM: ${{ secrets.RESEND_STAGING_FROM }}
+      STAGING_EMAIL_TEST_RECIPIENT: ${{ secrets.RESEND_STAGING_TEST_RECIPIENT }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+
+    steps:
+      - name: Validate scope, confirmation and required secrets
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: run this workflow from main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'CONFIGURE STAGING WEEKLY EMAIL TEST DELIVERY' || { echo 'Confirmation must be exact.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing repository secret: SUPABASE_ACCESS_TOKEN.' >&2; exit 1; }
+          test -n "${RESEND_API_KEY:-}" || { echo 'Missing repository secret: RESEND_STAGING_API_KEY.' >&2; exit 1; }
+          test -n "${RESEND_FROM:-}" || { echo 'Missing repository secret: RESEND_STAGING_FROM.' >&2; exit 1; }
+          test -n "${STAGING_EMAIL_TEST_RECIPIENT:-}" || { echo 'Missing repository secret: RESEND_STAGING_TEST_RECIPIENT.' >&2; exit 1; }
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: staging ref matches production.' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Verify the isolated staging project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1 || { echo "Expected exactly one staging project named '$STAGING_PROJECT_NAME'; found $count." >&2; exit 1; }
+          discovered_ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test "$discovered_ref" = "$STAGING_PROJECT_REF" || { echo 'SAFETY STOP: discovered project does not match the expected staging ref.' >&2; exit 1; }
+          test "$discovered_ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: discovered project is production.' >&2; exit 1; }
+
+      - name: Set staging-only function secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase secrets set \
+            "RESEND_API_KEY=$RESEND_API_KEY" \
+            "RESEND_FROM=$RESEND_FROM" \
+            "STAGING_EMAIL_TEST_RECIPIENT=$STAGING_EMAIL_TEST_RECIPIENT" \
+            'STAGING_EMAIL_TEST_DELIVERY_ENABLED=true' \
+            --project-ref "$STAGING_PROJECT_REF"
+
+      - name: Deploy staging-only email test function
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions deploy employee-notifications --project-ref "$STAGING_PROJECT_REF"
+
+      - name: Write configuration summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Staging weekly-email test delivery configured'
+            echo
+            echo "- Staging project: $STAGING_PROJECT_REF"
+            echo '- Function secrets were written only to the verified staging project.'
+            echo '- The Resend key, sender and test recipient are never printed or committed.'
+            echo '- No email, push, scheduler, migration or production access was performed.'
+            echo '- Next step: Step 9A read-only readiness review, followed by one separately approved Step 9B email.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove transient project list
+        if: always()
+        shell: bash
+        run: rm -f projects.json
