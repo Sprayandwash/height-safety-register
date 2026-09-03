@@ -14,14 +14,11 @@ test('NOTIFY-WEEKLY-EMAIL-STAGING-001: provider send is restricted to the dedica
   assert.match(source, /await isActiveAdmin\(service, user\.id\)/);
   assert.match(source, /https:\/\/api\.resend\.com\/emails/);
   assert.match(source, /'Idempotency-Key': idempotencyKey/);
-  assert.match(source, /stagingEmailTestVersion = 'app-link-v1'/);
+  assert.match(source, /stagingEmailTestVersion = 'plain-close-v1'/);
   assert.match(source, /staging-weekly-email-test:\$\{stagingEmailTestVersion\}:\$\{userId\}/);
   assert.match(source, /recipient: 'staging_secret'/);
-  assert.match(source, /function configuredAppPublicUrl\(\)/);
-  assert.match(source, /Deno\.env\.get\('APP_PUBLIC_URL'\)/);
-  assert.match(source, /url\.protocol === 'https:'/);
-  assert.match(source, /Staging app link is not configured with a valid HTTPS APP_PUBLIC_URL/);
-  assert.doesNotMatch(source, /href="\.\/"/);
+  assert.match(source, /Review and action your tasks in the Spray &amp; Wash Operations App/);
+  assert.doesNotMatch(source, /APP_PUBLIC_URL|configuredAppPublicUrl|href=/);
   assert.doesNotMatch(source, /action === 'send_weekly_email'/);
 });
 
@@ -34,8 +31,7 @@ test('NOTIFY-WEEKLY-EMAIL-STAGING-002: secret configuration is main-only, stagin
   assert.match(workflow, /RESEND_STAGING_API_KEY/);
   assert.match(workflow, /RESEND_STAGING_FROM/);
   assert.match(workflow, /RESEND_STAGING_TEST_RECIPIENT/);
-  assert.match(workflow, /STAGING_APP_PUBLIC_URL/);
-  assert.match(workflow, /APP_PUBLIC_URL=\$APP_PUBLIC_URL/);
+  assert.doesNotMatch(workflow, /STAGING_APP_PUBLIC_URL|APP_PUBLIC_URL/);
   assert.match(workflow, /supabase secrets set/);
   assert.match(workflow, /supabase functions deploy employee-notifications/);
   assert.doesNotMatch(workflow, /api\.resend\.com|send_staging_test_weekly_email|curl .*emails/);
