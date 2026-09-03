@@ -239,7 +239,16 @@ type WeeklyPreview = {
   suppression_reason?: string | null;
 };
 
-function taskLinesForEmail(groups: WeeklyPreview['pending_tasks'], includeAssignment: boolean) {
+function taskLine(task: Record<string, unknown>, includeAssignment: boolean) {
+  return [
+    String(task.title || 'Untitled task'),
+    task.due_date ? `due ${task.due_date}` : 'no due date',
+    task.priority ? `priority ${task.priority}` : null,
+    includeAssignment && task.assigned_to ? `assigned to ${task.assigned_to}` : null
+  ].filter(Boolean).join(' — ');
+}
+
+function taskLinesForEmail(groups: WeeklyPreview['pending_tasks'], includeAssignment: boolean, excludedGroups = new Set<string>()) {
   const labels: Record<string, string> = {
     overdue: 'Overdue',
     due_within_48_hours: 'Due within 48 hours',
@@ -248,23 +257,45 @@ function taskLinesForEmail(groups: WeeklyPreview['pending_tasks'], includeAssign
   const text: string[] = [];
   const html: string[] = [];
   for (const [group, tasks] of Object.entries(groups)) {
-    if (!tasks.length) continue;
+    if (!tasks.length || excludedGroups.has(group)) continue;
     const heading = labels[group] || group;
     text.push(heading);
     html.push(`<h3>${escapeEmailHtml(heading)}</h3><ul>`);
     for (const task of tasks) {
-      const line = [
-        String(task.title || 'Untitled task'),
-        task.due_date ? `due ${task.due_date}` : 'no due date',
-        task.priority ? `priority ${task.priority}` : null,
-        includeAssignment && task.assigned_to ? `assigned to ${task.assigned_to}` : null
-      ].filter(Boolean).join(' — ');
+      const line = taskLine(task, includeAssignment);
       text.push(`- ${line}`);
       html.push(`<li>${escapeEmailHtml(line)}</li>`);
     }
     html.push('</ul>');
   }
   return { text: text.join('\n'), html: html.join('') };
+}
+
+function overdueTasksByEmployee(tasks: Array<Record<string, unknown>>) {
+  const grouped = new Map<string, Array<Record<string, unknown>>>();
+  for (const task of tasks) {
+    const employee = String(task.assigned_to || 'Unassigned');
+    const rows = grouped.get(employee) || [];
+    rows.push(task);
+    grouped.set(employee, rows);
+  }
+  const text: string[] = ['Overdue tasks by employee'];
+  const html: string[] = ['<h3 style="margin:0 0 12px;color:#003b73">Overdue tasks by employee</h3>'];
+  for (const [employee, rows] of [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    text.push(employee);
+    html.push(`<div style="margin:0 0 14px;padding:12px;border-left:4px solid #0b9b50;background:#f3f7fb"><strong>${escapeEmailHtml(employee)}</strong><ul style="margin:8px 0 0;padding-left:20px">`);
+    for (const task of rows) {
+      const line = taskLine(task, false);
+      text.push(`- ${line}`);
+      html.push(`<li style="margin:5px 0">${escapeEmailHtml(line)}</li>`);
+    }
+    html.push('</ul></div>');
+  }
+  return { text: text.join('\n'), html: html.join('') };
+}
+
+function brandedEmail(title: string, subtitle: string, body: string) {
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef4f8;font-family:Arial,Helvetica,sans-serif;color:#17324d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4f8"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden"><tr><td style="padding:24px 28px;background:#003b73;color:#ffffff"><div style="font-size:25px;font-weight:700;letter-spacing:.2px">Spray <span style="color:#74c948">&amp;</span> Wash</div><div style="margin-top:5px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#d9e8f4">Operations</div></td></tr><tr><td style="height:5px;background:#0b9b50"></td></tr><tr><td style="padding:28px"><h1 style="margin:0 0 6px;font-size:24px;line-height:1.25;color:#003b73">${escapeEmailHtml(title)}</h1><p style="margin:0 0 24px;color:#5d7185">${escapeEmailHtml(subtitle)}</p>${body}<p style="margin:28px 0 0"><a href="./" style="display:inline-block;padding:12px 18px;background:#0b9b50;border-radius:6px;color:#ffffff;text-decoration:none;font-weight:700">Open Operations App</a></p></td></tr><tr><td style="padding:16px 28px;background:#f3f7fb;color:#5d7185;font-size:12px">Spray &amp; Wash Operations</td></tr></table></td></tr></table></body></html>`;
 }
 
 function renderWeeklyEmailDraft(preview: WeeklyPreview) {
@@ -281,12 +312,13 @@ function renderWeeklyEmailDraft(preview: WeeklyPreview) {
 
   const taskLines = taskLinesForEmail(preview.pending_tasks, preview.kind === 'admin_weekly_preview');
   if (preview.kind === 'employee_weekly_preview') {
+    const employeeBody = `<div style="padding:18px;background:#f3f7fb;border-left:4px solid #0b9b50"><h2 style="margin:0 0 12px;font-size:18px;color:#003b73">Your open tasks</h2>${taskLines.html || '<p style="margin:0">No dated tasks.</p>'}</div>`;
     return {
       delivery: 'disabled',
       suppressed: false,
       subject: 'Spray & Wash — your weekly task update',
       text: `Your open tasks\n\n${taskLines.text || 'No dated tasks.'}\n\nOpen the Spray & Wash app for details.`,
-      html: `<h2>Your open tasks</h2>${taskLines.html || '<p>No dated tasks.</p>'}<p>Open the Spray &amp; Wash app for details.</p>`
+      html: brandedEmail('Your weekly task update', 'A summary of tasks currently assigned to you.', employeeBody)
     };
   }
 
@@ -300,15 +332,18 @@ function renderWeeklyEmailDraft(preview: WeeklyPreview) {
     `Maintenance records created: ${activity.maintenance_records_created || 0}`,
     `Height Equipment inspections completed: ${activity.height_equipment_inspections_completed || 0}`
   ];
-  const activityHtml = activityText.map(line => `<li>${escapeEmailHtml(line)}</li>`).join('');
+  const activityHtml = activityText.map(line => `<li style="margin:5px 0">${escapeEmailHtml(line)}</li>`).join('');
   const unassigned = preview.exceptions?.unassigned_tasks?.length || 0;
   const vehicleIssues = preview.exceptions?.vehicle_checks_with_reported_issue || 0;
+  const overdue = overdueTasksByEmployee(preview.pending_tasks.overdue || []);
+  const remainingTasks = taskLinesForEmail(preview.pending_tasks, true, new Set(['overdue']));
+  const adminBody = `<div style="margin:0 0 20px;padding:18px;background:#f3f7fb;border-radius:8px"><h2 style="margin:0 0 12px;font-size:18px;color:#003b73">Activity</h2><ul style="margin:0;padding-left:20px">${activityHtml}</ul></div><div style="margin:0 0 20px;padding:18px;border:1px solid #d6e3ee;border-radius:8px">${overdue.html}<h3 style="margin:20px 0 12px;color:#003b73">Other pending tasks</h3>${remainingTasks.html || '<p>No other open tasks.</p>'}</div><div style="padding:18px;background:#fff6e8;border-left:4px solid #e5a321"><h2 style="margin:0 0 10px;font-size:18px;color:#003b73">Exceptions</h2><ul style="margin:0;padding-left:20px"><li>Unassigned tasks: ${unassigned}</li><li>Vehicle checks with reported issue: ${vehicleIssues}</li></ul></div>`;
   return {
     delivery: 'disabled',
     suppressed: false,
     subject: `Spray & Wash — weekly operations update (${preview.period_nz?.start || ''} to ${preview.period_nz?.end || ''})`,
-    text: `Weekly operations update\n${preview.period_nz?.start || ''} to ${preview.period_nz?.end || ''}\n\nActivity\n${activityText.map(line => `- ${line}`).join('\n')}\n\nPending tasks\n${taskLines.text || 'No open tasks.'}\n\nExceptions\n- Unassigned tasks: ${unassigned}\n- Vehicle checks with reported issue: ${vehicleIssues}\n\nOpen the Spray & Wash app for details.`,
-    html: `<h2>Weekly operations update</h2><p>${escapeEmailHtml(preview.period_nz?.start || '')} to ${escapeEmailHtml(preview.period_nz?.end || '')}</p><h3>Activity</h3><ul>${activityHtml}</ul><h3>Pending tasks</h3>${taskLines.html || '<p>No open tasks.</p>'}<h3>Exceptions</h3><ul><li>Unassigned tasks: ${unassigned}</li><li>Vehicle checks with reported issue: ${vehicleIssues}</li></ul><p>Open the Spray &amp; Wash app for details.</p>`
+    text: `Weekly operations update\n${preview.period_nz?.start || ''} to ${preview.period_nz?.end || ''}\n\nActivity\n${activityText.map(line => `- ${line}`).join('\n')}\n\n${overdue.text}\n\nOther pending tasks\n${remainingTasks.text || 'No other open tasks.'}\n\nExceptions\n- Unassigned tasks: ${unassigned}\n- Vehicle checks with reported issue: ${vehicleIssues}\n\nOpen the Spray & Wash app for details.`,
+    html: brandedEmail('Weekly operations update', `${preview.period_nz?.start || ''} to ${preview.period_nz?.end || ''}`, adminBody)
   };
 }
 
