@@ -1,0 +1,25 @@
+name: Review staging weekly routine schedule (Step 9A)
+on: { workflow_dispatch: {} }
+permissions: { contents: read, actions: read }
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      E2E_STAGING_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
+      E2E_STAGING_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=spray-wash-staging-app&per_page=100" --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > staging-app.zip
+          mkdir staging-app && unzip -q staging-app.zip -d staging-app
+          npx --no-install http-server staging-app -p 4174 -c-1 > staging-http-server.log 2>&1 &
+          sleep 2
+          E2E_STAGING_BASE_URL=http://127.0.0.1:4174 npx playwright test --config=playwright.staging.weekly-routine-schedule.config.cjs
