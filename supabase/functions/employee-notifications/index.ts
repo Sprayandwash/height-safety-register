@@ -294,8 +294,22 @@ function overdueTasksByEmployee(tasks: Array<Record<string, unknown>>) {
   return { text: text.join('\n'), html: html.join('') };
 }
 
-function brandedEmail(title: string, subtitle: string, body: string) {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef4f8;font-family:Arial,Helvetica,sans-serif;color:#17324d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4f8"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden"><tr><td style="padding:24px 28px;background:#003b73;color:#ffffff"><div style="font-size:25px;font-weight:700;letter-spacing:.2px">Spray <span style="color:#74c948">&amp;</span> Wash</div><div style="margin-top:5px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#d9e8f4">Operations</div></td></tr><tr><td style="height:5px;background:#0b9b50"></td></tr><tr><td style="padding:28px"><h1 style="margin:0 0 6px;font-size:24px;line-height:1.25;color:#003b73">${escapeEmailHtml(title)}</h1><p style="margin:0 0 24px;color:#5d7185">${escapeEmailHtml(subtitle)}</p>${body}<p style="margin:28px 0 0"><a href="./" style="display:inline-block;padding:12px 18px;background:#0b9b50;border-radius:6px;color:#ffffff;text-decoration:none;font-weight:700">Open Operations App</a></p></td></tr><tr><td style="padding:16px 28px;background:#f3f7fb;color:#5d7185;font-size:12px">Spray &amp; Wash Operations</td></tr></table></td></tr></table></body></html>`;
+function configuredAppPublicUrl() {
+  const configured = Deno.env.get('APP_PUBLIC_URL')?.trim();
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function brandedEmail(title: string, subtitle: string, body: string, appUrl = configuredAppPublicUrl()) {
+  const appButton = appUrl
+    ? `<p style="margin:28px 0 0"><a href="${escapeEmailHtml(appUrl)}" style="display:inline-block;padding:12px 18px;background:#0b9b50;border-radius:6px;color:#ffffff;text-decoration:none;font-weight:700">Open Operations App</a></p>`
+    : '<p style="margin:28px 0 0;color:#5d7185">Open the Spray &amp; Wash Operations App for details.</p>';
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef4f8;font-family:Arial,Helvetica,sans-serif;color:#17324d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4f8"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden"><tr><td style="padding:24px 28px;background:#003b73;color:#ffffff"><div style="font-size:25px;font-weight:700;letter-spacing:.2px">Spray <span style="color:#74c948">&amp;</span> Wash</div><div style="margin-top:5px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#d9e8f4">Operations</div></td></tr><tr><td style="height:5px;background:#0b9b50"></td></tr><tr><td style="padding:28px"><h1 style="margin:0 0 6px;font-size:24px;line-height:1.25;color:#003b73">${escapeEmailHtml(title)}</h1><p style="margin:0 0 24px;color:#5d7185">${escapeEmailHtml(subtitle)}</p>${body}${appButton}</td></tr><tr><td style="padding:16px 28px;background:#f3f7fb;color:#5d7185;font-size:12px">Spray &amp; Wash Operations</td></tr></table></td></tr></table></body></html>`;
 }
 
 function renderWeeklyEmailDraft(preview: WeeklyPreview) {
@@ -352,6 +366,7 @@ async function sendOneStagingWeeklyEmail(service: ReturnType<typeof createClient
   const from = Deno.env.get('RESEND_FROM');
   const recipient = Deno.env.get('STAGING_EMAIL_TEST_RECIPIENT');
   if (!apiKey || !from || !recipient) throw new Error('Staging email delivery is not fully configured.');
+  if (!configuredAppPublicUrl()) throw new Error('Staging app link is not configured with a valid HTTPS APP_PUBLIC_URL.');
 
   // A renderer revision gets one independently approved staging delivery test.
   const stagingEmailTestVersion = 'branded-template-v1';
