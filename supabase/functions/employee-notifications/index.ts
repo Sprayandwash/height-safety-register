@@ -312,6 +312,65 @@ function renderWeeklyEmailDraft(preview: WeeklyPreview) {
   };
 }
 
+async function sendOneStagingWeeklyEmail(service: ReturnType<typeof createClient>, userId: string) {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const from = Deno.env.get('RESEND_FROM');
+  const recipient = Deno.env.get('STAGING_EMAIL_TEST_RECIPIENT');
+  if (!apiKey || !from || !recipient) throw new Error('Staging email delivery is not fully configured.');
+
+  const idempotencyKey = `staging-weekly-email-test:${userId}`;
+  const { data: existing, error: existingError } = await service.from('operations_notifications')
+    .select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) throw new Error('A staging weekly email test has already been attempted for this admin.');
+
+  const preview = await weeklyAdminPreview(service);
+  const draft = renderWeeklyEmailDraft(preview);
+  if (draft.suppressed || !draft.subject || !draft.text || !draft.html) throw new Error('The staging Admin weekly email draft is unavailable.');
+
+  const now = new Date().toISOString();
+  const { data: notification, error: notificationError } = await service.from('operations_notifications').insert({
+    recipient_user_id: userId, task_id: null, event_type: 'task_assigned', escalation_stage: 'test', severity: 'Low',
+    title: 'Staging weekly email test', body: 'A controlled staging weekly-email delivery test.', deep_link: './',
+    state: 'processing', eligible_at: now, idempotency_key: idempotencyKey,
+    metadata: { source: 'manual-staging-test', channel: 'email', automated: false, recipient: 'staging_secret' }
+  }).select('id').single();
+  if (notificationError || !notification) throw new Error(notificationError?.message || 'Could not create the staging email test record.');
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey
+      },
+      body: JSON.stringify({ from, to: [recipient], subject: draft.subject, text: draft.text, html: draft.html })
+    });
+    const providerResult = await response.json().catch(() => null) as { id?: unknown } | null;
+    if (!response.ok) throw new Error('Email provider rejected the staging test.');
+    const providerMessageId = typeof providerResult?.id === 'string' ? providerResult.id : 'accepted';
+    await Promise.all([
+      service.from('operations_notification_deliveries').insert({
+        notification_id: notification.id, recipient_user_id: userId, channel: 'email', status: 'sent',
+        provider_message_id: providerMessageId, attempted_at: now, delivered_at: new Date().toISOString()
+      }),
+      service.from('operations_notifications').update({ state: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', notification.id)
+    ]);
+    return { notification_id: notification.id, provider_message_id: providerMessageId };
+  } catch (error) {
+    const failure = error instanceof Error ? error.message.slice(0, 500) : 'Email provider delivery failed.';
+    await Promise.all([
+      service.from('operations_notification_deliveries').insert({
+        notification_id: notification.id, recipient_user_id: userId, channel: 'email', status: 'failed',
+        error_code: 'email_send_failed', error_message: failure, attempted_at: now
+      }),
+      service.from('operations_notifications').update({ state: 'failed', updated_at: new Date().toISOString() }).eq('id', notification.id)
+    ]);
+    throw new Error('Staging weekly email test failed.');
+  }
+}
+
 async function reconcileTaskNotifications(service: ReturnType<typeof createClient>, record: boolean) {
   const { data: tasks, error } = await service.from('operations_maintenance_tasks')
     .select('id,title,description,status,priority,due_date,assigned_user_id,assigned_role')
@@ -475,6 +534,24 @@ Deno.serve(async (req) => {
       return json({ ok: true, scope, kind: preview.kind, ...draft });
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : 'Weekly email rendering failed.' }, 500);
+    }
+  }
+
+  if (action === 'send_staging_test_weekly_email') {
+    if (Deno.env.get('STAGING_EMAIL_TEST_DELIVERY_ENABLED') !== 'true') {
+      return json({ error: 'Staging email test delivery is not enabled.' }, 403);
+    }
+    if (!await isActiveAdmin(service, user.id)) return json({ error: 'Admin access required' }, 403);
+    if (body?.confirmation !== 'SEND_ONE_STAGING_TEST_WEEKLY_EMAIL') {
+      return json({ error: 'Explicit one-email test confirmation required.' }, 400);
+    }
+    try {
+      const result = await sendOneStagingWeeklyEmail(service, user.id);
+      return json({ ok: true, delivery: 'email', recipient: 'staging_test_recipient', ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Staging weekly email test failed.';
+      const status = /already been attempted/.test(message) ? 409 : 502;
+      return json({ error: message }, status);
     }
   }
 
