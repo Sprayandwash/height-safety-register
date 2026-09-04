@@ -29,7 +29,7 @@ For this notification programme, proceed autonomously through ordinary design, b
 
 ## Next safe action
 
-For any new app change, start at **Step 1 — Define change**, identify the affected journeys, run the relevant automated checks, then complete read-only Staging review where applicable. The controlled staging delivery phase has now proven one Android PWA push end-to-end. Any routine assignment, due-soon, overdue or weekly-email delivery design remains a separate approved phase; production must not be used until its controls have been reviewed.
+For any new app change, start at **Step 1 — Define change**, identify the affected journeys, run the relevant automated checks, then complete read-only Staging review where applicable. The controlled Staging delivery phase has now proven one Android PWA push end-to-end through both the direct dispatcher and the inactive database scheduler route. The scheduler remains inactive and routine delivery flags remain off. Any routine assignment, due-soon, overdue or weekly-email delivery design remains a separate approved phase; production must not be used until its controls have been reviewed.
 
 ## Safety boundaries
 
