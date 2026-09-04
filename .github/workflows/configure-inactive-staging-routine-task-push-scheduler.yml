@@ -1,0 +1,101 @@
+name: Configure inactive staging routine task-push scheduler
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type CONFIGURE INACTIVE STAGING ROUTINE TASK PUSH SCHEDULER
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: configure-inactive-staging-routine-task-push-scheduler
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - name: Validate staging-only no-send scope
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'CONFIGURE INACTIVE STAGING ROUTINE TASK PUSH SCHEDULER' || { echo 'Exact confirmation required.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing SUPABASE_ACCESS_TOKEN.' >&2; exit 1; }
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: production target.' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Verify named staging project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          discovered_ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test "$discovered_ref" = "$STAGING_PROJECT_REF" || { echo 'SAFETY STOP: staging mismatch.' >&2; exit 1; }
+      - name: Create inactive 15-minute scheduler
+        shell: bash
+        run: |
+          set -euo pipefail
+          scheduler_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$scheduler_secret"
+          supabase secrets set "TASK_PUSH_SCHEDULER_SECRET=$scheduler_secret" "TASK_PUSH_DELIVERY_ENABLED=false" --project-ref "$STAGING_PROJECT_REF"
+          supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
+          sql="$(cat <<SQL
+          do \$vault\$
+          declare secret_id uuid;
+          begin
+            select id into secret_id from vault.secrets where name = 'task_push_scheduler_secret';
+            if secret_id is null then
+              perform vault.create_secret('$scheduler_secret', 'task_push_scheduler_secret');
+            else
+              perform vault.update_secret(secret_id, '$scheduler_secret');
+            end if;
+          end
+          \$vault\$;
+          select cron.schedule(
+            'spray-and-wash-routine-task-push-staging',
+            '*/15 * * * *',
+            \$\$select net.http_post(
+              url := 'https://tsnmbvezrweciaitkquf.supabase.co/functions/v1/employee-notifications',
+              headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-task-push-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'task_push_scheduler_secret')),
+              body := jsonb_build_object('action', 'run_task_push_delivery')
+            );\$\$
+          );
+          select cron.alter_job((select jobid from cron.job where jobname = 'spray-and-wash-routine-task-push-staging'), active := false);
+          select jobid, jobname, schedule, active from cron.job where jobname = 'spray-and-wash-routine-task-push-staging';
+          SQL
+          )"
+          status="$(curl --silent --show-error --output scheduler-result.json --write-out '%{http_code}' --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')")"
+          if test "$status" != "201"; then jq -r '.message // .error // "Database query failed"' scheduler-result.json; exit 1; fi
+          jq -e '.. | objects | select(.jobname == "spray-and-wash-routine-task-push-staging" and .schedule == "*/15 * * * *" and .active == false)' scheduler-result.json >/dev/null
+          curl --silent --show-error --fail --request POST "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications" --header "Content-Type: application/json" --header "x-spray-wash-task-push-secret: $scheduler_secret" --data '{"action":"run_task_push_preview"}' > preview.json
+          jq -e '.ok == true and .kind == "task_push_scheduler_preview" and .delivery == "disabled"' preview.json >/dev/null
+      - name: Publish redacted result
+        if: success()
+        run: |
+          {
+            echo '## Inactive staging routine task-push scheduler configured'
+            echo '- Target: verified staging project only.'
+            echo '- Job: spray-and-wash-routine-task-push-staging.'
+            echo '- Schedule: every 15 minutes.'
+            echo '- State: inactive; delivery remains disabled.'
+            echo '- No push, email, SMS, notification record or delivery record was created.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove transient files
+        if: always()
+        run: rm -f projects.json scheduler-result.json preview.json
