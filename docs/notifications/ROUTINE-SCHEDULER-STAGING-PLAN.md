@@ -1,6 +1,6 @@
 # Routine weekly scheduler — staging plan
 
-**Status:** Read-only evaluator and guarded scheduler endpoint are source-ready. No cron job or routine delivery is active.
+**Status:** Step 9B completed on 2026-09-04: the staging-only cron job is configured and inactive. No routine delivery is active. See [the Step 9B record](../testing/history/step-9b/2026-09-04-inactive-weekly-scheduler-33821491212.md).
 
 - **Timezone:** Pacific/Auckland
 - **Routine:** Monday at 7:30 am local time
@@ -10,7 +10,7 @@
 
 ## Step 9B configuration boundary
 
-The next controlled staging step will create the following, all **inactive**:
+Step 9B created the following, all **inactive**:
 
 1. A staging-only Vault secret holding a random scheduler invocation value.
 2. A staging-only cron job named for the weekly routine, scheduled as `30 18 * * 0` UTC and marked inactive.
