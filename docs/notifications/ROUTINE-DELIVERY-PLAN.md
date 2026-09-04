@@ -1,6 +1,6 @@
 # Routine notification delivery plan
 
-**Status:** Step 1 — design only. Routine delivery remains disabled.  
+**Status:** Guarded staging delivery route built and verified disabled on 2026-09-04. Routine delivery remains disabled. See [the checkpoint record](../testing/history/step-9b/2026-09-04-weekly-delivery-disabled-33822524034.md).  
 **Timezone:** Pacific/Auckland  
 **Primary channel:** Android PWA push  
 **Secondary channel:** Weekly email summary
@@ -62,7 +62,7 @@ It groups their tasks by overdue, due within 48 hours and later-due, and include
 |---|---|---|
 | Step 1 | Confirm this policy and acceptance criteria | Disabled |
 | Steps 2–4 | Add candidate generation, suppression and idempotency tests | Disabled |
-| Steps 5–8 | Build scheduled staging evaluator and weekly-email renderer | Disabled |
+| Steps 5–8 | Build scheduled staging evaluator and weekly-email renderer | Completed; disabled |
 | Step 9A | Read-only staging review of candidates and schedule configuration | Disabled |
 | Step 9B | Controlled staging records and up to one explicitly approved delivery per channel | Explicit test only |
 | Step 10 | Separate production review and approval | Not authorised |
