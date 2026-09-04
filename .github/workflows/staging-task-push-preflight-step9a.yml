@@ -1,0 +1,102 @@
+name: Verify staged routine task push (Step 9A)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type VERIFY STAGING TASK PUSH to run the no-send staging preflight
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Deploy and verify no-send task push path
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - name: Validate Step 9A scope
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: run from main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'VERIFY STAGING TASK PUSH' || { echo 'Confirmation must be exact.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing Supabase staging access token.' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+
+      - name: Resolve and isolate the staging project
+        id: staging
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1 || { echo 'Could not uniquely identify staging.' >&2; exit 1; }
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: refusing production.' >&2; exit 1; }
+          echo "project_ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy reviewed function to staging only
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          supabase functions deploy employee-notifications --project-ref "$STAGING_PROJECT_REF" --no-verify-jwt
+
+      - name: Set disabled delivery controls
+        id: controls
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+        run: |
+          set -euo pipefail
+          secret="$(openssl rand -hex 32)"
+          umask 077
+          {
+            printf 'TASK_PUSH_SCHEDULER_SECRET=%s\n' "$secret"
+            printf 'TASK_PUSH_DELIVERY_ENABLED=false\n'
+          } > .task-push-preflight-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .task-push-preflight-secrets
+          rm .task-push-preflight-secrets
+          echo "::add-mask::$secret"
+          echo "secret=$secret" >> "$GITHUB_OUTPUT"
+
+      - name: Verify guarded no-send preview
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+          TASK_PUSH_SECRET: ${{ steps.controls.outputs.secret }}
+        run: |
+          set -euo pipefail
+          before_notifications="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notifications" | jq -r '.[0].count')"
+          before_deliveries="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notification_deliveries" | jq -r '.[0].count')"
+          response="$(curl --fail-with-body --silent --show-error \
+            -H 'content-type: application/json' \
+            -H "x-spray-wash-task-push-secret: $TASK_PUSH_SECRET" \
+            --data '{"action":"run_task_push_preview"}' \
+            "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications")"
+          echo "$response" | jq -e '.ok == true and .kind == "task_push_scheduler_preview" and .delivery == "disabled"' >/dev/null
+          after_notifications="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notifications" | jq -r '.[0].count')"
+          after_deliveries="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notification_deliveries" | jq -r '.[0].count')"
+          test "$before_notifications" = "$after_notifications"
+          test "$before_deliveries" = "$after_deliveries"
+
+      - name: Publish no-send result
+        run: |
+          {
+            echo '## Staging routine task-push preflight passed'
+            echo
+            echo '- The reviewed function was deployed to the isolated staging project.'
+            echo '- The custom scheduler secret was accepted.'
+            echo '- Delivery was disabled and the preview created no notification or delivery records.'
+            echo '- No push, email, SMS, cron activation or production action occurred.'
+          } >> "$GITHUB_STEP_SUMMARY"
