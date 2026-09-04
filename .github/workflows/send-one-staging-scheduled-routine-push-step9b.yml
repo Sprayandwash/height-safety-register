@@ -54,7 +54,8 @@ jobs:
         run: |
           set -euo pipefail
           sql="select net.http_post(url := 'https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications', headers := jsonb_build_object('Content-Type','application/json','x-spray-wash-task-push-secret',(select decrypted_secret from vault.decrypted_secrets where name='task_push_scheduler_secret')), body := jsonb_build_object('action','run_task_push_delivery','controlled_test','SEND_ONE_STAGING_ROUTINE_PUSH','notification_id','$NOTIFICATION_ID')) as request_id;"
-          curl --silent --show-error --fail --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')" >/dev/null
+          status="$(curl --silent --show-error --output scheduler-route-result.json --write-out '%{http_code}' --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')")"
+          if test "$status" != "201"; then cat scheduler-route-result.json >&2; exit 1; fi
       - name: Verify exactly one delivery
         run: |
           set -euo pipefail
