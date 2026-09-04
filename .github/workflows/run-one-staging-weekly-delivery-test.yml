@@ -1,0 +1,67 @@
+name: Run one staging weekly email delivery test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type SEND ONE STAGING WEEKLY DELIVERY TO CURRENT ADMINS
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: run-one-staging-weekly-delivery-test
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+    steps:
+      - name: Validate exact approval and staging target
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'SEND ONE STAGING WEEKLY DELIVERY TO CURRENT ADMINS' || { echo 'Exact delivery confirmation required.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing SUPABASE_ACCESS_TOKEN.' >&2; exit 1; }
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: production target.' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Verify named staging project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          discovered_ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test "$discovered_ref" = "$STAGING_PROJECT_REF" || { echo 'SAFETY STOP: verified staging project mismatch.' >&2; exit 1; }
+      - name: Send one controlled staging weekly delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          scheduler_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$scheduler_secret"
+          supabase secrets set "WEEKLY_ROUTINE_SCHEDULER_SECRET=$scheduler_secret" "WEEKLY_ROUTINE_DELIVERY_ENABLED=true" --project-ref "$STAGING_PROJECT_REF"
+          trap 'supabase secrets set "WEEKLY_ROUTINE_DELIVERY_ENABLED=false" --project-ref "$STAGING_PROJECT_REF"' EXIT
+          supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
+          curl --silent --show-error --fail --request POST "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications" \
+            --header "Content-Type: application/json" \
+            --header "x-spray-wash-scheduler-secret: $scheduler_secret" \
+            --data '{"action":"run_weekly_routine_delivery"}' > delivery-result.json
+          jq -e '.ok == true and .delivery == "enabled"' delivery-result.json >/dev/null
+          jq '{delivery, period_nz, admin, employee}' delivery-result.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove transient files
+        if: always()
+        run: rm -f projects.json delivery-result.json
