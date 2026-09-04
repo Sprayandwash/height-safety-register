@@ -56,7 +56,17 @@ jobs:
           supabase secrets set "WEEKLY_ROUTINE_SCHEDULER_SECRET=$scheduler_secret" --project-ref "$STAGING_PROJECT_REF"
           supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
           sql="$(cat <<SQL
-          select vault.create_secret('$scheduler_secret', 'weekly_routine_scheduler_secret');
+          do \$vault\$
+          declare secret_id uuid;
+          begin
+            select id into secret_id from vault.secrets where name = 'weekly_routine_scheduler_secret';
+            if secret_id is null then
+              perform vault.create_secret('$scheduler_secret', 'weekly_routine_scheduler_secret');
+            else
+              perform vault.update_secret(secret_id, '$scheduler_secret');
+            end if;
+          end
+          \$vault\$;
           select cron.schedule(
             'spray-and-wash-weekly-routine-staging',
             '30 18 * * 0',
