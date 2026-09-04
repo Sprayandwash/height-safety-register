@@ -48,7 +48,8 @@ jobs:
           rm .step9b-secrets
           supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
           sql="do \$vault\$ declare secret_id uuid; begin select id into secret_id from vault.secrets where name = 'task_push_scheduler_secret'; if secret_id is null then perform vault.create_secret('$secret', 'task_push_scheduler_secret'); else perform vault.update_secret(secret_id, '$secret'); end if; end \$vault\$;"
-          curl --silent --show-error --fail --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')" >/dev/null
+          status="$(curl --silent --show-error --output scheduler-route-result.json --write-out '%{http_code}' --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')")"
+          if test "$status" != "201"; then cat scheduler-route-result.json >&2; exit 1; fi
       - name: Send through database scheduler route
         run: |
           set -euo pipefail
@@ -70,7 +71,7 @@ jobs:
         run: |
           printf 'TASK_PUSH_DELIVERY_ENABLED=false\nSTAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED=false\n' > .step9b-disable-secrets
           supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .step9b-disable-secrets
-          rm .step9b-disable-secrets
+          rm -f .step9b-disable-secrets scheduler-route-result.json
       - name: Publish result
         if: success()
         run: |
