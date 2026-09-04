@@ -79,9 +79,9 @@ async function recipientsForTask(service: ReturnType<typeof createClient>, task:
   }
   if (!ids.size) return [];
   const { data: activeRows, error } = await service.from('app_user_access')
-    .select('user_id').in('user_id', [...ids]).eq('status', 'Active');
+    .select('user_id,must_change_password').in('user_id', [...ids]).eq('status', 'Active');
   if (error) throw error;
-  return (activeRows || []).map(row => row.user_id);
+  return (activeRows || []).filter(row => row.must_change_password !== true).map(row => row.user_id);
 }
 
 function taskEvent(task: Task, today: string) {
@@ -525,6 +525,18 @@ async function deliverRoutinePushNotifications(service: ReturnType<typeof create
   webpush.setVapidDetails(subject, publicKey, privateKey);
   const result = { delivery: 'enabled', candidates, notifications_considered: notifications.length, sent: 0, suppressed: 0, failed: 0 };
   for (const notification of notifications) {
+    if (notification.task_id) {
+      const { data: task, error: taskError } = await service.from('operations_maintenance_tasks').select('status,due_date').eq('id', notification.task_id).maybeSingle();
+      if (taskError) throw taskError;
+      const stale = !task || ['Completed', 'Deferred'].includes(task.status)
+        || (notification.event_type === 'overdue' && (!task.due_date || task.due_date >= nzDate()))
+        || (notification.event_type === 'due_soon' && (!task.due_date || task.due_date > addDays(new Date(), 2)));
+      if (stale) {
+        await service.from('operations_notifications').update({ state: 'suppressed', suppressed_at: new Date().toISOString(), suppression_reason: 'Task is no longer eligible for this reminder.', updated_at: new Date().toISOString() }).eq('id', notification.id);
+        result.suppressed += 1;
+        continue;
+      }
+    }
     const [{ data: preference, error: preferenceError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
       service.from('operations_notification_preferences').select('push_enabled').eq('user_id', notification.recipient_user_id).maybeSingle(),
       service.from('operations_push_subscriptions').select('id,subscription_json').eq('user_id', notification.recipient_user_id).eq('permission_state', 'granted')
