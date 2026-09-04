@@ -513,17 +513,27 @@ async function routinePushSchedulePreview(service: ReturnType<typeof createClien
   };
 }
 
-async function deliverRoutinePushNotifications(service: ReturnType<typeof createClient>) {
+async function deliverRoutinePushNotifications(service: ReturnType<typeof createClient>, controlledNotificationId?: string) {
+  const controlled = Boolean(controlledNotificationId);
   if (Deno.env.get('TASK_PUSH_DELIVERY_ENABLED') !== 'true') return await routinePushSchedulePreview(service);
-  if (!isRoutinePushWindow()) return { delivery: 'deferred', schedule: routinePushSchedule, reason: 'Outside the configured Pacific/Auckland weekday delivery window.' };
+  if (controlled && Deno.env.get('STAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED') !== 'true') {
+    throw new Error('Controlled staging routine push test is not enabled.');
+  }
+  if (!controlled && !isRoutinePushWindow()) return { delivery: 'deferred', schedule: routinePushSchedule, reason: 'Outside the configured Pacific/Auckland weekday delivery window.' };
   const [publicKey, privateKey, subject] = [Deno.env.get('VAPID_PUBLIC_KEY'), Deno.env.get('VAPID_PRIVATE_KEY'), Deno.env.get('VAPID_SUBJECT')];
   if (!publicKey || !privateKey || !subject) throw new Error('Routine push delivery is not configured.');
-  const candidates = await reconcileTaskNotifications(service, true);
-  const { data, error } = await service.from('operations_notifications').select('id,recipient_user_id,task_id,event_type,title,body,deep_link,severity,metadata').eq('state', 'pending').limit(100);
+  const candidates = controlled ? { scanned: 0, eligible: 0, unresolved: 0, created: 0, duplicates: 0, preview: [] as Array<Record<string, unknown>> } : await reconcileTaskNotifications(service, true);
+  let notificationQuery = service.from('operations_notifications').select('id,recipient_user_id,task_id,event_type,title,body,deep_link,severity,metadata').eq('state', 'pending').limit(100);
+  if (controlled) notificationQuery = notificationQuery.eq('id', controlledNotificationId!);
+  const { data, error } = await notificationQuery;
   if (error) throw error;
-  const notifications = ((data || []) as RoutinePushNotification[]).filter(row => row.metadata?.source === 'routine-push' && row.metadata?.channel === 'push');
+  const notifications = ((data || []) as RoutinePushNotification[]).filter(row =>
+    row.metadata?.source === 'routine-push'
+    && row.metadata?.channel === 'push'
+    && (!controlled || row.metadata?.controlled_step9b === true)
+  );
   webpush.setVapidDetails(subject, publicKey, privateKey);
-  const result = { delivery: 'enabled', candidates, notifications_considered: notifications.length, sent: 0, suppressed: 0, failed: 0 };
+  const result = { delivery: 'enabled', controlled, candidates, notifications_considered: notifications.length, sent: 0, suppressed: 0, failed: 0 };
   for (const notification of notifications) {
     if (notification.task_id) {
       const { data: task, error: taskError } = await service.from('operations_maintenance_tasks').select('status,due_date').eq('id', notification.task_id).maybeSingle();
@@ -747,7 +757,13 @@ Deno.serve(async (req) => {
 
   if (action === 'run_task_push_delivery') {
     if (!routinePushSchedulerAuthorized(req)) return json({ error: 'Task push scheduler access required' }, 403);
-    try { return json({ ok: true, kind: 'task_push_scheduler_delivery', ...await deliverRoutinePushNotifications(service) }); }
+    const controlled = body?.controlled_test === 'SEND_ONE_STAGING_ROUTINE_PUSH';
+    const notificationId = typeof body?.notification_id === 'string' ? body.notification_id : null;
+    if (controlled && (!notificationId || Deno.env.get('STAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED') !== 'true')) {
+      return json({ error: 'Controlled staging test requires one notification id and its separate enabled flag.' }, 403);
+    }
+    if (notificationId && !controlled) return json({ error: 'A notification id is only accepted for the controlled staging test.' }, 400);
+    try { return json({ ok: true, kind: 'task_push_scheduler_delivery', ...await deliverRoutinePushNotifications(service, controlled ? notificationId! : undefined) }); }
     catch (error) {
       const detail = error instanceof Error ? error.message : 'Unknown task push delivery error.';
       console.error('Routine task push delivery failed:', detail);
