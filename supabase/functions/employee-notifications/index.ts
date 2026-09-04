@@ -648,7 +648,9 @@ Deno.serve(async (req) => {
     try {
       return json({ ok: true, kind: 'weekly_routine_scheduler_delivery', ...await weeklyRoutineDelivery(service) });
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : 'Weekly schedule delivery failed.' }, 500);
+      const detail = error instanceof Error ? error.message : 'Unknown weekly delivery error.';
+      console.error('Weekly routine delivery failed:', detail);
+      return json({ error: 'Weekly schedule delivery failed.', detail }, 500);
     }
   }
 
