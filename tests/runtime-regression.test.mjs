@@ -146,3 +146,17 @@ test('REG-064: employee weekly email is disabled until explicitly opted in',()=>
   assert.match(notifications,/weekly_email_enabled: preference\?\.weekly_email_enabled === true,/);
   assert.doesNotMatch(notifications,/weekly_email_enabled: preference\?\.weekly_email_enabled !== false,/);
 });
+
+
+test('REG-065: routine task push is separately gated and excludes stale or non-opted-in recipients',()=>{
+  const notifications=read('supabase/functions/employee-notifications/index.ts');
+  assert.match(notifications,/TASK_PUSH_DELIVERY_ENABLED/);
+  assert.match(notifications,/TASK_PUSH_SCHEDULER_SECRET/);
+  assert.match(notifications,/x-spray-wash-task-push-secret/);
+  assert.match(notifications,/function isRoutinePushWindow/);
+  assert.match(notifications,/Weekdays, 6:30 am to 7:00 pm/);
+  assert.match(notifications,/metadata: \{ source: 'routine-push', channel: 'push'/);
+  assert.match(notifications,/No provider call, notification record or delivery record is created while delivery is disabled/);
+  assert.match(notifications,/Task is no longer eligible for this reminder/);
+  assert.match(notifications,/must_change_password !== true/);
+});
