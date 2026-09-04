@@ -25,6 +25,12 @@
 - The guarded preview completed with delivery disabled. No push, email, SMS, cron activation or production action occurred.
 - The staging task table now has a queue-only assignment trigger. It creates `task_assigned` candidates for active recipients only, without provider delivery.
 
+## Assignment-trigger verification
+
+- A temporary, staging-only task was assigned to the enrolled active test user while provider delivery was disabled.
+- The database trigger created exactly one pending task-assigned routine-push candidate.
+- The temporary task and its candidate were removed afterward; no delivery record was created.
+
 ## Step 9B result
 
 - One controlled candidate was sent to the single enrolled staging test device through the routine dispatcher.

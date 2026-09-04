@@ -23,6 +23,10 @@ The notification foundation is now verified in isolated Staging. Controlled Step
 
 The permanent `testing-history` branch remains the archive route for its existing Admin controlled workflow. The notification Step 9B records are maintained on `main` at [notification records review](history/step-9b/2026-09-01-run-33545502753.md) and [staging VAPID setup](history/step-9b/2026-09-01-run-33571260467.md) and [Android PWA enrolment](history/step-9b/2026-09-02-android-push-enrolment.md), and indexed in the run ledger.
 
+## Notification delivery working instruction
+
+For this notification programme, proceed autonomously through ordinary design, build, automated test, no-send Staging verification, documentation and recovery work. Do not stop for routine approval until the next external-send **Step 9B** is fully prepared. At that point, report the exact proposed recipient, channel and safeguards and wait for explicit Step 9B approval.
+
 ## Next safe action
 
 For any new app change, start at **Step 1 — Define change**, identify the affected journeys, run the relevant automated checks, then complete read-only Staging review where applicable. The controlled staging delivery phase has now proven one Android PWA push end-to-end. Any routine assignment, due-soon, overdue or weekly-email delivery design remains a separate approved phase; production must not be used until its controls have been reviewed.
