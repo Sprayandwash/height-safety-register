@@ -53,12 +53,14 @@ jobs:
           echo "project_ref=$ref" >> "$GITHUB_OUTPUT"
 
       - name: Deploy reviewed function to staging only
-        env: { STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }} }
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
         run: supabase functions deploy employee-notifications --project-ref "$STAGING_PROJECT_REF" --no-verify-jwt
 
       - name: Temporarily enable the controlled test only
         id: controls
-        env: { STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }} }
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
         run: |
           set -euo pipefail
           secret="$(openssl rand -hex 32)"
@@ -88,7 +90,8 @@ jobs:
 
       - name: Disable all routine task-push delivery controls
         if: always()
-        env: { STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }} }
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
         run: |
           set -euo pipefail
           printf 'TASK_PUSH_DELIVERY_ENABLED=false\nSTAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED=false\n' > .step9b-disable-secrets
