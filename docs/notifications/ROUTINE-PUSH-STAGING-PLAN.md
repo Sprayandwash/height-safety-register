@@ -1,6 +1,6 @@
 # Routine task push — staging plan
 
-**Status:** Step 9A passed (run 33842212511) and controlled Step 9B passed on 2026-09-04 (run 33844427906). Routine delivery is **disabled** and no routine push scheduler is installed or active.
+**Status:** Step 9A passed (run 33842212511) and controlled Step 9B passed on 2026-09-04 (run 33844427906). A 15-minute Staging scheduler is installed but **inactive**; routine delivery remains **disabled**.
 
 ## Delivery policy
 
@@ -24,6 +24,12 @@
 - The reviewed function was deployed to the isolated staging project and accepted the separate task-push scheduler secret.
 - The guarded preview completed with delivery disabled. No push, email, SMS, cron activation or production action occurred.
 - The staging task table now has a queue-only assignment trigger. It creates `task_assigned` candidates for active recipients only, without provider delivery.
+
+## Inactive scheduler verification
+
+- The Staging-only job `spray-and-wash-routine-task-push-staging` is configured for every 15 minutes and was verified inactive.
+- Its secret is isolated from the weekly-email scheduler. Routine push delivery remains disabled.
+- The guarded no-send preview passed during scheduler setup; no provider, notification or delivery record was created.
 
 ## Assignment-trigger verification
 
