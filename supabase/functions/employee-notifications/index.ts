@@ -460,7 +460,7 @@ async function reconcileTaskNotifications(service: ReturnType<typeof createClien
         deep_link: './',
         state: 'pending',
         idempotency_key: idempotencyKey,
-        metadata: { source: 'staging-reconcile', task_status: task.status, due_date: task.due_date }
+        metadata: { source: 'routine-push', channel: 'push', task_status: task.status, due_date: task.due_date }
       };
       result.preview.push({ task_id: task.id, event_type: event.type, due_date: task.due_date, idempotency_key: idempotencyKey });
       if (!record) continue;
@@ -470,6 +470,99 @@ async function reconcileTaskNotifications(service: ReturnType<typeof createClien
       if (insertError) throw insertError;
       if ((insertedRows || []).length) result.created += 1;
       else result.duplicates += 1;
+    }
+  }
+  return result;
+}
+
+
+type RoutinePushNotification = {
+  id: string; recipient_user_id: string; task_id: string | null; event_type: string;
+  title: string; body: string; deep_link: string | null; severity: string; metadata: Record<string, unknown>;
+};
+
+const routinePushSchedule = {
+  timezone: 'Pacific/Auckland',
+  interval: 'Every 15 minutes',
+  local_window: 'Weekdays, 6:30 am to 7:00 pm',
+  active: false
+};
+
+const nzTimeFormatter = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: 'Pacific/Auckland', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+});
+
+function isRoutinePushWindow(now = new Date()) {
+  const parts = Object.fromEntries(nzTimeFormatter.formatToParts(now).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  const minutes = Number(parts.hour || 0) * 60 + Number(parts.minute || 0);
+  return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(String(parts.weekday || '')) && minutes >= 390 && minutes < 1140;
+}
+
+function routinePushSchedulerAuthorized(req: Request) {
+  const expected = Deno.env.get('TASK_PUSH_SCHEDULER_SECRET');
+  const supplied = req.headers.get('x-spray-wash-task-push-secret');
+  return Boolean(expected && supplied && supplied === expected);
+}
+
+async function routinePushSchedulePreview(service: ReturnType<typeof createClient>) {
+  const candidates = await reconcileTaskNotifications(service, false);
+  return {
+    delivery: Deno.env.get('TASK_PUSH_DELIVERY_ENABLED') === 'true' ? 'enabled' : 'disabled',
+    schedule: routinePushSchedule, window_open: isRoutinePushWindow(), candidate_preview: candidates,
+    safeguards: ['No provider call, notification record or delivery record is created while delivery is disabled.', 'Only routine-push candidates can be dispatched.', 'The staging scheduler remains inactive.']
+  };
+}
+
+async function deliverRoutinePushNotifications(service: ReturnType<typeof createClient>) {
+  if (Deno.env.get('TASK_PUSH_DELIVERY_ENABLED') !== 'true') return await routinePushSchedulePreview(service);
+  if (!isRoutinePushWindow()) return { delivery: 'deferred', schedule: routinePushSchedule, reason: 'Outside the configured Pacific/Auckland weekday delivery window.' };
+  const [publicKey, privateKey, subject] = [Deno.env.get('VAPID_PUBLIC_KEY'), Deno.env.get('VAPID_PRIVATE_KEY'), Deno.env.get('VAPID_SUBJECT')];
+  if (!publicKey || !privateKey || !subject) throw new Error('Routine push delivery is not configured.');
+  const candidates = await reconcileTaskNotifications(service, true);
+  const { data, error } = await service.from('operations_notifications').select('id,recipient_user_id,task_id,event_type,title,body,deep_link,severity,metadata').eq('state', 'pending').limit(100);
+  if (error) throw error;
+  const notifications = ((data || []) as RoutinePushNotification[]).filter(row => row.metadata?.source === 'routine-push' && row.metadata?.channel === 'push');
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+  const result = { delivery: 'enabled', candidates, notifications_considered: notifications.length, sent: 0, suppressed: 0, failed: 0 };
+  for (const notification of notifications) {
+    const [{ data: preference, error: preferenceError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
+      service.from('operations_notification_preferences').select('push_enabled').eq('user_id', notification.recipient_user_id).maybeSingle(),
+      service.from('operations_push_subscriptions').select('id,subscription_json').eq('user_id', notification.recipient_user_id).eq('permission_state', 'granted')
+    ]);
+    if (preferenceError || subscriptionsError) throw preferenceError || subscriptionsError;
+    if (preference?.push_enabled !== true || !(subscriptions || []).length) {
+      await service.from('operations_notifications').update({ state: 'suppressed', suppressed_at: new Date().toISOString(), suppression_reason: 'No opted-in granted push subscription.', updated_at: new Date().toISOString() }).eq('id', notification.id);
+      result.suppressed += 1;
+      continue;
+    }
+    let delivered = 0;
+    for (const subscription of subscriptions || []) {
+      const now = new Date().toISOString();
+      try {
+        const response = await webpush.sendNotification(subscription.subscription_json, JSON.stringify({
+          title: notification.title, body: notification.body, url: notification.deep_link || './',
+          tag: 'spray-wash-' + notification.event_type + '-' + notification.id,
+          data: { notification_id: notification.id, event_type: notification.event_type }
+        }), { TTL: 3600, urgency: notification.severity === 'High' ? 'high' : 'normal' });
+        await Promise.all([
+          service.from('operations_notification_deliveries').insert({ notification_id: notification.id, recipient_user_id: notification.recipient_user_id, channel: 'push', subscription_id: subscription.id, status: 'sent', provider_message_id: String(response.statusCode || 'accepted'), attempted_at: now, delivered_at: new Date().toISOString() }),
+          service.from('operations_push_subscriptions').update({ last_success_at: new Date().toISOString(), last_failure_at: null, last_failure_code: null, updated_at: new Date().toISOString() }).eq('id', subscription.id)
+        ]);
+        delivered += 1;
+      } catch (error) {
+        const failure = error instanceof Error ? error.message.slice(0, 500) : 'Push provider delivery failed.';
+        await Promise.all([
+          service.from('operations_notification_deliveries').insert({ notification_id: notification.id, recipient_user_id: notification.recipient_user_id, channel: 'push', subscription_id: subscription.id, status: 'failed', error_code: 'routine_push_send_failed', error_message: failure, attempted_at: now }),
+          service.from('operations_push_subscriptions').update({ last_failure_at: new Date().toISOString(), last_failure_code: 'routine_push_send_failed', updated_at: new Date().toISOString() }).eq('id', subscription.id)
+        ]);
+      }
+    }
+    if (delivered) {
+      await service.from('operations_notifications').update({ state: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', notification.id);
+      result.sent += 1;
+    } else {
+      await service.from('operations_notifications').update({ state: 'failed', updated_at: new Date().toISOString() }).eq('id', notification.id);
+      result.failed += 1;
     }
   }
   return result;
@@ -633,6 +726,22 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
+
+  if (action === 'run_task_push_preview') {
+    if (!routinePushSchedulerAuthorized(req)) return json({ error: 'Task push scheduler access required' }, 403);
+    try { return json({ ok: true, kind: 'task_push_scheduler_preview', ...await routinePushSchedulePreview(service) }); }
+    catch (error) { return json({ error: error instanceof Error ? error.message : 'Task push schedule preview failed.' }, 500); }
+  }
+
+  if (action === 'run_task_push_delivery') {
+    if (!routinePushSchedulerAuthorized(req)) return json({ error: 'Task push scheduler access required' }, 403);
+    try { return json({ ok: true, kind: 'task_push_scheduler_delivery', ...await deliverRoutinePushNotifications(service) }); }
+    catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown task push delivery error.';
+      console.error('Routine task push delivery failed:', detail);
+      return json({ error: 'Task push delivery failed.', detail }, 500);
+    }
+  }
 
   if (action === 'run_weekly_routine_preview') {
     if (!weeklyRoutineSchedulerAuthorized(req)) return json({ error: 'Scheduler access required' }, 403);
