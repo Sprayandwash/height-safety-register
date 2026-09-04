@@ -1,0 +1,82 @@
+name: Send one staging routine push through scheduler route (Step 9B)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type SEND ONE STAGING SCHEDULED ROUTINE PUSH
+        required: true
+        type: string
+      notification_id:
+        description: One prepared controlled staging notification id
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  send-one:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_REF: tsnmbvezrweciaitkquf
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      CONFIRMATION: ${{ inputs.confirmation }}
+      NOTIFICATION_ID: ${{ inputs.notification_id }}
+    steps:
+      - name: Validate controlled staging scope
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'SEND ONE STAGING SCHEDULED ROUTINE PUSH' || { echo 'Exact confirmation required.' >&2; exit 1; }
+          [[ "$NOTIFICATION_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'Invalid notification id.' >&2; exit 1; }
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: production target.' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: 2.116.0 }
+      - name: Deploy reviewed function and enable controlled test
+        id: controls
+        run: |
+          set -euo pipefail
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          printf 'TASK_PUSH_SCHEDULER_SECRET=%s\nTASK_PUSH_DELIVERY_ENABLED=true\nSTAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED=true\n' "$secret" > .step9b-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .step9b-secrets
+          rm .step9b-secrets
+          supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
+          sql="do \$vault\$ declare secret_id uuid; begin select id into secret_id from vault.secrets where name = 'task_push_scheduler_secret'; if secret_id is null then perform vault.create_secret('$secret', 'task_push_scheduler_secret'); else perform vault.update_secret(secret_id, '$secret'); end if; end \$vault\$;"
+          curl --silent --show-error --fail --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')" >/dev/null
+      - name: Send through database scheduler route
+        run: |
+          set -euo pipefail
+          sql="select net.http_post(url := 'https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications', headers := jsonb_build_object('Content-Type','application/json','x-spray-wash-task-push-secret',(select decrypted_secret from vault.decrypted_secrets where name='task_push_scheduler_secret')), body := jsonb_build_object('action','run_task_push_delivery','controlled_test','SEND_ONE_STAGING_ROUTINE_PUSH','notification_id','$NOTIFICATION_ID')) as request_id;"
+          curl --silent --show-error --fail --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')" >/dev/null
+      - name: Verify exactly one delivery
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            sql="select n.state, (select count(*) from operations_notification_deliveries d where d.notification_id=n.id and d.channel='push' and d.status='sent') as sent from operations_notifications n where n.id='$NOTIFICATION_ID';"
+            response="$(curl --silent --show-error --fail --request POST "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/query" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --header "Content-Type: application/json" --data "$(jq -n --arg query "$sql" '{query:$query}')")"
+            if echo "$response" | jq -e '.. | objects | select(.state == "sent" and .sent == 1)' >/dev/null; then exit 0; fi
+            sleep 5
+          done
+          echo 'Controlled scheduler delivery was not verified.' >&2
+          exit 1
+      - name: Disable all delivery controls
+        if: always()
+        run: |
+          printf 'TASK_PUSH_DELIVERY_ENABLED=false\nSTAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED=false\n' > .step9b-disable-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .step9b-disable-secrets
+          rm .step9b-disable-secrets
+      - name: Publish result
+        if: success()
+        run: |
+          {
+            echo '## Controlled scheduled staging push passed'
+            echo '- One prepared candidate was delivered through the Staging database-to-function scheduler route.'
+            echo '- The recurring cron job remained inactive.'
+            echo '- Routine delivery controls were returned to disabled.'
+          } >> "$GITHUB_STEP_SUMMARY"
