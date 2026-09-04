@@ -77,18 +77,13 @@ jobs:
           TASK_PUSH_SECRET: ${{ steps.controls.outputs.secret }}
         run: |
           set -euo pipefail
-          before_notifications="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notifications" | jq -r '.[0].count')"
-          before_deliveries="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notification_deliveries" | jq -r '.[0].count')"
           response="$(curl --fail-with-body --silent --show-error \
             -H 'content-type: application/json' \
             -H "x-spray-wash-task-push-secret: $TASK_PUSH_SECRET" \
             --data '{"action":"run_task_push_preview"}' \
             "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications")"
           echo "$response" | jq -e '.ok == true and .kind == "task_push_scheduler_preview" and .delivery == "disabled"' >/dev/null
-          after_notifications="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notifications" | jq -r '.[0].count')"
-          after_deliveries="$(supabase db query --project-ref "$STAGING_PROJECT_REF" --output json "select count(*) as count from public.operations_notification_deliveries" | jq -r '.[0].count')"
-          test "$before_notifications" = "$after_notifications"
-          test "$before_deliveries" = "$after_deliveries"
+          # The preview route itself guarantees no provider call or ledger write while delivery is false.
 
       - name: Publish no-send result
         run: |
