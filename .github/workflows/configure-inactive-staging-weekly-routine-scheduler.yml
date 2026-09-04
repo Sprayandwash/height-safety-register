@@ -72,7 +72,7 @@ jobs:
             '30 18 * * 0',
             \$\$select net.http_post(
               url := 'https://tsnmbvezrweciaitkquf.supabase.co/functions/v1/employee-notifications',
-              headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-scheduler-secret', \$(select decrypted_secret from vault.decrypted_secrets where name = 'weekly_routine_scheduler_secret')),
+              headers := jsonb_build_object('Content-Type', 'application/json', 'x-spray-wash-scheduler-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'weekly_routine_scheduler_secret')),
               body := jsonb_build_object('action', 'run_weekly_routine_preview')
             );\$\$
           );
@@ -88,7 +88,7 @@ jobs:
             jq -r '.message // .error // "Database query returned HTTP " + "'$status'"' scheduler-result.json
             exit 1
           fi
-          jq -e '.[-1][]? | select(.jobname == "spray-and-wash-weekly-routine-staging" and .schedule == "30 18 * * 0" and .active == false)' scheduler-result.json >/dev/null
+          jq -e '.. | objects | select(.jobname == "spray-and-wash-weekly-routine-staging" and .schedule == "30 18 * * 0" and .active == false)' scheduler-result.json >/dev/null
       - name: Write redacted result
         if: success()
         run: |
