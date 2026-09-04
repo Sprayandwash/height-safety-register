@@ -427,7 +427,7 @@ async function weeklyRoutineSchedulePreview(service: ReturnType<typeof createCli
   const employeeIds = new Set((preferenceRows || []).map(row => row.user_id).filter(id => activeIds.has(id)));
   const period = previousNzWeek();
   return {
-    delivery: 'disabled', schedule: weeklyRoutineSchedule, period_nz: period,
+    delivery: Deno.env.get('WEEKLY_ROUTINE_DELIVERY_ENABLED') === 'true' ? 'enabled' : 'disabled', schedule: weeklyRoutineSchedule, period_nz: period,
     candidates: { admin_weekly_summary: adminIds.size, employee_task_only_summary: employeeIds.size, total: adminIds.size + employeeIds.size },
     idempotency: { admin: 'weekly-admin:' + period.end + ':<active-admin-user-id>', employee: 'weekly-employee:' + period.end + ':<opted-in-user-id>' },
     safeguards: ['No provider call, notification record, delivery record or scheduler job is created by preview.', 'Employee summaries require an explicit weekly-email opt-in.']
@@ -475,6 +475,148 @@ async function reconcileTaskNotifications(service: ReturnType<typeof createClien
   return result;
 }
 
+type WeeklyEmailRecipient = { user_id: string; email: string };
+
+function usableEmail(value: unknown) {
+  const email = String(value || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
+async function weeklyRoutineRecipients(service: ReturnType<typeof createClient>) {
+  const [{ data: accessRows, error: accessError }, { data: roleRows, error: roleError }, { data: preferenceRows, error: preferenceError }, { data: profiles, error: profileError }] = await Promise.all([
+    service.from('app_user_access').select('user_id,must_change_password').eq('status', 'Active'),
+    service.from('user_roles').select('user_id,role'),
+    service.from('operations_notification_preferences').select('user_id').eq('weekly_email_enabled', true),
+    service.from('profiles').select('user_id,email')
+  ]);
+  if (accessError || roleError || preferenceError || profileError) throw accessError || roleError || preferenceError || profileError;
+
+  const activeIds = new Set((accessRows || []).filter(row => row.must_change_password !== true).map(row => row.user_id));
+  const emailByUserId = new Map((profiles || []).map(row => [row.user_id, usableEmail(row.email)]));
+  const toRecipient = (userId: string): WeeklyEmailRecipient | null => {
+    const email = emailByUserId.get(userId);
+    return email ? { user_id: userId, email } : null;
+  };
+  const adminIds = new Set((roleRows || []).filter(row => row.role === 'Admin' && activeIds.has(row.user_id)).map(row => row.user_id));
+  const employeeIds = new Set((preferenceRows || []).map(row => row.user_id).filter(id => activeIds.has(id)));
+  return {
+    admins: [...adminIds].map(toRecipient).filter((row): row is WeeklyEmailRecipient => !!row),
+    employees: [...employeeIds].map(toRecipient).filter((row): row is WeeklyEmailRecipient => !!row)
+  };
+}
+
+async function sendWeeklyRoutineEmail(
+  service: ReturnType<typeof createClient>,
+  recipient: WeeklyEmailRecipient,
+  recipientType: 'admin' | 'employee',
+  preview: WeeklyPreview
+) {
+  const periodEnd = preview.period_nz?.end || previousNzWeek().end;
+  const idempotencyKey = `weekly-${recipientType}:${periodEnd}:${recipient.user_id}`;
+  const { data: existing, error: existingError } = await service.from('operations_notifications')
+    .select('id,state').eq('idempotency_key', idempotencyKey).maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return { status: 'duplicate', notification_id: existing.id };
+
+  const draft = renderWeeklyEmailDraft(preview);
+  if (draft.suppressed || !draft.subject || !draft.text || !draft.html) {
+    return { status: 'suppressed', reason: draft.suppression_reason || 'No weekly content.' };
+  }
+
+  const now = new Date().toISOString();
+  const { data: notification, error: notificationError } = await service.from('operations_notifications').insert({
+    recipient_user_id: recipient.user_id,
+    task_id: null,
+    event_type: 'weekly_summary',
+    escalation_stage: 'standard',
+    severity: 'Low',
+    title: recipientType === 'admin' ? 'Weekly operations update' : 'Weekly task update',
+    body: recipientType === 'admin' ? 'Weekly operations update prepared.' : 'Weekly task update prepared.',
+    deep_link: './',
+    state: 'processing',
+    eligible_at: now,
+    idempotency_key: idempotencyKey,
+    metadata: { source: 'weekly-routine', channel: 'email', recipient_type: recipientType, period_end: periodEnd }
+  }).select('id').single();
+  if (notificationError || !notification) throw new Error(notificationError?.message || 'Could not create weekly notification record.');
+
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const from = Deno.env.get('RESEND_FROM');
+  if (!apiKey || !from) throw new Error('Weekly email delivery is not configured.');
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey
+      },
+      body: JSON.stringify({ from, to: [recipient.email], subject: draft.subject, text: draft.text, html: draft.html })
+    });
+    const providerResult = await response.json().catch(() => null) as { id?: unknown } | null;
+    if (!response.ok) throw new Error('Email provider rejected the weekly delivery.');
+    const providerMessageId = typeof providerResult?.id === 'string' ? providerResult.id : 'accepted';
+    await Promise.all([
+      service.from('operations_notification_deliveries').insert({
+        notification_id: notification.id,
+        recipient_user_id: recipient.user_id,
+        channel: 'email',
+        status: 'sent',
+        provider_message_id: providerMessageId,
+        attempted_at: now,
+        delivered_at: new Date().toISOString()
+      }),
+      service.from('operations_notifications').update({
+        state: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString()
+      }).eq('id', notification.id)
+    ]);
+    return { status: 'sent', notification_id: notification.id };
+  } catch (error) {
+    const failure = error instanceof Error ? error.message.slice(0, 500) : 'Email provider delivery failed.';
+    await Promise.all([
+      service.from('operations_notification_deliveries').insert({
+        notification_id: notification.id, recipient_user_id: recipient.user_id, channel: 'email',
+        status: 'failed', error_code: 'weekly_email_send_failed', error_message: failure, attempted_at: now
+      }),
+      service.from('operations_notifications').update({
+        state: 'failed', updated_at: new Date().toISOString()
+      }).eq('id', notification.id)
+    ]);
+    throw new Error('Weekly email delivery failed.');
+  }
+}
+
+async function weeklyRoutineDelivery(service: ReturnType<typeof createClient>) {
+  const { admins, employees } = await weeklyRoutineRecipients(service);
+  const period = previousNzWeek();
+  if (Deno.env.get('WEEKLY_ROUTINE_DELIVERY_ENABLED') !== 'true') {
+    return {
+      delivery: 'disabled',
+      period_nz: period,
+      candidates: { admin_weekly_summary: admins.length, employee_task_only_summary: employees.length, total: admins.length + employees.length },
+      safeguards: ['No provider call, notification record or delivery record is created while delivery is disabled.']
+    };
+  }
+
+  const adminPreview = await weeklyAdminPreview(service);
+  const result = { delivery: 'enabled', period_nz: period, admin: { sent: 0, duplicates: 0, suppressed: 0 }, employee: { sent: 0, duplicates: 0, suppressed: 0 } };
+  for (const recipient of admins) {
+    const outcome = await sendWeeklyRoutineEmail(service, recipient, 'admin', adminPreview);
+    if (outcome.status === 'sent') result.admin.sent += 1;
+    else if (outcome.status === 'duplicate') result.admin.duplicates += 1;
+    else result.admin.suppressed += 1;
+  }
+  for (const recipient of employees) {
+    const preview = await weeklyEmployeePreview(service, recipient.user_id);
+    const outcome = await sendWeeklyRoutineEmail(service, recipient, 'employee', preview);
+    if (outcome.status === 'sent') result.employee.sent += 1;
+    else if (outcome.status === 'duplicate') result.employee.duplicates += 1;
+    else result.employee.suppressed += 1;
+  }
+  return result;
+}
+
 function weeklyRoutineSchedulerAuthorized(req: Request) {
   const expected = Deno.env.get('WEEKLY_ROUTINE_SCHEDULER_SECRET');
   const supplied = req.headers.get('x-spray-wash-scheduler-secret');
@@ -498,6 +640,15 @@ Deno.serve(async (req) => {
       return json({ ok: true, kind: 'weekly_routine_scheduler_preview', ...await weeklyRoutineSchedulePreview(service) });
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : 'Weekly schedule preview failed.' }, 500);
+    }
+  }
+
+  if (action === 'run_weekly_routine_delivery') {
+    if (!weeklyRoutineSchedulerAuthorized(req)) return json({ error: 'Scheduler access required' }, 403);
+    try {
+      return json({ ok: true, kind: 'weekly_routine_scheduler_delivery', ...await weeklyRoutineDelivery(service) });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : 'Weekly schedule delivery failed.' }, 500);
     }
   }
 
