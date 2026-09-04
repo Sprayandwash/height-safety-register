@@ -1,6 +1,6 @@
 # Routine notification delivery plan
 
-**Status:** Guarded staging delivery route built and verified disabled on 2026-09-04. Routine delivery remains disabled. See [the checkpoint record](../testing/history/step-9b/2026-09-04-weekly-delivery-disabled-33822524034.md).  
+**Status:** One controlled staging weekly-email delivery completed on 2026-09-04; recurring delivery remains disabled. See [the delivery record](../testing/history/step-9b/2026-09-04-one-staging-weekly-delivery-33829310943.md).  
 **Timezone:** Pacific/Auckland  
 **Primary channel:** Android PWA push  
 **Secondary channel:** Weekly email summary
@@ -34,7 +34,7 @@ The Monday email covers the preceding Monday–Sunday NZ time period and then li
 | Section | Content |
 |---|---|
 | Activity summary | Tasks created, completed and deferred; vehicle checks completed and any reported issues; maintenance records created; and Height Equipment inspections completed. |
-| Pending tasks | Every open task, grouped by overdue, due within 48 hours and later-due. Each line shows the title, assigned employee or role, due date, priority and a direct app link. |
+| Pending tasks | Every open task, grouped by overdue, due within 48 hours and later-due. Each line shows the title, assigned employee or role, due date and priority. |
 | Exceptions | Unassigned tasks, overdue vehicle checks and records that could not be delivered are clearly highlighted. |
 
 The update is sent to the current active **Admin** role at send time, rather than a hard-coded address. It is a management report and does not alter task ownership or create new tasks.
@@ -46,7 +46,7 @@ An employee can enable or disable their own weekly email preference in the app. 
 - tasks assigned directly to that user; and
 - tasks assigned to a role that user currently holds.
 
-It groups their tasks by overdue, due within 48 hours and later-due, and includes title, due date, priority and a direct app link. It never includes other employees' tasks, the Admin activity report, customer address details or management-only exceptions. An employee with no open tasks receives no weekly email.
+It groups their tasks by overdue, due within 48 hours and later-due, and includes title, due date and priority. It never includes other employees' tasks, the Admin activity report, customer address details or management-only exceptions. An employee with no open tasks receives no weekly email.
 
 ## Delivery architecture
 
@@ -64,7 +64,7 @@ It groups their tasks by overdue, due within 48 hours and later-due, and include
 | Steps 2–4 | Add candidate generation, suppression and idempotency tests | Disabled |
 | Steps 5–8 | Build scheduled staging evaluator and weekly-email renderer | Completed; disabled |
 | Step 9A | Read-only staging review of candidates and schedule configuration | Disabled |
-| Step 9B | Controlled staging records and up to one explicitly approved delivery per channel | Explicit test only |
+| Step 9B | Controlled staging records and up to one explicitly approved delivery per channel | Email test completed; recurring delivery disabled |
 | Step 10 | Separate production review and approval | Not authorised |
 
 ## Acceptance criteria
