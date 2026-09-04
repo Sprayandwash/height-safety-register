@@ -43,6 +43,14 @@
 - The delivery workflow isolated staging, made no production or scheduler change, and automatically returned TASK_PUSH_DELIVERY_ENABLED and STAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED to false.
 - The controlled candidate's ledger state was verified as sent after the run.
 
+
+## Scheduled-route Step 9B result
+
+- A separate synthetic Staging candidate was delivered through the database scheduler route (GitHub Actions run 33926383683).
+- The original no-send failure identified the missing pg_net extension; Staging now has pg_net installed.
+- The candidate was verified sent with exactly one push delivery. The recurring cron job remained inactive and workflow controls returned to disabled.
+- All synthetic task, notification and delivery records were removed after verification.
+
 ## Before Step 9B
 
 - Deploy the reviewed function to the staging project.
