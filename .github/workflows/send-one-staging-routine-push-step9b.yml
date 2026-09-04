@@ -1,0 +1,107 @@
+name: Send one staged routine task push (Step 9B)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type SEND ONE STAGING ROUTINE PUSH to send exactly one controlled staging push
+        required: true
+        type: string
+      notification_id:
+        description: Controlled pending staging notification id
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  send-one:
+    name: Send one controlled routine push and disable it again
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_NAME: Spray and Wash Staging
+      PRODUCTION_PROJECT_REF: twkgfmctuffmkvkmdkct
+      CONFIRMATION: ${{ inputs.confirmation }}
+      NOTIFICATION_ID: ${{ inputs.notification_id }}
+    steps:
+      - name: Validate single-push scope
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo 'SAFETY STOP: run from main only.' >&2; exit 1; }
+          test "$CONFIRMATION" = 'SEND ONE STAGING ROUTINE PUSH' || { echo 'Confirmation must be exact.' >&2; exit 1; }
+          test "$NOTIFICATION_ID" =~ ^[0-9a-fA-F-]{36}$ || { echo 'Invalid notification id.' >&2; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'Missing Supabase staging access token.' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+
+      - name: Resolve and isolate staging
+        id: staging
+        run: |
+          set -euo pipefail
+          supabase projects list --output json > projects.json
+          count="$(jq -r --arg name "$STAGING_PROJECT_NAME" '[.[] | select(.name == $name)] | length' projects.json)"
+          test "$count" -eq 1 || { echo 'Could not uniquely identify staging.' >&2; exit 1; }
+          ref="$(jq -r --arg name "$STAGING_PROJECT_NAME" '.[] | select(.name == $name) | (.id // .ref // empty)' projects.json)"
+          test -n "$ref"
+          test "$ref" != "$PRODUCTION_PROJECT_REF" || { echo 'SAFETY STOP: refusing production.' >&2; exit 1; }
+          echo "project_ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy reviewed function to staging only
+        env: { STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }} }
+        run: supabase functions deploy employee-notifications --project-ref "$STAGING_PROJECT_REF" --no-verify-jwt
+
+      - name: Temporarily enable the controlled test only
+        id: controls
+        env: { STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }} }
+        run: |
+          set -euo pipefail
+          secret="$(openssl rand -hex 32)"
+          umask 077
+          {
+            printf 'TASK_PUSH_SCHEDULER_SECRET=%s\n' "$secret"
+            printf 'TASK_PUSH_DELIVERY_ENABLED=true\n'
+            printf 'STAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED=true\n'
+          } > .step9b-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .step9b-secrets
+          rm .step9b-secrets
+          echo "::add-mask::$secret"
+          echo "secret=$secret" >> "$GITHUB_OUTPUT"
+
+      - name: Send exactly one controlled staging push
+        env:
+          STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }}
+          TASK_PUSH_SECRET: ${{ steps.controls.outputs.secret }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            -H 'content-type: application/json' \
+            -H "x-spray-wash-task-push-secret: $TASK_PUSH_SECRET" \
+            --data "{\"action\":\"run_task_push_delivery\",\"controlled_test\":\"SEND_ONE_STAGING_ROUTINE_PUSH\",\"notification_id\":\"$NOTIFICATION_ID\"}" \
+            "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications")"
+          echo "$response" | jq -e '.ok == true and .kind == "task_push_scheduler_delivery" and .controlled == true and .notifications_considered == 1 and .sent == 1 and .failed == 0' >/dev/null
+
+      - name: Disable all routine task-push delivery controls
+        if: always()
+        env: { STAGING_PROJECT_REF: ${{ steps.staging.outputs.project_ref }} }
+        run: |
+          set -euo pipefail
+          printf 'TASK_PUSH_DELIVERY_ENABLED=false\nSTAGING_ROUTINE_PUSH_TEST_DELIVERY_ENABLED=false\n' > .step9b-disable-secrets
+          supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file .step9b-disable-secrets
+          rm .step9b-disable-secrets
+
+      - name: Publish controlled-test result
+        if: success()
+        run: |
+          {
+            echo '## Step 9B controlled staging routine push passed'
+            echo
+            echo '- Exactly one designated pending routine-push candidate was considered and sent.'
+            echo '- Staging was isolated; no production project or scheduler was used.'
+            echo '- Routine delivery and the separate controlled-test flag were returned to disabled.'
+          } >> "$GITHUB_STEP_SUMMARY"
