@@ -56,10 +56,12 @@ jobs:
           supabase secrets set "WEEKLY_ROUTINE_SCHEDULER_SECRET=$scheduler_secret" "WEEKLY_ROUTINE_DELIVERY_ENABLED=true" --project-ref "$STAGING_PROJECT_REF"
           trap 'supabase secrets set "WEEKLY_ROUTINE_DELIVERY_ENABLED=false" --project-ref "$STAGING_PROJECT_REF"' EXIT
           supabase functions deploy employee-notifications --no-verify-jwt --project-ref "$STAGING_PROJECT_REF"
-          curl --silent --show-error --fail --request POST "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications" \
+          http_status="$(curl --silent --show-error --output delivery-result.json --write-out '%{http_code}' --request POST "https://$STAGING_PROJECT_REF.supabase.co/functions/v1/employee-notifications" \
             --header "Content-Type: application/json" \
             --header "x-spray-wash-scheduler-secret: $scheduler_secret" \
-            --data '{"action":"run_weekly_routine_delivery"}' > delivery-result.json
+            --data '{"action":"run_weekly_routine_delivery"}')"
+          jq -c '{ok, delivery, error, period_nz, admin, employee}' delivery-result.json
+          test "$http_status" = '200' || { echo "Delivery endpoint returned HTTP $http_status." >&2; exit 1; }
           jq -e '.ok == true and .delivery == "enabled"' delivery-result.json >/dev/null
           jq '{delivery, period_nz, admin, employee}' delivery-result.json >> "$GITHUB_STEP_SUMMARY"
       - name: Remove transient files
