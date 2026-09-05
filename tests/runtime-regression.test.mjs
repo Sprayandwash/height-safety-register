@@ -160,3 +160,9 @@ test('REG-065: routine task push is separately gated and excludes stale or non-o
   assert.match(notifications,/Task is no longer eligible for this reminder/);
   assert.match(notifications,/must_change_password !== true/);
 });
+
+test('REG-066: completing the first-password flow refreshes the session before loading notifications or app data',()=>{
+  const operations=read('operations-v4.js');
+  assert.match(operations,/action:'complete_first_password'[\s\S]*?auth\.refreshSession\(\)[\s\S]*?await loadRoles\(\);await loadAll\(\);/);
+  assert.match(operations,/Password saved\. Please sign in again with your new password/);
+});
